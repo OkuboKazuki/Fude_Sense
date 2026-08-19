@@ -29,9 +29,9 @@ static inline int clampInk(int v) { return v < 0 ? 0 : (v > MAX_INK_PER_PIXEL ? 
 
 static inline uint32_t CalculateInkPixel(int inkAmount)
 {
-	if (inkAmount <= 205) return 0xFFFFFFFF; // 白キャンバス（インクなし）
-	int inkVal = (inkAmount > 450) ? 255 : inkAmount; // 255を超えたら255に固定
-	uint32_t color = static_cast<uint32_t>(450 - inkVal); // 濃さに応じて白(255)～黒(0)
+	if (inkAmount <= 0) return 0xFFFFFFFF; // 白キャンバス（インクなし）
+	int inkVal = (inkAmount > 255) ? 255 : inkAmount; // 255を超えたら255に固定
+	uint32_t color = static_cast<uint32_t>(255 - inkVal); // 濃さに応じて白(255)～黒(0)
 	return 0xFF000000 | (color << 16) | (color << 8) | color;
 }
 
