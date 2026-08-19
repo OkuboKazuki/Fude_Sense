@@ -581,22 +581,42 @@ void GpuInk::StampBrush(int cx, int cy, int radius, double /*dirX*/, double /*di
 
 	uint32_t* pixels = m_pixelBuffer.data();
 
-	int ext = static_cast<int>(std::ceil(static_cast<double>(radius)));
+	// ペンの傾き (altitude/azimuth) から毛束の接地形状（しなり・広がり）を推定
+	double altitudeDegrees = (m_penAltitude > 0) ? (static_cast<double>(m_penAltitude) / 10.0) : 90.0;
+	double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
+	if (tiltFactor < 0.0) tiltFactor = 0.0;
+	if (tiltFactor > 1.0) tiltFactor = 1.0;
+
+	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
+	double angRad = azimuthRad + 1.57079632679; // 毛束の接地広がり方向
+
+	double rad = static_cast<double>(radius);
+	double semiMajor = rad * (1.0 + tiltFactor * 1.5);
+	double semiMinor = std::max(0.5, rad * (1.0 - tiltFactor * 0.4));
+
+	int ext = static_cast<int>(std::ceil(semiMajor));
 	int left = std::max(0, cx - ext);
 	int right = std::min(m_width - 1, cx + ext);
 	int top = std::max(0, cy - ext);
 	int bottom = std::min(m_height - 1, cy + ext);
 
+	double cosA = std::cos(angRad);
+	double sinA = std::sin(angRad);
+
 	bool stampChanged = false;
 
 	for (int y = top; y <= bottom; ++y)
 	{
-		int dy = y - cy;
+		double dy = static_cast<double>(y - cy);
 		for (int x = left; x <= right; ++x)
 		{
-			int dx = x - cx;
-			double dist = std::sqrt(static_cast<double>(dx * dx + dy * dy));
-			if (dist > radius) continue;
+			double dx = static_cast<double>(x - cx);
+
+			double localX = dx * cosA + dy * sinA;
+			double localY = -dx * sinA + dy * cosA;
+
+			double normDistSq = (localX * localX) / (semiMajor * semiMajor) + (localY * localY) / (semiMinor * semiMinor);
+			if (normDistSq > 1.0) continue;
 
 			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
 
