@@ -14,7 +14,23 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
-#include "CpuInk.h"
+struct KinematicsInfo
+{
+	double currentSpeed;
+	double currentAccel;
+	double recentMaxSpeed;
+	double recentMaxAccel;
+	double recentMaxDist;
+	double lastEndSpeed;
+	double lastEndEffectiveSpeed;
+	double lastEndAccel;
+	bool lastIsFlick;
+
+	int currentZ;
+	int currentAltitude;
+	int currentAzimuth;
+	bool isHovering;
+};
 
 // GPU ベースの墨汁インクシステム (Direct2D / Direct3D 11)
 class GpuInk

@@ -30,8 +30,7 @@
 #include "WacomMultiTouch.h"
 #include "WintabUtils.h"
 
-// 追加: CPU 墨汁システム
-#include "CpuInk.h"
+// 追加: GPU 墨汁システム
 #include "GpuInk.h"
 
 ///////////////////////////////////////////////////////////////////////////////
