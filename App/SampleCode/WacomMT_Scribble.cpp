@@ -47,7 +47,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 // Wintab support headers
-#define PACKETDATA	(PK_BUTTONS | PK_X | PK_Y | PK_Z | PK_NORMAL_PRESSURE | PK_ORIENTATION)
+#define PACKETDATA	(PK_X | PK_Y | PK_Z | PK_BUTTONS | PK_NORMAL_PRESSURE | PK_TANGENT_PRESSURE | PK_TIME | PK_ORIENTATION)
 #define PACKETMODE	PK_BUTTONS
 #include "pktdef.h"
 
@@ -86,10 +86,25 @@ RECT										g_clientRect = { 0, 0, 0, 0 };
 
 bool										g_ShowTouchSize = true;
 bool										g_ShowTouchID = false;
-
 std::map<int, WacomMTCapability>	g_caps;
 std::vector<int>						g_devices;
-HCTX										g_tabCtx = NULL;
+
+typedef struct 
+{
+	int		maxPressure;
+	COLORREF	penColor;
+	char		name[32];
+	LONG		tabletXExt;
+	LONG		tabletYExt;
+	bool		displayTablet;
+	int 		maxZ;
+} TabletInfo;
+
+std::map<HCTX, TabletInfo> g_contextMap;
+bool g_openSystemContext = true;
+
+bool OpenTabletContexts(HWND hWnd);
+void CloseTabletContexts(void);
 
 std::map<int, HPEN>					g_hPenMap;
 std::map<int, HPEN>					g_fingerHPenMap;
@@ -456,29 +471,8 @@ INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 void					ClearScreen();
 
 ///////////////////////////////////////////////////////////////////////////////
-// Multi-touch API support functions
-
-WacomMTHitRectPtr GetAppHitRect();
-int FingerCallback(WacomMTFingerCollection* fingerData, void* userData);
-int BlobCallback(WacomMTBlobAggregate* blobData, void* userData);
-int RawCallback(WacomMTRawData* rawData, void* userData);
-void AttachCallback(WacomMTCapability deviceInfo, void* userRef);
-void DetachCallback(int deviceID, void* userRef);
-void DrawFingerData(int count, WacomMTFinger* fingers, int device);
-void DrawBlobData(int count, WacomMTBlob* blobs, int device);
-void DrawRawData(int count, unsigned short* rawBuf, int device);
-void DumpCaps(bool showMessageBox_I);
-bool ClientHitRectChanged(const WacomMTHitRectPtr& wtHitRect_I, int deviceID);
-WacomMTError RegisterForData(int deviceID_I, HWND hWnd_I);
-WacomMTError UnregisterForData(int deviceID, HWND hWnd_I);
-WacomMTError MoveCallback(int deviceID);
-WacomMTError InitWacomMTAPI(HWND hwnd_I);
-
-///////////////////////////////////////////////////////////////////////////////
 // Wintab support functions.
 
-HCTX InitWintabAPI(HWND hwnd_I);
-void DrawPenData(POINT point_I, UINT pressure_I, bool bMoveToPoint_I);
 void Cleanup(void);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -727,6 +721,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 //
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	static POINT s_ptMouseOld = { 0 };
+
 	switch (message)
 	{
 	case WM_CREATE:
@@ -752,17 +748,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_hPenMap[idx] = CreatePen(PS_SOLID, 2, RGB(rand() % 255, rand() % 255, rand() % 255));
 		}
 
-		// Initialize the Wintab API
-		g_tabCtx = InitWintabAPI(hWnd);
-		if (!g_tabCtx)
+		// Initialize Wintab API using ScribbleDemo multi-context initialization
+		if (!OpenTabletContexts(hWnd))
 		{
-			ShowError("Could Not Open a Wintab Tablet Context.");
-		}
-
-		// Initialize the Multi-Touch API
-		if (WMTErrorSuccess != InitWacomMTAPI(hWnd))
-		{
-			ShowError("Could not initialize Wacom Multi-Touch API.");
+			ShowError("Could Not Open Wintab Tablet Contexts.");
 		}
 		break;
 	}
@@ -815,11 +804,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_COMMAND:
 	{
-		// Handle menu selections & changes
-		HMENU menu = GetMenu(g_mainWnd);
 		WORD wmId = LOWORD(wParam);
-		WORD wmEvent = HIWORD(wParam);
-
 		switch (wmId)
 		{
 		case IDM_ABOUT:
@@ -829,141 +814,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				CreateDialog(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 				ShowWindow(g_hWndAbout, SW_SHOW);
 			}
-			break;
-		}
-
-		// Non-confident fingers are usually hidden, if this option is disabled they will be shown
-		case IDM_OPTIONS_USECONFIDENCEBITS:
-		{
-			g_useConfidenceBits = !g_useConfidenceBits;
-			CheckMenuItem(menu, IDM_OPTIONS_USECONFIDENCEBITS, (g_useConfidenceBits ? MF_CHECKED : MF_UNCHECKED));
-			ClearScreen();
-			break;
-		}
-
-		// Shows the capabilities of attached devices
-		case IDM_OPTIONS_SHOW_CAPS:
-		{
-			DumpCaps(true);
-			break;
-		}
-
-		// Change between Consumer (default) and Observer mode.
-		// See the Wacom MTAPI Developer docs for more on the difference.
-		case IDM_OBSERVER:
-		case IDM_CONSUMER:
-		{
-			bool newMode = wmId == IDM_OBSERVER;
-			if (g_ObserverMode != newMode)
-			{
-				for (size_t idx = 0; idx < g_devices.size(); idx++)
-				{
-					UnregisterForData(g_devices[idx], hWnd);
-				}
-				g_ObserverMode = newMode;
-				CheckMenuItem(menu, IDM_OBSERVER, (g_ObserverMode ? MF_CHECKED : MF_UNCHECKED));
-				CheckMenuItem(menu, IDM_CONSUMER, (g_ObserverMode ? MF_UNCHECKED : MF_CHECKED));
-				for (size_t idx = 0; idx < g_devices.size(); idx++)
-				{
-					RegisterForData(g_devices[idx], hWnd);
-				}
-			}
-			SetWindowTextW(hWnd, GetTitle().c_str());
-			ClearScreen();
-			break;
-		}
-
-		// Toggle between showing the touch size and the touch id next to fingers
-		case IDM_SHOW_TOUCH_SIZE:
-		case IDM_SHOW_TOUCH_ID:
-		{
-			g_ShowTouchSize = (wmId == IDM_SHOW_TOUCH_SIZE);
-			g_ShowTouchID = (wmId == IDM_SHOW_TOUCH_ID);
-
-			CheckMenuItem(menu, IDM_SHOW_TOUCH_SIZE, (g_ShowTouchSize ? MF_CHECKED : MF_UNCHECKED));
-			CheckMenuItem(menu, IDM_SHOW_TOUCH_ID, (g_ShowTouchID ? MF_CHECKED : MF_UNCHECKED));
-
-			ClearScreen();
-			break;
-		}
-
-		// Toggle the data being shown.
-		// Finger (default) is supported by all Wacom Touch tablets
-		// See the Wacom MTAPI Developer docs for more on the difference.
-		case IDM_FINGER:
-		case IDM_BLOB:
-		case IDM_RAW:
-		{
-			EDataType typeHit = (wmId == IDM_FINGER) ? EDataType::EFingerData : (wmId == IDM_BLOB) ? EDataType::EBlobData : EDataType::ERawData;
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				UnregisterForData(g_devices[idx], hWnd);
-			}
-			if (g_DataType == typeHit)
-			{
-				g_DataType = EDataType::ENoData;
-			}
-			else
-			{
-				g_DataType = typeHit;
-			}
-
-			CheckMenuItem(menu, IDM_FINGER, (g_DataType == EDataType::EFingerData ? MF_CHECKED : MF_UNCHECKED));
-			CheckMenuItem(menu, IDM_BLOB, (g_DataType == EDataType::EBlobData ? MF_CHECKED : MF_UNCHECKED));
-			CheckMenuItem(menu, IDM_RAW, (g_DataType == EDataType::ERawData ? MF_CHECKED : MF_UNCHECKED));
-
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				RegisterForData(g_devices[idx], hWnd);
-			}
-
-			SetWindowTextW(hWnd, GetTitle().c_str());
-			ClearScreen();
-			break;
-		}
-
-		// Wacom MTAPI has different mechanisms for tracking touch. The API can handle it itself
-		// or the developer can handle it manually.
-		// See the Wacom MTAPI Developer docs for more on the difference.
-		case IDM_WINDOW_HANDLES:
-		{
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				UnregisterForData(g_devices[idx], hWnd);
-			}
-			g_UseHWND = !g_UseHWND;
-
-			CheckMenuItem(menu, IDM_WINDOW_HANDLES, (g_UseHWND ? MF_CHECKED : MF_UNCHECKED));
-			CheckMenuItem(menu, IDM_WINDOW_RECT, (g_UseHWND || g_UseWinHitRect ? MF_CHECKED : MF_UNCHECKED));
-			EnableMenuItem(menu, IDM_WINDOW_RECT, (g_UseHWND ? MF_GRAYED : MF_ENABLED));
-
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				RegisterForData(g_devices[idx], hWnd);
-			}
-
-			SetWindowTextW(hWnd, GetTitle().c_str());
-			ClearScreen();
-			break;
-		}
-
-		case IDM_WINDOW_RECT:
-		{
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				UnregisterForData(g_devices[idx], hWnd);
-			}
-
-			g_UseWinHitRect = !g_UseWinHitRect;
-			CheckMenuItem(menu, IDM_WINDOW_RECT, (g_UseWinHitRect ? MF_CHECKED : MF_UNCHECKED));
-
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				RegisterForData(g_devices[idx], hWnd);
-			}
-
-			SetWindowTextW(hWnd, GetTitle().c_str());
-			ClearScreen();
 			break;
 		}
 
@@ -1002,36 +852,44 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	// --- ここからマウス入力をハンドルするケースを追加 ---
 	case WM_LBUTTONDOWN:
 	{
-		// client 座標
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		SetCapture(hWnd);
-		// マウスは常に最大圧力扱い（調整可）
-		UINT pressure = static_cast<UINT>(g_maxPressure ? g_maxPressure : 100);
-		g_gpuInk.BeginStroke(pt, pressure);
-		InvalidateRect(g_mainWnd, NULL, FALSE);
+		s_ptMouseOld = pt;
+		InvalidateRect(hWnd, NULL, FALSE);
 		break;
 	}
 
 	case WM_MOUSEMOVE:
 	{
-		// マウスの左ボタンが押されているときのみ描画
 		if (wParam & MK_LBUTTON)
 		{
-			POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-			UINT pressure = static_cast<UINT>(g_maxPressure ? g_maxPressure : 100);
-			g_gpuInk.AddPoint(pt, pressure);
-			InvalidateRect(g_mainWnd, NULL, FALSE);
+			POINT ptNew = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+			double dx = (double)(ptNew.x - s_ptMouseOld.x);
+			double dy = (double)(ptNew.y - s_ptMouseOld.y);
+			double dist = std::hypot(dx, dy);
+
+			if (dist > 0.1)
+			{
+				double pressureFactor = 0.5;
+				double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+				double haraiFactor = std::pow(pressureFactor, haraiPower);
+				double rawWidth = 36.0 * haraiFactor;
+				int penWidth = (int)std::round(rawWidth);
+				if (penWidth < 1) penWidth = 1;
+
+				g_gpuInk.DrawSegment(s_ptMouseOld, ptNew, (double)penWidth, 255);
+			}
+			s_ptMouseOld = ptNew;
+			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		break;
 	}
 
 	case WM_LBUTTONUP:
 	{
-		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-		// 終了処理（座標は不要だが一応保持）
 		g_gpuInk.EndStroke();
 		ReleaseCapture();
-		InvalidateRect(g_mainWnd, NULL, FALSE);
+		InvalidateRect(hWnd, NULL, FALSE);
 		break;
 	}
 	// --- マウス入力ハンドラここまで ---
@@ -1052,11 +910,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_DESTROY:
 	{
 		ReleaseDC(hWnd, g_hdc);
-		if (g_tabCtx)
-		{
-			gpWTClose(g_tabCtx);
-			g_tabCtx = NULL;
-		}
+		CloseTabletContexts();
 
 		// Return Wintab and MTAPI resources.
 		Cleanup();
@@ -1073,94 +927,158 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		GetWindowInfo(hWnd, &appWindowInfo);
 		g_clientRect = appWindowInfo.rcClient;
 
-		// Resize GPU ink buffer to match client area
+		int w = g_clientRect.right - g_clientRect.left;
+		int h = g_clientRect.bottom - g_clientRect.top;
+		if (w > 0 && h > 0)
 		{
-			int w = g_clientRect.right - g_clientRect.left;
-			int h = g_clientRect.bottom - g_clientRect.top;
-			if (w > 0 && h > 0)
-			{
-				g_gpuInk.Resize(w, h);
-			}
-		}
-
-		if (!g_UseHWND)
-		{
-			// Make sure there's an attached touch tablet.
-			for (size_t idx = 0; idx < g_devices.size(); idx++)
-			{
-				int deviceID = g_devices[idx];
-				if (g_caps.count(deviceID) && (g_caps[deviceID].Type == WMTDeviceTypeIntegrated))
-				{
-					// Resend hitrect size and position to MTAPI
-					MoveCallback(deviceID);
-				}
-			}
-		}
-		else
-		{
-			return DefWindowProc(hWnd, message, wParam, lParam);
+			g_gpuInk.Resize(w, h);
 		}
 		break;
 	}
 
-	// Handle MTAPI Finger data
-	case WM_FINGERDATA:
-	{
-		DrawFingerData(((WacomMTFingerCollection*)lParam)->FingerCount,
-			((WacomMTFingerCollection*)lParam)->Fingers,
-			((WacomMTFingerCollection*)lParam)->DeviceID);
-		break;
-	}
-
-	// Handle MTAPI Blob data
-	case WM_BLOBDATA:
-	{
-		DrawBlobData(((WacomMTBlobAggregate*)lParam)->BlobCount,
-			((WacomMTBlobAggregate*)lParam)->BlobArray,
-			((WacomMTBlobAggregate*)lParam)->DeviceID);
-		break;
-	}
-
-	// Capture pen data.
-	// Note that the data is being sent in system coordinates.
+	// Capture pen data (ScribbleDemo 方式).
 	case WT_PACKET:
 	{
-		PACKET wintabPkt;
-		static POINT ptOld = { 0 };
-		static POINT ptNew = { 0 };
-		static UINT prsOld = 0;
-		static UINT prsNew = 0;
-
-		if (gpWTPacket((HCTX)lParam, wParam, &wintabPkt))
+		HCTX hCtx = (HCTX)lParam;
+		if (g_contextMap.count(hCtx) == 0 && !g_contextMap.empty())
 		{
-			ptNew.x = wintabPkt.pkX;
-			ptNew.y = wintabPkt.pkY;
-			prsNew = wintabPkt.pkNormalPressure;
+			hCtx = g_contextMap.begin()->first;
+		}
 
-			int zValue = static_cast<int>(wintabPkt.pkZ);
-			int altitude = static_cast<int>(wintabPkt.pkOrientation.orAltitude);
-			int azimuth = static_cast<int>(wintabPkt.pkOrientation.orAzimuth);
+		PACKET pkt = { 0 };
+		if (gpWTPacket(hCtx, static_cast<int>(wParam), &pkt))
+		{
+			static POINT ptOld = { 0 };
+			static POINT ptNew = { 0 };
+			static UINT prsOld = 0;
+			static UINT prsNew = 0;
+			static ORIENTATION ortOld = { 0 };
+			static ORIENTATION ortNew = { 0 };
+			static double s_smoothedWidth = 0.0;
+			static bool s_strokeActive = false;
 
-			bool hovering = (prsNew == 0);
-			g_gpuInk.UpdatePenZ(zValue, altitude, azimuth, hovering);
+			ptNew.x = pkt.pkX;
+			ptNew.y = pkt.pkY;
+			prsNew = pkt.pkNormalPressure;
+			ortNew = pkt.pkOrientation;
 
-			if ((ptNew.x != ptOld.x) || (ptNew.y != ptOld.y) || (prsOld != prsNew))
+			g_gpuInk.UpdatePenZ(static_cast<int>(pkt.pkZ),
+				static_cast<int>(ortNew.orAltitude),
+				static_cast<int>(ortNew.orAzimuth),
+				prsNew == 0);
+
+			double maxPrs = (g_contextMap.count(hCtx) > 0 && g_contextMap[hCtx].maxPressure > 0)
+				? (double)g_contextMap[hCtx].maxPressure
+				: (g_maxPressure > 0 ? (double)g_maxPressure : 1024.0);
+
+			// 筆離れ判定: ノイズ以下の微少筆圧 (1.0%) は筆離れとみなす
+			UINT minPrsThreshold = static_cast<UINT>(maxPrs * 0.01);
+			if (prsNew <= minPrsThreshold)
 			{
-				bool bMoveToPoint = ((prsOld == 0) && (prsNew > 0));
-
-				DrawPenData(ptNew, prsNew, bMoveToPoint);
-
-				ptOld = ptNew;
-				prsOld = prsNew;
+				prsNew = 0;
 			}
 
-			if (hovering && g_hMonitorWnd && IsWindow(g_hMonitorWnd))
+			if (prsNew > 0)
 			{
-				InvalidateRect(g_hMonitorWnd, NULL, FALSE);
+				POINT newPoint = { ptNew.x, ptNew.y };
+				if (g_openSystemContext)
+				{
+					ScreenToClient(hWnd, &newPoint);
+				}
+
+				POINT oldPoint = { ptOld.x, ptOld.y };
+				if (g_openSystemContext)
+				{
+					ScreenToClient(hWnd, &oldPoint);
+				}
+
+				// ストロークの書き始め (着地瞬間) または離筆状態からの開始
+				if (!s_strokeActive || prsOld == 0 || !g_gpuInk.IsInStroke())
+				{
+					s_strokeActive = true;
+					ptOld = ptNew;
+					oldPoint = newPoint; // oldPoint == newPoint に即時同期！
+				}
+
+				double dx = (double)(newPoint.x - oldPoint.x);
+				double dy = (double)(newPoint.y - oldPoint.y);
+				double dist = std::hypot(dx, dy);
+
+				// 異常距離ジャンプ (パケット飛び > 50px)
+				if (dist > 50.0)
+				{
+					oldPoint = newPoint;
+					ptOld = ptNew;
+					dist = 0.0;
+				}
+
+				double pressureFactor = (double)prsNew / (maxPrs > 0 ? maxPrs : 1.0);
+				if (pressureFactor > 1.0) pressureFactor = 1.0;
+				if (pressureFactor < 0.0) pressureFactor = 0.0;
+
+				double altitudeDegrees = (double)ortNew.orAltitude / 10.0;
+				double azimuthRad = ((double)ortNew.orAzimuth / 10.0) * (3.14159265358979323846 / 180.0);
+				double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
+				if (tiltFactor < 0.0) tiltFactor = 0.0;
+
+				double moveAngle = (dist > 1e-5) ? std::atan2(dy, dx) : 0.0;
+
+				// 太さ計算 (ScribbleDemo 方式)
+				double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
+				double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+				double haraiFactor = std::pow(pressureFactor, haraiPower);
+				double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
+				double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
+
+				double baseMaxWidth = 36.0;
+				double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + tiltFactor * 0.6);
+
+				// スムージング処理
+				if (dist == 0.0 || !g_gpuInk.IsInStroke())
+				{
+					s_smoothedWidth = rawWidth;
+				}
+				else
+				{
+					const double alpha = 0.3;
+					s_smoothedWidth = s_smoothedWidth * (1.0 - alpha) + rawWidth * alpha;
+				}
+
+				// インクスタンプ描画
+				g_gpuInk.DrawSegment(oldPoint, newPoint, s_smoothedWidth, 255);
 			}
+			else
+			{
+				s_strokeActive = false;
+				if (g_gpuInk.IsInStroke())
+				{
+					g_gpuInk.EndStroke();
+				}
+			}
+
+			ptOld = ptNew;
+			prsOld = prsNew;
+			ortOld = ortNew;
+
+			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		break;
 	}
+
+	case WT_INFOCHANGE:
+	{
+		CloseTabletContexts();
+		OpenTabletContexts(hWnd);
+		break;
+	}
+
+	case WM_DISPLAYCHANGE:
+	{
+		CloseTabletContexts();
+		OpenTabletContexts(hWnd);
+		break;
+	}
+
 	case WT_PROXIMITY:
 	{
 		bool inRange = (lParam != 0);
@@ -1237,388 +1155,7 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Register for finger, blob, and raw data from the MTAPI.
-//
-WacomMTError RegisterForData(int deviceID_I, HWND hWnd_I)
-{
-	WacomMTError res = WMTErrorInvalidParam;
 
-	WacomMTHitRectPtr wtHitRect;
-	if (g_caps[deviceID_I].Type == WMTDeviceTypeIntegrated)
-	{
-		wtHitRect = GetAppHitRect();
-	}
-
-	switch (g_DataType)
-	{
-	case EDataType::EFingerData:
-	{
-		if (g_UseHWND)
-		{
-			res = WacomMTRegisterFingerReadHWND(deviceID_I, CurrentMode(), hWnd_I, 5);
-		}
-		else
-		{
-			res = WacomMTRegisterFingerReadCallback(deviceID_I, wtHitRect.get(), CurrentMode(), FingerCallback, NULL);
-		}
-		break;
-	}
-
-	case EDataType::EBlobData:
-	{
-		if (g_UseHWND)
-		{
-			res = WacomMTRegisterBlobReadHWND(deviceID_I, CurrentMode(), hWnd_I, 5);
-		}
-		else
-		{
-			res = WacomMTRegisterBlobReadCallback(deviceID_I, wtHitRect.get(), CurrentMode(), BlobCallback, NULL);
-		}
-		break;
-	}
-
-	case EDataType::ERawData:
-	{
-		res = WacomMTRegisterRawReadCallback(deviceID_I, CurrentMode(), RawCallback, NULL);
-		break;
-	}
-
-	default:
-	{
-		break;
-	}
-	}
-
-	g_lastWTHitRect[deviceID_I] = std::move(wtHitRect);
-
-	return res;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Callback triggered to deliver movement data from the MTAPI.
-//
-WacomMTError MoveCallback(int deviceID)
-{
-	WacomMTError res = WMTErrorInvalidParam;
-
-	WacomMTHitRectPtr wtHitRect = GetAppHitRect();
-	if (ClientHitRectChanged(wtHitRect, deviceID))
-	{
-		switch (g_DataType)
-		{
-		case EDataType::EFingerData:
-		{
-			// move registered callback from prev hit rect to new hit rect
-			res = WacomMTMoveRegisteredFingerReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), wtHitRect.get(), NULL);
-			break;
-		}
-
-		case EDataType::EBlobData:
-		{
-			// move registered callback from prev hit rect to new hit rect
-			res = WacomMTMoveRegisteredBlobReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), wtHitRect.get(), NULL);
-			break;
-		}
-
-		case EDataType::ERawData:
-		{
-			res = WacomMTRegisterRawReadCallback(deviceID, CurrentMode(), RawCallback, NULL);
-			break;
-		}
-
-		default:
-		{
-			break;
-		}
-		}
-
-		g_lastWTHitRect[deviceID] = std::move(wtHitRect);
-	}
-	return res;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Unregisters a device from the MTAPI.
-//
-WacomMTError UnregisterForData(int deviceID, HWND hWnd_I)
-{
-	WacomMTError res = WMTErrorInvalidParam;
-
-	switch (g_DataType)
-	{
-	case EDataType::EFingerData:
-	{
-		if (g_UseHWND)
-		{
-			res = WacomMTUnRegisterFingerReadHWND(hWnd_I);
-		}
-		else
-		{
-			res = WacomMTUnRegisterFingerReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), NULL);
-		}
-		break;
-	}
-
-	case EDataType::EBlobData:
-	{
-		if (g_UseHWND)
-		{
-			res = WacomMTUnRegisterBlobReadHWND(g_mainWnd);
-		}
-		else
-		{
-			res = WacomMTUnRegisterBlobReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), NULL);
-		}
-		break;
-	}
-
-	case EDataType::ERawData:
-	{
-		res = WacomMTUnRegisterRawReadCallback(deviceID, CurrentMode(), NULL);
-		break;
-	}
-
-	default:
-	{
-		break;
-	}
-	}
-
-	g_lastWTHitRect[deviceID].reset();
-
-	return res;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Callback triggered to deliver finger touch data from the MTAPI.
-//
-int FingerCallback(WacomMTFingerCollection* fingerData, void* userData)
-{
-	if (fingerData)
-	{
-		DrawFingerData(fingerData->FingerCount, fingerData->Fingers, fingerData->DeviceID);
-	}
-	return 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Callback triggered to deliver blob touch data from the MTAPI.
-//
-int BlobCallback(WacomMTBlobAggregate* blobData, void* userData)
-{
-	if (blobData)
-	{
-		DrawBlobData(blobData->BlobCount, blobData->BlobArray, blobData->DeviceID);
-	}
-	return 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Callback triggered to deliver raw touch data from the MTAPI.
-//
-int RawCallback(WacomMTRawData* rawData, void* userData)
-{
-	// rawData->ElementCount should equal caps.ScanX times caps.ScanY
-	if (rawData)
-	{
-		DrawRawData(rawData->ElementCount, rawData->Sensitivity, rawData->DeviceID);
-	}
-	return 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Callback triggered on device attach.
-//
-void AttachCallback(WacomMTCapability deviceInfo, void* userRef)
-{
-	if (!g_caps.count(deviceInfo.DeviceID))
-	{
-		g_devices.push_back(deviceInfo.DeviceID);
-		g_caps[deviceInfo.DeviceID] = deviceInfo;
-
-		RegisterForData(deviceInfo.DeviceID, g_mainWnd); // Ignore result
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Callback triggered on device detach.
-//
-void DetachCallback(int deviceID, void* userRef)
-{
-	if (g_caps.count(deviceID))
-	{
-		UnregisterForData(deviceID, g_mainWnd);
-		std::vector<int>::const_iterator iter = std::find(g_devices.begin(), g_devices.end(), deviceID);
-		if (iter != g_devices.end())
-		{
-			g_devices.erase(iter);
-		}
-		g_caps.erase(deviceID);
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Calculates the rotated x & y of a given set of points around a centeral
-//		pivot.
-//
-void Rotate(double degrees, const POINT& centerPnt, std::vector<POINT>& points)
-{
-	double rad = (90 - degrees) * 3.14159 / 180.0;
-
-	for (UINT idx = 0; idx < points.size(); idx++)
-	{
-		points[idx].x = static_cast<LONG>(cos(rad)
-			* (static_cast<double>(points[idx].x) - centerPnt.x) - (sin(rad)
-				* (static_cast<double>(points[idx].y) - centerPnt.y)) + centerPnt.x);
-		points[idx].y = static_cast<LONG>(sin(rad)
-			* (static_cast<double>(points[idx].x) - centerPnt.x) + (cos(rad)
-				* (static_cast<double>(points[idx].y) - centerPnt.y)) + centerPnt.y);
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Draws Finger data from the MTAPI.
-//
-void DrawFingerData(int count, WacomMTFinger* fingers, int device)
-{
-	if (g_devices.size() && count && fingers)
-	{
-		EnterCriticalSection(&g_graphicsCriticalSection);
-
-		float horizontalPixelPitch = g_caps[device].PhysicalSizeX / g_caps[device].LogicalWidth;
-		float verticalPixelPitch = g_caps[device].PhysicalSizeY / g_caps[device].LogicalHeight;
-
-		for (int index = 0; index < count; index++)
-		{
-			//DebugTrace("TC[%i], confidence: %i\n", fingers[index].FingerID, fingers[index].Confidence);
-
-			if (!g_fingerHPenMap.count(fingers[index].FingerID))
-			{
-				g_fingerHPenMap[fingers[index].FingerID] = g_hPenMap[index];
-			}
-
-			if (fingers[index].TouchState != WMTFingerStateNone)
-			{
-				// Skip this finger if using confidence bits and it's NOT confident.
-				if (g_useConfidenceBits && !fingers[index].Confidence)
-				{
-					continue;
-				}
-
-				HPEN pen = g_fingerHPenMap[fingers[index].FingerID];
-				HPEN oldPen = (HPEN)SelectObject(g_hdc, pen);
-
-				// Display tablets report position in pixels.
-				double x = fingers[index].X;
-				double y = fingers[index].Y;
-				if (g_caps[device].Type == WMTDeviceTypeOpaque)
-				{
-					// If we're using an opaque tablet, then the X and Y values are not in
-					// pixels; they are a percentage of the tablet width (eg: 0.123, 0.37, etc.).
-					// We need to convert to client pixels.
-					x *= static_cast<double>(g_clientRect.right) - g_clientRect.left;
-					x += g_clientRect.left;
-					y *= static_cast<double>(g_clientRect.bottom) - g_clientRect.top;
-					y += g_clientRect.top;
-				}
-
-				//map to our window
-				POINT pt = { static_cast<LONG>(x), static_cast<LONG>(y) };
-				::ScreenToClient(g_mainWnd, &pt);
-
-				// If width and height are not supported; we will fake it.
-				double widthMM = 0.;
-				double widthMaxMM = 0.;
-
-				if (fingers[index].Width > 0)
-				{
-					// Make larger for visibility, if necessary.
-					if (fingers[index].Width <= 1.0)
-					{
-						// Convert logical value to millimeters by multiplying with physical width.
-						widthMM = static_cast<double>(fingers[index].Width) * g_caps[device].PhysicalSizeX;
-					}
-					else //must be Cintiq so width already in pixels
-					{
-						widthMM = static_cast<double>(fingers[index].Width) * horizontalPixelPitch;
-					}
-				}
-
-				int contactWidthOffset = static_cast<int>(widthMM / horizontalPixelPitch / 2);
-
-				double heightMM = 0.;
-				if (fingers[index].Height > 0)
-				{
-					// Make larger for visibility, if necessary.
-					if (fingers[index].Height <= 1.0)
-					{
-						// Convert logical value to millimeters by multiplying by physical height.
-						heightMM = static_cast<double>(fingers[index].Height) * g_caps[device].PhysicalSizeY;
-					}
-					else //must be Cintiq so height already in pixels
-					{
-						heightMM = static_cast<double>(fingers[index].Height) * verticalPixelPitch; //pixel pitch of Cintiq 24 HD
-					}
-				}
-				int contactHeightOffset = static_cast<int>(heightMM / verticalPixelPitch / 2);
-
-				//DebugTrace("width, height (mm): %3.3f,%3.3f\n", widthMM, heightMM);
-
-				// Draw a larger ellipse around essentially a dot.
-				// Fill in any con-confident contacts.
-				HBRUSH oBrush = 0;
-
-				if (!fingers[index].Confidence)
-				{
-					oBrush = static_cast<HBRUSH>(SelectObject(g_hdc, g_noConfidenceBrush));
-				}
-
-				CenterEllipse(g_hdc, pt.x, pt.y, contactWidthOffset, contactHeightOffset);
-
-				wchar_t displayText[8] = L"";
-				if (g_ShowTouchSize)
-				{
-					_stprintf_s(displayText, L"%.1f", widthMM);
-				}
-				else if (g_ShowTouchID)
-				{
-					_stprintf_s(displayText, L"%i", fingers[index].FingerID);
-				}
-				// else bubble will be blank
-				TextOut(g_hdc, pt.x, pt.y, displayText, _tcslen(displayText));
-
-				if (!fingers[index].Confidence)
-				{
-					SelectObject(g_hdc, oBrush);
-				}
-
-				// Display finger stats in upper left corner.
-				wchar_t fingerStr[128] = L"";
-				_stprintf_s(fingerStr, L"Finger:%d ID:%d Xtab:%.2f Ytab:%.2f W:%.2f [%.2f mm]  H:%.2f [%.2f mm]  Angle:%.0f      \n",
-					index, fingers[index].FingerID, fingers[index].X, fingers[index].Y,
-					fingers[index].Width, widthMM, fingers[index].Height, heightMM, fingers[index].Orientation);
-				TextOut(g_hdc, 50, 20, fingerStr, _tcslen(fingerStr));
-
-				SelectObject(g_hdc, oldPen);
-			}
-		}
-
-		LeaveCriticalSection(&g_graphicsCriticalSection);
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Purpose
 //		Clears the canvas of finger and pen data.
 //
@@ -1640,398 +1177,119 @@ void ClearScreen()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Determines the applications hit rect.
-//
-WacomMTHitRectPtr GetAppHitRect()
-{
-	if (g_UseWinHitRect)
-	{
-		WINDOWINFO appWindowInfo = { 0 };
-		appWindowInfo.cbSize = sizeof(appWindowInfo);
-		GetWindowInfo(g_mainWnd, &appWindowInfo);
-
-		WacomMTHitRect hitRect = {
-			static_cast<float>(appWindowInfo.rcClient.left),
-			static_cast<float>(appWindowInfo.rcClient.top),
-			static_cast<float>(appWindowInfo.rcClient.right - appWindowInfo.rcClient.left),
-			static_cast<float>(appWindowInfo.rcClient.bottom - appWindowInfo.rcClient.top)
-		};
-
-		return WacomMTHitRectPtr(new WacomMTHitRect(hitRect));
-	}
-	return WacomMTHitRectPtr();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Draw Raw data from the MTAPI.
-//
-void DrawRawData(int count, unsigned short* rawBuf, int device)
-{
-	SIZE rawSize = { g_caps[device].ScanSizeX, g_caps[device].ScanSizeY };
-	if (count && rawBuf)
-	{
-		ClearScreen();
-
-		HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
-		HPEN oldPen = static_cast<HPEN>(SelectObject(g_hdc, pen));
-
-		for (int sy = 0; sy < rawSize.cy; sy++)
-		{
-			for (int sx = 0; sx < rawSize.cx; sx++)
-			{
-				unsigned short value = rawBuf[sy * rawSize.cx + sx];
-				if (value > 4)
-				{
-					int X = sx * static_cast<int>(g_caps[device].LogicalWidth) / rawSize.cx + static_cast<int>(g_caps[device].LogicalOriginX);
-					int Y = sy * static_cast<int>(g_caps[device].LogicalHeight) / rawSize.cy + static_cast<int>(g_caps[device].LogicalOriginY);
-					int offset = std::max(value * 6 / 255 + 5, 7);
-
-					if ((X > g_clientRect.left) && (X < g_clientRect.right) &&
-						(Y > g_clientRect.top) && (Y < g_clientRect.bottom))
-					{
-						POINT pt = { X, Y };
-						::ScreenToClient(g_mainWnd, &pt);
-
-						Circle(g_hdc, pt.x, pt.y, offset);
-					}
-				}
-			}
-		}
-
-		SelectObject(g_hdc, oldPen);
-		DeleteObject(pen);
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Calculates the center point given a set of points.
-//
-POINT FindCenterPoint(int count, WacomMTBlobPoint* points)
-{
-	UINT32 msig = 0;
-	UINT32 wmx = 0;
-	UINT32 wmy = 0;
-
-for (int i = 0; i < count; i++)
-	{
-		msig += points[i].Sensitivity;
-		wmx += static_cast<UINT32>(points[i].X * points[i].Sensitivity);
-		wmy += static_cast<UINT32>(points[i].Y * points[i].Sensitivity);
-	}
-
-	POINT center = { 0,0 };
-	if (msig)
-	{
-		center.x = wmx / msig;
-		center.y = wmy / msig;
-	}
-	return center;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Draw a single blob from the MTAPI.
-//
-void DrawBlob(int count, WacomMTBlobPoint* points)
-{
-	if (count && points)
-	{
-		WacomMTBlobPoint apiPoint = points[0];
-		POINT curPt = { static_cast<LONG>(apiPoint.X), static_cast<LONG>(apiPoint.Y) };
-		::ScreenToClient(g_mainWnd, &curPt);
-
-		for (int pointIndex = 1; pointIndex <= count; pointIndex++)
-		{
-			bool bDrawLine = apiPoint.Sensitivity > 0;
-			apiPoint = points[pointIndex == count ? 0 : pointIndex];
-			POINT prevPt = curPt;
-			curPt.x = static_cast<LONG>(apiPoint.X);
-			curPt.y = static_cast<LONG>(apiPoint.Y);
-			::ScreenToClient(g_mainWnd, &curPt);
-
-			if (bDrawLine)
-			{
-				MoveToEx(g_hdc, prevPt.x, prevPt.y, NULL);
-				LineTo(g_hdc, curPt.x, curPt.y);
-			}
-		}
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Draw blob data from the MTAPI.
-//
-void DrawBlobData(int count, WacomMTBlob* blobs, int device)
-{
-	if (count && blobs)
-	{
-		blobs->BlobID;
-		blobs->BlobType;
-		blobs->ParentID;
-
-		ClearScreen();
-
-		{
-			POINT pt = { static_cast<LONG>(blobs->X), static_cast<LONG>(blobs->Y) };
-
-			if ((pt.x > g_clientRect.left) && (pt.x < g_clientRect.right) &&
-				(pt.y > g_clientRect.top) && (pt.y < g_clientRect.bottom))
-			{
-				//map to our window
-				::ScreenToClient(g_mainWnd, &pt);
-				Circle(g_hdc, pt.x, pt.y, 2);
-			}
-
-			for (int blobIndex = 0; blobIndex < count; blobIndex++)
-			{
-				bool confident = blobs[blobIndex].Confidence;
-
-				if (g_useConfidenceBits && !confident)
-				{
-					continue;	// skip drawing this blob
-				}
-
-				HPEN oldPen = static_cast<HPEN>(SelectObject(g_hdc,
-					confident ? g_confidencePen : g_noConfidencePen));
-
-				DrawBlob(blobs[blobIndex].PointCount, blobs[blobIndex].BlobPoints);
-
-				SelectObject(g_hdc, oldPen);
-			}
-		}
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Wintab support functions
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Purpose
 //		Loads the Wintab32 DLL and sets up the API function pointers.
 //
-HCTX InitWintabAPI(HWND hwnd_I)
+bool OpenTabletContexts(HWND hWnd)
 {
-	AXIS Pressure = { 0 };
-
 	if (!LoadWintab())
 	{
 		ShowError("Wintab not available");
-		return 0;
+		return false;
 	}
 
-	char TabletName[50] = "";
-	gpWTInfoA(WTI_DEVICES, DVC_NAME, TabletName);
-	gpWTInfoA(WTI_INTERFACE, IFC_WINTABID, TabletName);
-
-	// check if WinTab available.
 	if (!gpWTInfoA(0, 0, NULL))
 	{
 		ShowError("WinTab Services Not Available.");
-		return FALSE;
+		return false;
 	}
 
-	// get default region
-	LOGCONTEXTA logContext = { 0 };
-	gpWTInfoA(WTI_DEFSYSCTX, 0, &logContext);
+	int ctxIndex = 0;
+	int gnOpenContexts = 0;
+	int gnAttachedDevices = 0;
 
-	// No need to specify lcInOrg* and lcInExt* as they are the entire
-	// physical tablet area by default.
+	CloseTabletContexts();
 
-	// Get messages
-	logContext.lcOptions |= CXO_MESSAGES;
+	gpWTInfoA(WTI_INTERFACE, IFC_NDEVICES, &gnAttachedDevices);
 
-	// Move the system cursor.
-	logContext.lcOptions |= CXO_SYSTEM;
-
-	logContext.lcPktData = PACKETDATA;
-	logContext.lcPktMode = PACKETMODE;
-	logContext.lcMoveMask = PACKETDATA;
-	logContext.lcBtnUpMask = logContext.lcBtnDnMask;
-
-	AXIS ZAxis = { 0 };
-	if (gpWTInfoA(WTI_DEVICES + 0, DVC_Z, &ZAxis) && ZAxis.axMax > ZAxis.axMin)
+	do
 	{
-		logContext.lcInOrgZ = ZAxis.axMin;
-		logContext.lcInExtZ = ZAxis.axMax - ZAxis.axMin;
-		logContext.lcOutOrgZ = ZAxis.axMin;
-		logContext.lcOutExtZ = ZAxis.axMax - ZAxis.axMin;
-	}
+		int foundCtx = 0;
+		LOGCONTEXTA lcMine = { 0 };
+		AXIS tabletX = { 0 };
+		AXIS tabletY = { 0 };
+		AXIS Pressure = { 0 };
+		AXIS axisZ = { 0 };
 
-	// In Wintab, the tablet origin is lower left.  Move origin to upper left
-	// so that it coincides with screen origin.
-	logContext.lcOutExtY = -GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-	gpWTInfoA(WTI_DEVICES + 0, DVC_NPRESSURE, &Pressure);
-	g_maxPressure = Pressure.axMax;
-
-	// open the region
-	return gpWTOpenA(hwnd_I, (LPLOGCONTEXT)&logContext, TRUE);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Initialize the Wacom Multi-Touch API
-//
-WacomMTError InitWacomMTAPI(HWND hWnd_I)
-{
-	WacomMTError res = WacomMTInitialize(WACOM_MULTI_TOUCH_API_VERSION);
-	if (res != WMTErrorSuccess)
-	{
-		return res;
-	}
-
-	int deviceCount = WacomMTGetAttachedDeviceIDs(NULL, 0);
-	if (deviceCount)
-	{
-		int newCount = 0;
-		while (newCount != deviceCount)
+		if (g_openSystemContext)
 		{
-			g_devices.resize(deviceCount, 0);
-			newCount = WacomMTGetAttachedDeviceIDs(&g_devices[0], deviceCount * sizeof(int));
+			foundCtx = gpWTInfoA(WTI_DEFSYSCTX, 0, &lcMine);
+		}
+		else
+		{
+			foundCtx = gpWTInfoA(WTI_DDCTXS + ctxIndex, 0, &lcMine);
 		}
 
-		DumpCaps(false);
-	}
-
-	res = WacomMTRegisterAttachCallback(AttachCallback, NULL);
-	if (res != WMTErrorSuccess)
-	{
-		return res;
-	}
-
-	res = WacomMTRegisterDetachCallback(DetachCallback, NULL);
-	if (res != WMTErrorSuccess)
-	{
-		return res;
-	}
-
-	int loopCount = static_cast<int>(g_devices.size());
-	for (int idx = 0; idx < loopCount; idx++)
-	{
-		res = RegisterForData(g_devices[idx], hWnd_I);
-		if (res != WMTErrorSuccess)
+		if (foundCtx > 0)
 		{
-			return res;
+			UINT result = 0;
+			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_HARDWARE, &result);
+			bool displayTablet = (result & HWC_INTEGRATED) != 0;
+
+			lcMine.lcPktData = PACKETDATA;
+			lcMine.lcOptions |= CXO_MESSAGES | CXO_SYSTEM;
+			lcMine.lcPktMode = PACKETMODE;
+			lcMine.lcMoveMask = PACKETDATA;
+			lcMine.lcBtnUpMask = lcMine.lcBtnDnMask;
+
+			if (gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_X, &tabletX) != sizeof(AXIS))
+			{
+				ctxIndex++;
+				if (g_openSystemContext) break;
+				continue;
+			}
+			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_Y, &tabletY);
+			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_NPRESSURE, &Pressure);
+			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_Z, &axisZ);
+
+			g_maxPressure = Pressure.axMax;
+
+			lcMine.lcOutExtY = -lcMine.lcOutExtY;
+
+			HCTX hCtx = gpWTOpenA(hWnd, (LPLOGCONTEXT)&lcMine, TRUE);
+			if (hCtx)
+			{
+				TabletInfo info = { Pressure.axMax, RGB(0,0,0) };
+				sprintf_s(info.name, sizeof(info.name), "Tablet %i", ctxIndex);
+				info.tabletXExt = tabletX.axMax;
+				info.tabletYExt = tabletY.axMax;
+				info.displayTablet = displayTablet;
+				info.maxZ = axisZ.axMax;
+				g_contextMap[hCtx] = info;
+				gnOpenContexts++;
+			}
 		}
-	}
-
-	return WMTErrorSuccess;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Drawing routine for pen data
-//
-void DrawPenData(POINT point_I, UINT pressure_I, bool bMoveToPoint_I)
-{
-	EnterCriticalSection(&g_graphicsCriticalSection);
-
-	POINT ptNew = point_I;
-	::ScreenToClient(g_mainWnd, &ptNew);
-
-	// ホバリング中（圧力0）でもインクが出るように仮のホバー筆圧を与える
-	UINT effectivePressure = pressure_I;
-	if (effectivePressure == 0)
-	{
-		// ホバリング時は最大筆圧の 20% 程度の仮筆圧を設定（繊細なインク線）
-		UINT hoverPressure = (g_maxPressure > 0) ? (g_maxPressure / 5) : 200;
-		effectivePressure = hoverPressure;
-	}
-
-	if (!g_gpuInk.IsInStroke())
-	{
-		g_gpuInk.BeginStroke(ptNew, effectivePressure);
-	}
-	else
-	{
-		g_gpuInk.AddPoint(ptNew, effectivePressure);
-	}
-
-	InvalidateRect(g_mainWnd, NULL, FALSE);
-
-	LeaveCriticalSection(&g_graphicsCriticalSection);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Release resources we used in this example.
-//
-void Cleanup(void)
-{
-	// Release MTAPI resources.
-	WacomMTQuit();
-
-	// Release Wintab resources.
-	UnloadWintab();
-
-	// Clear GPU ink (object will be destroyed on process exit)
-	g_gpuInk.Clear();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Dump the MT capabilities of the attached devices.
-//
-void DumpCaps(bool showMessageBox_I)
-{
-	std::stringstream msg;
-	WacomMTError res = WMTErrorInvalidParam;
-
-	for (int idx = 0; idx < static_cast<int>(g_devices.size()); idx++)
-	{
-		WacomMTCapability cap = { 0 };
-		res = WacomMTGetDeviceCapabilities(g_devices[idx], &cap);
-		if (res != WMTErrorSuccess)
+		else
 		{
 			break;
 		}
 
-		g_caps[g_devices[idx]] = cap;
+		if (g_openSystemContext) break;
+		ctxIndex++;
+	} while (true);
 
-		msg << "MT Capabilities for idx: " << idx << std::endl;
-		msg << "\tVersion: " << g_caps[idx].Version << std::endl;
-		msg << "\tdeviceID_I: " << g_caps[idx].DeviceID << std::endl;
-		msg << "\tType: " << (int)g_caps[idx].Type << std::endl;
-		msg << "\tLogicalOriginX: " << g_caps[idx].LogicalOriginX << std::endl;
-		msg << "\tLogicalOriginY: " << g_caps[idx].LogicalOriginY << std::endl;
-		msg << "\tLogicalWidth: " << g_caps[idx].LogicalWidth << std::endl;
-		msg << "\tLogicalHeight: " << g_caps[idx].LogicalHeight << std::endl;
-		msg << "\tPhysicalSizeX: " << g_caps[idx].PhysicalSizeX << "\n";
-		msg << "\tPhysicalSizeY: " << g_caps[idx].PhysicalSizeY << "\n";
-		msg << "\tReportedSizeX: " << g_caps[idx].ReportedSizeX << "\n";
-		msg << "\tReportedSizeY: " << g_caps[idx].ReportedSizeY << "\n";
-		msg << "\tScanSizeX: " << g_caps[idx].ScanSizeX << "\n";
-		msg << "\tScanSizeY: " << g_caps[idx].ScanSizeY << "\n";
-		msg << "\tFingerMax: " << g_caps[idx].FingerMax << "\n";
-		msg << "\tBlobMax: " << g_caps[idx].BlobMax << "\n";
-		msg << "\tBlobPointsMax: " << g_caps[idx].BlobPointsMax << "\n";
-		msg << "\tCapabilityFlags: " << std::hex << static_cast<int>(g_caps[idx].CapabilityFlags) << "\n\n";
-	}
-
-	//DebugTrace("%s\n", msg.str().c_str());
-
-	if (showMessageBox_I)
-	{
-		MessageBoxA(NULL, msg.str().c_str(), "Capabilities", MB_OK);
-	}
+	return gnOpenContexts > 0;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Purpose
-//		Returns true if client hit rect changed from last time.
-//
-bool ClientHitRectChanged(const WacomMTHitRectPtr& wtHitRect_I, int deviceID)
+void CloseTabletContexts(void)
 {
-	if (!wtHitRect_I && !g_lastWTHitRect[deviceID]) return false;
-	if (!wtHitRect_I || !g_lastWTHitRect[deviceID]) return true;
-	return ((wtHitRect_I->originX != g_lastWTHitRect[deviceID]->originX)
-		|| (wtHitRect_I->originY != g_lastWTHitRect[deviceID]->originY)
-		|| (wtHitRect_I->width != g_lastWTHitRect[deviceID]->width)
-		|| (wtHitRect_I->height != g_lastWTHitRect[deviceID]->height));
+	for (auto& pair : g_contextMap)
+	{
+		if (pair.first != nullptr)
+		{
+			gpWTClose(pair.first);
+		}
+	}
+	g_contextMap.clear();
+}
+
+void Cleanup(void)
+{
+	UnloadWintab();
+	g_gpuInk.Clear();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

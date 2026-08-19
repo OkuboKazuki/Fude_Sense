@@ -31,6 +31,7 @@ public:
 	// ストローク操作
 	void BeginStroke(POINT pt, UINT pressure);
 	void AddPoint(POINT pt, UINT pressure);
+	void DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha = 255);
 	void EndStroke(); // 跳ね払い（flick tail）処理なし
 	bool IsInStroke() const { return m_inStroke; }
 
@@ -118,6 +119,7 @@ private:
 	std::chrono::steady_clock::time_point m_lastTime;
 
 	double m_lastRadius = 0.0;
+	double m_smoothedWidth = 0.0;
 	double m_lastDirX = 1.0;
 	double m_lastDirY = 0.0;
 

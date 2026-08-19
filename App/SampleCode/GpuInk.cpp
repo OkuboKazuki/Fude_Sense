@@ -17,9 +17,9 @@
 // Ink Simulation Parameters (GpuInk)
 // ============================================================================
 
-static constexpr int PROPAGATION_THRESHOLD = 300;
+static constexpr int PROPAGATION_THRESHOLD = 350;
 static constexpr int PROPAGATION_AMOUNT = 40;
-static constexpr int MAX_INK_PER_PIXEL =500;
+static constexpr int MAX_INK_PER_PIXEL = 450;
 static constexpr double PRESSURE_TO_PIXELS = 24.0;
 static constexpr double MAX_SPEED_PX_PER_SEC = 2000.0;
 static constexpr double ELLIPSE_MIN_ELONGATION = 1.0;
@@ -29,9 +29,9 @@ static inline int clampInk(int v) { return v < 0 ? 0 : (v > MAX_INK_PER_PIXEL ? 
 
 static inline uint32_t CalculateInkPixel(int inkAmount)
 {
-	if (inkAmount <= 0) return 0xFFFFFFFF; // 白キャンバス（インクなし）
-	int inkVal = (inkAmount > 255) ? 255 : inkAmount; // 255を超えたら255に固定
-	uint32_t color = static_cast<uint32_t>(255 - inkVal); // 濃さに応じて白(255)～黒(0)
+	if (inkAmount <= 205) return 0xFFFFFFFF; // 白キャンバス（インクなし）
+	int inkVal = (inkAmount > 450) ? 255 : inkAmount; // 255を超えたら255に固定
+	uint32_t color = static_cast<uint32_t>(450 - inkVal); // 濃さに応じて白(255)～黒(0)
 	return 0xFF000000 | (color << 16) | (color << 8) | color;
 }
 
@@ -265,6 +265,7 @@ void GpuInk::BeginStroke(POINT pt, UINT pressure)
 	m_inStroke = true;
 	m_lastPt = pt;
 	m_lastPressure = pressure;
+	m_smoothedWidth = 0.0;
 	m_strokeInkLeft = 1.0;
 	m_recentMaxSpeed = 0.0;
 	m_recentMaxDist = 0.0;
@@ -419,13 +420,59 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 {
 	int dx = b.x - a.x;
 	int dy = b.y - a.y;
-	double dist = std::sqrt(double(dx) * dx + double(dy) * dy);
+	double dist = std::hypot(static_cast<double>(dx), static_cast<double>(dy));
 
 	extern int g_maxPressure;
-	int devMax = (g_maxPressure > 0) ? g_maxPressure : 1024;
-	double pressureRatioA = std::min(1.0, std::max(0.0, static_cast<double>(pa) / static_cast<double>(devMax)));
-	double pressureRatioB = std::min(1.0, std::max(0.0, static_cast<double>(pb) / static_cast<double>(devMax)));
+	double maxPrs = (g_maxPressure > 0) ? static_cast<double>(g_maxPressure) : 1024.0;
 
+	// ① 実効上限を 1.3 倍に広げて 100% 張り付き（カンスト）を防止
+	double rawFactor = static_cast<double>(pb) / (maxPrs * 1.3);
+	if (rawFactor > 1.0) rawFactor = 1.0;
+	if (rawFactor < 0.0) rawFactor = 0.0;
+
+	// ② ガンマ補正（1.5乗）で弱い力〜強い力の微妙な加減を引き延ばす
+	double pressureFactor = std::pow(rawFactor, 1.5);
+
+	// 傾き・角度計算 (ScribbleDemo 方式)
+	double altitudeDegrees = (m_penAltitude > 0) ? (static_cast<double>(m_penAltitude) / 10.0) : 90.0;
+	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
+	double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
+	if (tiltFactor < 0.0) tiltFactor = 0.0;
+	if (tiltFactor > 1.0) tiltFactor = 1.0;
+
+	double moveAngle = (dist > 1e-5) ? std::atan2(static_cast<double>(dy), static_cast<double>(dx)) : 0.0;
+
+	// 「止め・はね・角度」による太さ補正 (ScribbleDemo 方式)
+	// 止め
+	double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
+	// はらい、はね
+	double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+	double haraiFactor = std::pow(pressureFactor, haraiPower);
+	// 角度
+	double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
+	double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
+
+	// 最終的な太さ算出
+	double baseMaxWidth = 36.0;
+	double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + tiltFactor * 0.6);
+
+	// ローパスフィルタ (平滑化)
+	if (m_lastPressure == 0 || dist > 40.0 || m_smoothedWidth <= 0.0)
+	{
+		m_smoothedWidth = rawWidth;
+	}
+	else
+	{
+		const double alpha = 0.3;
+		m_smoothedWidth = m_smoothedWidth * (1.0 - alpha) + rawWidth * alpha;
+	}
+
+	double targetRadius = m_smoothedWidth / 2.0;
+	if (targetRadius < 0.5) targetRadius = 0.5;
+
+	int stampRadius = std::max(1, static_cast<int>(std::lround(targetRadius)));
+
+	// 方向ベクトル
 	double dirX = static_cast<double>(dx);
 	double dirY = static_cast<double>(dy);
 	double dirLen = std::sqrt(dirX * dirX + dirY * dirY);
@@ -439,6 +486,7 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 		m_lastDirX = ux;
 		m_lastDirY = uy;
 	}
+
 	m_recentMaxDist = std::max(m_recentMaxDist, dist);
 
 	double speed = 0.0;
@@ -446,101 +494,32 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 	{
 		speed = dist / dtSeconds;
 		speed = std::min(MAX_SPEED_PX_PER_SEC, speed);
-
 		if (m_lastSpeed > 0.0)
 		{
 			double accel = (speed - m_lastSpeed) / dtSeconds;
 			m_lastAcceleration = accel;
 			m_recentMaxAccel = std::max(m_recentMaxAccel, accel);
 		}
-
 		m_lastSpeed = speed;
 		m_recentMaxSpeed = std::max(m_recentMaxSpeed, speed);
-	}
-	else
-	{
-		speed = std::min(MAX_SPEED_PX_PER_SEC, dist * 60.0);
-		if (speed > 0.0)
-		{
-			m_lastSpeed = speed;
-			m_recentMaxSpeed = std::max(m_recentMaxSpeed, speed);
-		}
 	}
 
 	double speedNorm = std::min(1.0, speed / MAX_SPEED_PX_PER_SEC);
 	double elongation = ELLIPSE_MIN_ELONGATION + (ELLIPSE_MAX_ELONGATION - ELLIPSE_MIN_ELONGATION) * speedNorm;
 
-	const double MAX_INTERPOLATE_DIST = std::max(32.0, PRESSURE_TO_PIXELS * 4.0);
-
-	if (pa == 0 || pb == 0 || dist > MAX_INTERPOLATE_DIST)
-	{
-		double presRatio = (pb > 0) ? pressureRatioB : pressureRatioA;
-		double targetRadius = PRESSURE_TO_PIXELS * (0.10 + 0.90 * presRatio);
-		const double speedThicknessReduction = 0.65;
-		double radiusAfterSpeed = targetRadius * (1.0 - speedNorm * speedThicknessReduction);
-
-		if (m_lastRadius > 0.0)
-		{
-			radiusAfterSpeed = std::max(m_lastRadius * 0.75, std::min(m_lastRadius, radiusAfterSpeed));
-		}
-
-		int radius = std::max(1, static_cast<int>(std::lround(radiusAfterSpeed)));
-		uint8_t alpha = static_cast<uint8_t>(std::min(255u, static_cast<unsigned int>(30 + presRatio * 225.0)));
-
-		if (pb != 0)
-		{
-			StampBrush(b.x, b.y, radius, dirX, dirY, elongation, alpha);
-		}
-		return;
-	}
-
-	int ra = std::max(1, static_cast<int>(pressureRatioA * PRESSURE_TO_PIXELS));
-	int rb = std::max(1, static_cast<int>(pressureRatioB * PRESSURE_TO_PIXELS));
-	int maxr = std::max(ra, rb);
-
-	// スタンプの打刻間隔を高密度化（0.5 -> 0.15 に変更し、ぼこぼこ・キャタピラ現象を防止）
-	const double speedThicknessReduction = 0.65;
-	double localSpeedNorm = std::min(1.0, speed / MAX_SPEED_PX_PER_SEC);
-	double estimatedRadius = std::max(1.0, static_cast<double>(maxr) * (1.0 - localSpeedNorm * speedThicknessReduction));
-
-	const double spacingFactor = 0.15;
-	double step = std::max(1.0, estimatedRadius * spacingFactor);
-
+	// スタンプ打刻（補間）
+	double step = std::max(1.0, static_cast<double>(stampRadius) * 0.3);
 	int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
+
 	for (int i = 0; i <= steps; ++i)
 	{
-		double t = steps == 0 ? 0.0 : double(i) / double(steps);
+		double t = (steps == 0) ? 0.0 : static_cast<double>(i) / static_cast<double>(steps);
 		POINT p;
 		p.x = static_cast<LONG>(a.x + (b.x - a.x) * t + 0.5);
 		p.y = static_cast<LONG>(a.y + (b.y - a.y) * t + 0.5);
 
-		double presRatio = pressureRatioA + (pressureRatioB - pressureRatioA) * t;
-		double targetRadius = PRESSURE_TO_PIXELS * (0.10 + 0.90 * presRatio);
-
-		const double speedThicknessReduction = 0.65;
-		double localSpeedNorm = std::min(1.0, speed / MAX_SPEED_PX_PER_SEC);
-		double radiusAfterSpeed = targetRadius * (1.0 - localSpeedNorm * speedThicknessReduction);
-
-		const double TAU = 0.03;
-		double alphaS = (dtSeconds > 1e-9) ? (1.0 - std::exp(-dtSeconds / TAU)) : 1.0;
-
-		if (m_lastRadius > 0.0 && radiusAfterSpeed > m_lastRadius * 1.25) radiusAfterSpeed = m_lastRadius * 1.25;
-		if (m_lastRadius > 0.0 && radiusAfterSpeed < m_lastRadius * 0.75) radiusAfterSpeed = m_lastRadius * 0.75;
-
-		if (m_lastRadius <= 0.0 || dtSeconds < 1e-9)
-		{
-			m_lastRadius = std::min(PRESSURE_TO_PIXELS * 0.5, radiusAfterSpeed);
-		}
-		else
-		{
-			m_lastRadius = m_lastRadius * (1.0 - alphaS) + radiusAfterSpeed * alphaS;
-		}
-
-		double consumed = (step * 0.0004) * (presRatio + 0.3);
-		m_strokeInkLeft = std::max(0.20, m_strokeInkLeft - consumed);
-
-		int stampRadius = std::max(1, static_cast<int>(std::lround(m_lastRadius)));
-		uint8_t alpha = static_cast<uint8_t>(std::min(255u, static_cast<unsigned int>((30 + presRatio * 225.0) * m_strokeInkLeft)));
+		double stepPres = pressureFactor;
+		uint8_t alpha = static_cast<uint8_t>(std::min(255u, static_cast<unsigned int>(30 + stepPres * 225.0)));
 
 		StampBrush(p.x, p.y, stampRadius, ux, uy, elongation, alpha);
 	}
@@ -601,7 +580,6 @@ void GpuInk::StampBrush(int cx, int cy, int radius, double /*dirX*/, double /*di
 	if (m_ink.empty() || m_pixelBuffer.empty()) return;
 
 	uint32_t* pixels = m_pixelBuffer.data();
-	uint8_t brushA = static_cast<uint8_t>(alpha);
 
 	int ext = static_cast<int>(std::ceil(static_cast<double>(radius)));
 	int left = std::max(0, cx - ext);
@@ -620,28 +598,11 @@ void GpuInk::StampBrush(int cx, int cy, int radius, double /*dirX*/, double /*di
 			double dist = std::sqrt(static_cast<double>(dx * dx + dy * dy));
 			if (dist > radius) continue;
 
-			double fall = 1.0 - (dist / static_cast<double>(radius));
-			if (fall <= 0.0) continue;
-
 			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
 
-			int baseAdd = static_cast<int>(brushA * fall + 0.5);
-			if (baseAdd <= 0) continue;
-
-			double normalizedRadius = static_cast<double>(radius) / (PRESSURE_TO_PIXELS > 0.0 ? PRESSURE_TO_PIXELS : 24.0);
-			double thicknessScale = std::max(0.15, std::min(1.0, normalizedRadius));
-
-			int add = static_cast<int>(std::lround(baseAdd * thicknessScale)) * 4;
-			if (add <= 0) add = 4;
-
+			// 固定インク値: 255 (MAX_INK_PER_PIXEL)
 			int prev = m_ink[idx];
-			int updated = clampInk(prev + add);
-
-			// 書いている最中のスタンプの最低値を PROPAGATION_THRESHOLD に設定
-			if (updated < PROPAGATION_THRESHOLD)
-			{
-				updated = PROPAGATION_THRESHOLD;
-			}
+			int updated = MAX_INK_PER_PIXEL;
 
 			if (updated != prev)
 			{
@@ -663,6 +624,51 @@ void GpuInk::StampBrush(int cx, int cy, int radius, double /*dirX*/, double /*di
 		if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
 		if (g_mainWnd && IsWindow(g_mainWnd)) InvalidateRect(g_mainWnd, NULL, FALSE);
 	}
+}
+
+void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	EnsureInitialized();
+	m_inStroke = true;
+
+	int dx = b.x - a.x;
+	int dy = b.y - a.y;
+	double dist = std::hypot(static_cast<double>(dx), static_cast<double>(dy));
+
+	double radius = strokeWidth / 2.0;
+	if (radius < 0.5) radius = 0.5;
+	int stampRadius = std::max(1, static_cast<int>(std::lround(radius)));
+
+	double dirX = static_cast<double>(dx);
+	double dirY = static_cast<double>(dy);
+	double dirLen = std::sqrt(dirX * dirX + dirY * dirY);
+	double ux = m_lastDirX;
+	double uy = m_lastDirY;
+
+	if (dirLen >= 1.0)
+	{
+		ux = dirX / dirLen;
+		uy = dirY / dirLen;
+		m_lastDirX = ux;
+		m_lastDirY = uy;
+	}
+
+	double step = std::max(1.0, static_cast<double>(stampRadius) * 0.3);
+	int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
+
+	for (int i = 0; i <= steps; ++i)
+	{
+		double t = (steps == 0) ? 0.0 : static_cast<double>(i) / static_cast<double>(steps);
+		POINT p;
+		p.x = static_cast<LONG>(a.x + (b.x - a.x) * t + 0.5);
+		p.y = static_cast<LONG>(a.y + (b.y - a.y) * t + 0.5);
+
+		// 固定インク値 255 でスタンプ
+		StampBrush(p.x, p.y, stampRadius, ux, uy, 1.0, 255);
+	}
+
+	m_lastPt = b;
 }
 
 void GpuInk::AddPoint(POINT pt, UINT pressure)

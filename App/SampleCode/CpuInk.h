@@ -126,6 +126,7 @@ private:
 	std::chrono::steady_clock::time_point m_lastTime;
 
 	double m_lastRadius = 0.0;
+	double m_smoothedWidth = 0.0;
 	double m_lastDirX = 1.0;
 	double m_lastDirY = 0.0;
 
