@@ -18,12 +18,16 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <deque>
 #include <utility>
 #include <algorithm>
 #include <string>
 #include <sstream>
 #include <memory>
 #include <crtdbg.h>
+#include <windows.h>
+
+#include "PressureGraph.h"
 
 #include "WacomMultiTouch.h"
 #include "WintabUtils.h"
@@ -32,17 +36,17 @@
 // Defines
 
 // Colors for touch points
-#define NO_CONFIDENCE_COLOR	RGB(255,128,0)		// orange
-#define CONFIDENCE_COLOR		RGB(0, 0, 255)		// blue
-#define POSITION_ONLY_COLOR	RGB(0, 255, 0)		// green
+#define NO_CONFIDENCE_COLOR RGB(255, 128, 0) // orange
+#define CONFIDENCE_COLOR RGB(0, 0, 0)		 // blue
+#define POSITION_ONLY_COLOR RGB(0, 255, 0)	 // green
 
 // Graphics HPEN objects
-#define NUM_HPENS		10
+#define NUM_HPENS 10
 
 ///////////////////////////////////////////////////////////////////////////////
 // Wintab support headers
-#define PACKETDATA	(PK_X | PK_Y | PK_BUTTONS | PK_NORMAL_PRESSURE)
-#define PACKETMODE	PK_BUTTONS
+#define PACKETDATA (PK_X | PK_Y | PK_BUTTONS | PK_NORMAL_PRESSURE | PK_ORIENTATION)
+#define PACKETMODE PK_BUTTONS
 #include "pktdef.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -61,69 +65,111 @@ enum class EDataType
 ///////////////////////////////////////////////////////////////////////////////
 // Global Variables
 
-HINSTANCE								hInst = NULL;
-std::wstring							szTitle = L"WacomMT_Scribble Pen, Consumer, Finger, HWND";
-std::wstring							szWindowClass = L"WACOMMT_SCRIBBLE";
-HWND										g_mainWnd = NULL;
-HDC										g_hdc = NULL;
-HWND										g_hWndAbout = NULL;
-int										g_maxPressure = 1024;
+HINSTANCE hInst = NULL;
+std::wstring szTitle = L"WacomMT_Scribble Pen, Consumer, Finger, HWND";
+std::wstring szWindowClass = L"WACOMMT_SCRIBBLE";
+HWND g_mainWnd = NULL;
+HDC g_hdc = NULL;
+HWND g_hWndAbout = NULL;
+int g_maxPressure = 1024;
+
+//書道用パラメータ
+static POINT g_prevPoint = { 0, 0 };
+
+// 前回角度
+static double g_prevAngle = 0.0;
+
+// 前回時刻
+static DWORD g_prevTime = 0;
+
+// 前回筆圧
+static UINT g_prevPressure = 0;
+ 
+ // ストローク開始判定
+ static bool g_firstPoint = true;
+ 
+ // 現在の角度（WT_PACKET で更新し、DrawPenData で利用）
+ static double g_currentVertAngle = 0.0;   // 0..90 deg
+ static double g_currentHorizAngle = 0.0;  // 0..360 deg
+
+//==================== 書道表現用 ====================
+static double g_prevSpeed = 0.0;
+static double g_avgSpeed = 0.0;
+static double g_prevDeltaPressure = 0.0;
+
+//==================== 硯（すずり）====================
+static RECT g_inkstoneRect = { 20, 20, 120, 180 };  // 硯を置く領域（クライアント座標）
+static double g_inkAmount = 1.0;                     // 墨量 0.0～1.0
+static const double INK_MAX = 1.0;
+static const double INK_CONSUME_RATE = 0.0002;        // 1点描画ごとの消費量（速度で変動）
+static const double INK_REFILL_RATE = 0.05;           // 硯に触れている間の回復速度
 
 // Cached client rect (system coordinates).
 // Used for evaluating whether or not to render pen data by verifying whether
-// the returned pen data (sys coords) falls within the client rect. Returned 
+// the returned pen data (sys coords) falls within the client rect. Returned
 // touch contact locations use this rect to interpolate where they should be drawn.
 // Similar interpolation done for raw and blob data rendering as well.
 // This rect needs to be updated when the app is moved or resized.
 
-RECT										g_clientRect = {0, 0, 0, 0};
+RECT g_clientRect = { 0, 0, 0, 0 };
 
-bool										g_ShowTouchSize = true;
-bool										g_ShowTouchID = false;
+bool g_ShowTouchSize = true;
+bool g_ShowTouchID = false;
 
-std::map<int, WacomMTCapability>	g_caps;
-std::vector<int>						g_devices;
-HCTX										g_tabCtx = NULL;
+std::map<int, WacomMTCapability> g_caps;
+std::vector<int> g_devices;
+HCTX g_tabCtx = NULL;
 
-std::map<int, HPEN>					g_hPenMap;
-std::map<int, HPEN>					g_fingerHPenMap;
+std::map<int, HPEN> g_hPenMap;
+std::map<int, HPEN> g_fingerHPenMap;
 
-HBRUSH									g_noConfidenceBrush = NULL;
-HBRUSH									g_confidenceBrush = NULL;
-HBRUSH									g_positionOnlyBrush = NULL;
-HPEN										g_noConfidencePen = NULL;
-HPEN										g_confidencePen = NULL;
-std::map<int, WacomMTHitRectPtr>	g_lastWTHitRect;
+HBRUSH g_noConfidenceBrush = NULL;
+HBRUSH g_confidenceBrush = NULL;
+HBRUSH g_positionOnlyBrush = NULL;
+HPEN g_noConfidencePen = NULL;
+HPEN g_confidencePen = NULL;
+std::map<int, WacomMTHitRectPtr> g_lastWTHitRect;
 
-bool										g_useConfidenceBits = true;
-bool										g_ObserverMode = false;
+bool g_useConfidenceBits = true;
+bool g_ObserverMode = false;
 
-EDataType								g_DataType = EDataType::EFingerData;
-bool										g_UseHWND = true;
-bool										g_UseWinHitRect = true;
+EDataType g_DataType = EDataType::EFingerData;
+bool g_UseHWND = true;
+bool g_UseWinHitRect = true;
 
-CRITICAL_SECTION						g_graphicsCriticalSection;
+CRITICAL_SECTION g_graphicsCriticalSection;
+
+std::deque<int> g_pressureHistory;
+
+const int MAX_HISTORY = 300;
+
+HWND g_btnClear = NULL;
+HWND g_btnSave = NULL;
+HWND g_lblTitle = NULL;
+
+const int PANEL_WIDTH = 200;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Forward declarations of functions included in this code module
 
-ATOM					MyRegisterClass(HINSTANCE hInstance);
-BOOL					InitInstance(HINSTANCE, int);
-LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
-void					ClearScreen();
+ATOM MyRegisterClass(HINSTANCE hInstance);
+BOOL InitInstance(HINSTANCE, int);
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
+void ClearScreen();
+void DrawInkstone();
 
 ///////////////////////////////////////////////////////////////////////////////
 // Multi-touch API support functions
 
 WacomMTHitRectPtr GetAppHitRect();
-int FingerCallback(WacomMTFingerCollection *fingerData, void *userData);
-int BlobCallback(WacomMTBlobAggregate *blobData, void *userData);
-int RawCallback(WacomMTRawData *rawData, void *userData);
-void AttachCallback(WacomMTCapability deviceInfo, void *userRef);
-void DetachCallback(int deviceID, void *userRef);
-void DrawFingerData(int count, WacomMTFinger *fingers, int device);
-void DrawBlobData(int count, WacomMTBlob *blobs, int device);
+int FingerCallback(WacomMTFingerCollection* fingerData, void* userData);
+int BlobCallback(WacomMTBlobAggregate* blobData, void* userData);
+int RawCallback(WacomMTRawData* rawData, void* userData);
+void AttachCallback(WacomMTCapability deviceInfo, void* userRef);
+void DetachCallback(int deviceID, void* userRef);
+void DrawFingerData(int count, WacomMTFinger* fingers, int device);
+void DrawBlobData(int count, WacomMTBlob* blobs, int device);
 void DrawRawData(int count, unsigned short* rawBuf, int device);
 void DumpCaps(bool showMessageBox_I);
 bool ClientHitRectChanged(const WacomMTHitRectPtr& wtHitRect_I, int deviceID);
@@ -181,35 +227,36 @@ std::wstring GetTitle(void)
 
 	switch (g_DataType)
 	{
-		case EDataType::ENoData:
-		{
-			title.append(L"No Touch");
-			break;
-		}
-		case EDataType::EFingerData:
-		{
-			title.append(L"Finger");
-			break;
-		}
-		case EDataType::EBlobData:
-		{
-			title.append(L"Blob");
-			break;
-		}
-		case EDataType::ERawData:
-		{
-			title.append(L"Raw");
-			break;
-		}
-		default:
-		{
-			title.append(L"Unknown");
-			break;
-		}
+	case EDataType::ENoData:
+	{
+		title.append(L"No Touch");
+		break;
+	}
+	case EDataType::EFingerData:
+	{
+		title.append(L"Finger");
+		break;
+	}
+	case EDataType::EBlobData:
+	{
+		title.append(L"Blob");
+		break;
+	}
+	case EDataType::ERawData:
+	{
+		title.append(L"Raw");
+		break;
+	}
+	default:
+	{
+		title.append(L"Unknown");
+		break;
+	}
 	}
 
 	title.append(L", ");
-	title.append(g_UseHWND ? L"HWND" : g_UseWinHitRect ? L"Windowed" : L"Full Screen");
+	title.append(g_UseHWND ? L"HWND" : g_UseWinHitRect ? L"Windowed"
+		: L"Full Screen");
 	return title;
 }
 
@@ -219,22 +266,22 @@ std::string GetStateString(WacomMTFingerState state_I)
 {
 	switch (state_I)
 	{
-		case WMTFingerStateDown:
-		{
-			return "D";
-		}
-		case WMTFingerStateHold:
-		{
-			return "H";
-		}
-		case WMTFingerStateUp:
-		{
-			return "U";
-		}
-		default:
-		{
-			return "N";
-		}
+	case WMTFingerStateDown:
+	{
+		return "D";
+	}
+	case WMTFingerStateHold:
+	{
+		return "H";
+	}
+	case WMTFingerStateUp:
+	{
+		return "U";
+	}
+	default:
+	{
+		return "N";
+	}
 	}
 }
 
@@ -243,9 +290,9 @@ std::string GetStateString(WacomMTFingerState state_I)
 //		Entrypoint (main) function for this application.
 //
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
-							_In_opt_ HINSTANCE hPrevInstance,
-							_In_ LPTSTR lpCmdLine,
-							_In_ int nCmdShow)
+	_In_opt_ HINSTANCE hPrevInstance,
+	_In_ LPTSTR lpCmdLine,
+	_In_ int nCmdShow)
 {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
@@ -259,7 +306,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	MyRegisterClass(hInstance);
 
 	// Perform application initialization:
-	if (!InitInstance (hInstance, nCmdShow))
+	if (!InitInstance(hInstance, nCmdShow))
 	{
 		return FALSE;
 	}
@@ -283,7 +330,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		g_noConfidenceBrush = NULL;
 	}
 
-	if ( g_confidenceBrush)
+	if (g_confidenceBrush)
 	{
 		DeleteObject(g_confidenceBrush);
 		g_confidenceBrush = NULL;
@@ -322,17 +369,17 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
 
-	wcex.style				= CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc		= WndProc;
-	wcex.cbClsExtra		= 0;
-	wcex.cbWndExtra		= 0;
-	wcex.hInstance			= hInstance;
-	wcex.hIcon				= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_WACOMMT_SCRIBBLE));
-	wcex.hCursor			= LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName		= MAKEINTRESOURCE(IDC_WACOMMT_SCRIBBLE);
-	wcex.lpszClassName	= szWindowClass.c_str();
-	wcex.hIconSm			= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
+	wcex.style = CS_HREDRAW | CS_VREDRAW;
+	wcex.lpfnWndProc = WndProc;
+	wcex.cbClsExtra = 0;
+	wcex.cbWndExtra = 0;
+	wcex.hInstance = hInstance;
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_WACOMMT_SCRIBBLE));
+	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.lpszMenuName = MAKEINTRESOURCE(IDC_WACOMMT_SCRIBBLE);
+	wcex.lpszClassName = szWindowClass.c_str();
+	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
 	return RegisterClassEx(&wcex);
 }
@@ -355,7 +402,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 		NULL,
 		NULL,
 		hInstance,
-		NULL );
+		NULL);
 
 	if (!g_mainWnd)
 	{
@@ -366,15 +413,17 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 	// Create a brush and pens
 	g_noConfidenceBrush = CreateSolidBrush(NO_CONFIDENCE_COLOR);
-	g_confidenceBrush   = CreateSolidBrush(CONFIDENCE_COLOR);
+	g_confidenceBrush = CreateSolidBrush(CONFIDENCE_COLOR);
 	g_positionOnlyBrush = CreateSolidBrush(POSITION_ONLY_COLOR);
-	g_noConfidencePen   = CreatePen(PS_SOLID, 3, NO_CONFIDENCE_COLOR);
-	g_confidencePen     = CreatePen(PS_SOLID, 3, CONFIDENCE_COLOR);
-	
+	g_noConfidencePen = CreatePen(PS_SOLID, 3, NO_CONFIDENCE_COLOR);
+	g_confidencePen = CreatePen(PS_SOLID, 3, CONFIDENCE_COLOR);
+
 	nCmdShow = SW_MAXIMIZE;
 
 	ShowWindow(g_mainWnd, nCmdShow);
 	UpdateWindow(g_mainWnd);
+
+	DrawInkstone();//
 
 	return TRUE;
 }
@@ -387,366 +436,240 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
-		case WM_CREATE:
+	case WM_CREATE:
+	{
+		WINDOWINFO appWindowInfo = { 0 };
+		appWindowInfo.cbSize = sizeof(appWindowInfo);
+		GetWindowInfo(hWnd, &appWindowInfo);
+		g_clientRect = appWindowInfo.rcClient;
+
+		// Create pens with random colors, which will be assigned to fingerIDs.
+		for (int idx = 0; idx < NUM_HPENS; idx++)
 		{
-			WINDOWINFO appWindowInfo = { 0 };
-			appWindowInfo.cbSize = sizeof(appWindowInfo);
-			GetWindowInfo(hWnd, &appWindowInfo);
-			g_clientRect = appWindowInfo.rcClient;
+			g_hPenMap[idx] = CreatePen(PS_SOLID, 2, RGB(rand() % 255, rand() % 255, rand() % 255));
+		}
 
-			// Create pens with random colors, which will be assigned to fingerIDs.
-			for (int idx = 0; idx < NUM_HPENS; idx++)
-			{
-				g_hPenMap[idx] = CreatePen(PS_SOLID, 2, RGB(rand() % 255, rand() % 255, rand() % 255));
-			}
+		// Initialize the Wintab API
+		g_tabCtx = InitWintabAPI(hWnd);
+		if (!g_tabCtx)
+		{
+			ShowError("Could Not Open a Wintab Tablet Context.");
+		}
 
-			// Initialize the Wintab API
-			g_tabCtx = InitWintabAPI(hWnd);
-			if (!g_tabCtx)
-			{
-				ShowError("Could Not Open a Wintab Tablet Context.");
-			}
+		// Initialize the Multi-Touch API
+		if (WMTErrorSuccess != InitWacomMTAPI(hWnd))
+		{
+			ShowError("Could not initialize Wacom Multi-Touch API.");
+		}
 
-			// Initialize the Multi-Touch API
-			if (WMTErrorSuccess != InitWacomMTAPI(hWnd))
+		CreatePressureGraph(hInst);
+
+		//DrawInkstone(); // ← 追加：起動時に硯を表示
+
+		break;
+	}
+
+	case WM_TIMER:
+	{
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+
+	case WM_CLOSE:
+	{
+		// Cleanup pens on close
+		for (int idx = 0; idx < NUM_HPENS; idx++)
+		{
+			DeleteObject(g_hPenMap[idx]);
+		}
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+
+	// Handle keyboard input
+	case WM_KEYDOWN:
+	{
+		switch (wParam)
+		{
+			// Escape key clears the screen
+		case VK_ESCAPE:
+		{
+			ClearScreen();
+			break;
+		}
+
+		// TODO - Handle other keys here
+
+		default:
+		{
+			break;
+		}
+		}
+		break;
+	}
+
+	case WM_COMMAND:
+	{
+		// Handle menu selections & changes
+		HMENU menu = GetMenu(g_mainWnd);
+		WORD wmId = LOWORD(wParam);
+		WORD wmEvent = HIWORD(wParam);
+
+		switch (wmId)
+		{
+		case IDM_ABOUT:
+		{
+			if (!IsWindow(g_hWndAbout))
 			{
-				ShowError("Could not initialize Wacom Multi-Touch API.");
+				CreateDialog(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+				ShowWindow(g_hWndAbout, SW_SHOW);
 			}
 			break;
 		}
 
-		case WM_TIMER:
+		// Non-confident fingers are usually hidden, if this option is disabled they will be shown
+		case IDM_OPTIONS_USECONFIDENCEBITS:
 		{
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-
-		case WM_CLOSE:
-		{
-			// Cleanup pens on close
-			for (int idx = 0; idx < NUM_HPENS; idx++)
-			{
-				DeleteObject(g_hPenMap[idx]);
-			}
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-
-		// Handle keyboard input
-		case WM_KEYDOWN:
-		{
-			switch(wParam)
-			{
-				// Escape key clears the screen
-				case VK_ESCAPE:
-				{
-					ClearScreen();
-					break;
-				}
-
-				// TODO - Handle other keys here
-
-				default:
-				{
-					break;
-				}
-			}
+			g_useConfidenceBits = !g_useConfidenceBits;
+			CheckMenuItem(menu, IDM_OPTIONS_USECONFIDENCEBITS, (g_useConfidenceBits ? MF_CHECKED : MF_UNCHECKED));
+			ClearScreen();
 			break;
 		}
 
-		case WM_COMMAND:
+		// Shows the capabilities of attached devices
+		case IDM_OPTIONS_SHOW_CAPS:
 		{
-			// Handle menu selections & changes
-			HMENU menu = GetMenu(g_mainWnd);
-			WORD wmId = LOWORD(wParam);
-			WORD wmEvent = HIWORD(wParam);
-
-			switch (wmId)
-			{
-				case IDM_ABOUT:
-				{
-					if (!IsWindow(g_hWndAbout))
-					{
-						CreateDialog(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-						ShowWindow(g_hWndAbout, SW_SHOW);
-					}
-					break;
-				}
-
-				// Non-confident fingers are usually hidden, if this option is disabled they will be shown
-				case IDM_OPTIONS_USECONFIDENCEBITS:
-				{
-					g_useConfidenceBits = !g_useConfidenceBits;
-					CheckMenuItem(menu, IDM_OPTIONS_USECONFIDENCEBITS, (g_useConfidenceBits ? MF_CHECKED : MF_UNCHECKED));
-					ClearScreen();
-					break;
-				}
-
-				// Shows the capabilities of attached devices
-				case IDM_OPTIONS_SHOW_CAPS:
-				{
-					DumpCaps(true);
-					break;
-				}
-
-				// Change between Consumer (default) and Observer mode.
-				// See the Wacom MTAPI Developer docs for more on the difference.
-				case IDM_OBSERVER:
-				case IDM_CONSUMER:
-				{
-					bool newMode = wmId == IDM_OBSERVER;
-					if (g_ObserverMode != newMode)
-					{
-						for (size_t idx = 0; idx < g_devices.size(); idx++)
-						{
-							UnregisterForData(g_devices[idx], hWnd);
-						}
-						g_ObserverMode = newMode;
-						CheckMenuItem(menu, IDM_OBSERVER, (g_ObserverMode ? MF_CHECKED : MF_UNCHECKED));
-						CheckMenuItem(menu, IDM_CONSUMER, (g_ObserverMode ? MF_UNCHECKED : MF_CHECKED));
-						for (size_t idx = 0; idx < g_devices.size(); idx++)
-						{
-							RegisterForData(g_devices[idx], hWnd);
-						}
-					}
-					SetWindowTextW(hWnd, GetTitle().c_str());
-					ClearScreen();
-					break;
-				}
-
-				// Toggle between showing the touch size and the touch id next to fingers
-				case IDM_SHOW_TOUCH_SIZE:
-				case IDM_SHOW_TOUCH_ID:
-				{
-					g_ShowTouchSize = (wmId == IDM_SHOW_TOUCH_SIZE);
-					g_ShowTouchID = (wmId == IDM_SHOW_TOUCH_ID);
-
-					CheckMenuItem(menu, IDM_SHOW_TOUCH_SIZE, (g_ShowTouchSize ? MF_CHECKED : MF_UNCHECKED));
-					CheckMenuItem(menu, IDM_SHOW_TOUCH_ID, (g_ShowTouchID ? MF_CHECKED : MF_UNCHECKED));
-
-					ClearScreen();
-					break;
-				}
-
-				// Toggle the data being shown.
-				// Finger (default) is supported by all Wacom Touch tablets
-				// See the Wacom MTAPI Developer docs for more on the difference.
-				case IDM_FINGER:
-				case IDM_BLOB:
-				case IDM_RAW:
-				{
-					EDataType typeHit = (wmId == IDM_FINGER) ? EDataType::EFingerData : (wmId == IDM_BLOB) ? EDataType::EBlobData : EDataType::ERawData;
-					for (size_t idx = 0; idx < g_devices.size(); idx++)
-					{
-						UnregisterForData(g_devices[idx], hWnd);
-					}
-					if (g_DataType == typeHit)
-					{
-						g_DataType = EDataType::ENoData;
-					}
-					else
-					{
-						g_DataType = typeHit;
-					}
-
-					CheckMenuItem(menu, IDM_FINGER, (g_DataType == EDataType::EFingerData ? MF_CHECKED : MF_UNCHECKED));
-					CheckMenuItem(menu, IDM_BLOB, (g_DataType == EDataType::EBlobData ? MF_CHECKED : MF_UNCHECKED));
-					CheckMenuItem(menu, IDM_RAW, (g_DataType == EDataType::ERawData ? MF_CHECKED : MF_UNCHECKED));
-
-					for (size_t idx = 0; idx < g_devices.size(); idx++)
-					{
-						RegisterForData(g_devices[idx], hWnd);
-					}
-
-					SetWindowTextW(hWnd, GetTitle().c_str());
-					ClearScreen();
-					break;
-				}
-
-				// Wacom MTAPI has different mechanisms for tracking touch. The API can handle it itself
-				// or the developer can handle it manually.
-				// See the Wacom MTAPI Developer docs for more on the difference.
-				case IDM_WINDOW_HANDLES:
-				{
-					for (size_t idx = 0; idx < g_devices.size(); idx++)
-					{
-						UnregisterForData(g_devices[idx], hWnd);
-					}
-					g_UseHWND = !g_UseHWND;
-
-					CheckMenuItem(menu, IDM_WINDOW_HANDLES, (g_UseHWND ? MF_CHECKED : MF_UNCHECKED));
-					CheckMenuItem(menu, IDM_WINDOW_RECT, (g_UseHWND || g_UseWinHitRect ? MF_CHECKED : MF_UNCHECKED));
-					EnableMenuItem(menu, IDM_WINDOW_RECT, (g_UseHWND ? MF_GRAYED : MF_ENABLED));
-
-					for (size_t idx = 0; idx < g_devices.size(); idx++)
-					{
-						RegisterForData(g_devices[idx], hWnd);
-					}
-
-					SetWindowTextW(hWnd, GetTitle().c_str());
-					ClearScreen();
-					break;
-				}
-
-				case IDM_WINDOW_RECT:
-				{
-					for (size_t idx = 0; idx < g_devices.size(); idx++)
-					{
-						UnregisterForData(g_devices[idx], hWnd);
-					}
-
-					g_UseWinHitRect = !g_UseWinHitRect;
-					CheckMenuItem(menu, IDM_WINDOW_RECT, (g_UseWinHitRect ? MF_CHECKED : MF_UNCHECKED));
-
-					for (size_t idx = 0; idx < g_devices.size(); idx++)
-					{
-						RegisterForData(g_devices[idx], hWnd);
-					}
-
-					SetWindowTextW(hWnd, GetTitle().c_str());
-					ClearScreen();
-					break;
-				}
-
-				case IDM_ERASE:
-				{
-					ClearScreen();
-					break;
-				}
-
-				case IDM_EXIT:
-				{
-					DestroyWindow(hWnd);
-					break;
-				}
-
-				default:
-				{
-					return DefWindowProc(hWnd, message, wParam, lParam);
-				}
-			}
+			DumpCaps(true);
 			break;
 		}
 
-		case WM_PAINT:
+		// Change between Consumer (default) and Observer mode.
+		// See the Wacom MTAPI Developer docs for more on the difference.
+		case IDM_OBSERVER:
+		case IDM_CONSUMER:
 		{
-			PAINTSTRUCT ps = {0};
-			HDC hdc = BeginPaint(hWnd, &ps);
-
-			// Forcing a "no-op" LineTo allows display to refresh pen data, upon getting
-			// this WM_PAINT message due to the InvalidateRect() call in DrawPenData().
-			// If also drawing due to finger ellipses, then this hack wouldn't be needed, but
-			// we want to use the pen by itself (no touch data).
-			// Hack seems to need to do a drawing operation; MoveToEx by itself doesn't work.
-			LineTo(hdc, 0, 0);
-			EndPaint(hWnd, &ps);
-			break;
-		}
-
-		case WM_SETTINGCHANGE:
-		{
-			if (lParam)
+			bool newMode = wmId == IDM_OBSERVER;
+			if (g_ObserverMode != newMode)
 			{
-				DebugTrace("WM_SETTINGCHANGE %i, %S\n", wParam, lParam);
-			}
-			else
-			{
-				DebugTrace("WM_SETTINGCHANGE %i, NULL\n", wParam);
-			}
-			break;
-		}
-
-		case WM_DESTROY:
-		{
-			ReleaseDC(hWnd, g_hdc);
-			if (g_tabCtx)
-			{
-				gpWTClose(g_tabCtx);
-				g_tabCtx = NULL;
-			}
-
-			// Return Wintab and MTAPI resources.
-			Cleanup();
-
-			PostQuitMessage(0);
-			break;
-		}
-
-		case WM_SIZE:
-		case WM_MOVE:
-		{
-			WINDOWINFO appWindowInfo = { 0 };
-			appWindowInfo.cbSize = sizeof(appWindowInfo);
-			GetWindowInfo(hWnd, &appWindowInfo);
-			g_clientRect = appWindowInfo.rcClient;
-
-			if (!g_UseHWND)
-			{
-				// Make sure there's an attached touch tablet.
 				for (size_t idx = 0; idx < g_devices.size(); idx++)
 				{
-					int deviceID = g_devices[idx];
-					if (g_caps.count(deviceID) && (g_caps[deviceID].Type == WMTDeviceTypeIntegrated))
-					{
-						// Resend hitrect size and position to MTAPI
-						MoveCallback(deviceID);
-					}
+					UnregisterForData(g_devices[idx], hWnd);
 				}
+				g_ObserverMode = newMode;
+				CheckMenuItem(menu, IDM_OBSERVER, (g_ObserverMode ? MF_CHECKED : MF_UNCHECKED));
+				CheckMenuItem(menu, IDM_CONSUMER, (g_ObserverMode ? MF_UNCHECKED : MF_CHECKED));
+				for (size_t idx = 0; idx < g_devices.size(); idx++)
+				{
+					RegisterForData(g_devices[idx], hWnd);
+				}
+			}
+			SetWindowTextW(hWnd, GetTitle().c_str());
+			ClearScreen();
+			break;
+		}
+
+		// Toggle between showing the touch size and the touch id next to fingers
+		case IDM_SHOW_TOUCH_SIZE:
+		case IDM_SHOW_TOUCH_ID:
+		{
+			g_ShowTouchSize = (wmId == IDM_SHOW_TOUCH_SIZE);
+			g_ShowTouchID = (wmId == IDM_SHOW_TOUCH_ID);
+
+			CheckMenuItem(menu, IDM_SHOW_TOUCH_SIZE, (g_ShowTouchSize ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, IDM_SHOW_TOUCH_ID, (g_ShowTouchID ? MF_CHECKED : MF_UNCHECKED));
+
+			ClearScreen();
+			break;
+		}
+
+		// Toggle the data being shown.
+		// Finger (default) is supported by all Wacom Touch tablets
+		// See the Wacom MTAPI Developer docs for more on the difference.
+		case IDM_FINGER:
+		case IDM_BLOB:
+		case IDM_RAW:
+		{
+			EDataType typeHit = (wmId == IDM_FINGER) ? EDataType::EFingerData : (wmId == IDM_BLOB) ? EDataType::EBlobData
+				: EDataType::ERawData;
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
+			{
+				UnregisterForData(g_devices[idx], hWnd);
+			}
+			if (g_DataType == typeHit)
+			{
+				g_DataType = EDataType::ENoData;
 			}
 			else
 			{
-				return DefWindowProc(hWnd, message, wParam, lParam);
+				g_DataType = typeHit;
 			}
-			break;
-		}
 
-		// Handle MTAPI Finger data
-		case WM_FINGERDATA:
-		{
-			DrawFingerData(((WacomMTFingerCollection*)lParam)->FingerCount,
-				((WacomMTFingerCollection*)lParam)->Fingers,
-				((WacomMTFingerCollection*)lParam)->DeviceID);
-			break;
-		}
+			CheckMenuItem(menu, IDM_FINGER, (g_DataType == EDataType::EFingerData ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, IDM_BLOB, (g_DataType == EDataType::EBlobData ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, IDM_RAW, (g_DataType == EDataType::ERawData ? MF_CHECKED : MF_UNCHECKED));
 
-		// Handle MTAPI Blob data
-		case WM_BLOBDATA:
-		{
-			DrawBlobData(((WacomMTBlobAggregate*)lParam)->BlobCount,
-				((WacomMTBlobAggregate*)lParam)->BlobArray,
-				((WacomMTBlobAggregate*)lParam)->DeviceID);
-			break;
-		}
-
-		// Capture pen data.
-		// Note that the data is being sent in system coordinates.
-		case WT_PACKET:
-		{
-			PACKET wintabPkt;
-			static POINT ptOld = {0};
-			static POINT ptNew = {0};
-			static UINT prsOld = 0;
-			static UINT prsNew = 0;
-
-			if (gpWTPacket((HCTX)lParam, wParam, &wintabPkt))
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
 			{
-				ptNew.x = wintabPkt.pkX;
-				ptNew.y = wintabPkt.pkY;
-				prsNew = wintabPkt.pkNormalPressure;
-
-				if ((ptNew.x != ptOld.x) || (ptNew.y != ptOld.y))
-				{
-					bool bMoveToPoint = ((prsOld == 0) && (prsNew > 0));
-					DebugTrace("prsOld: %i, prsNew: %i, ptNew: [%i,%i], ptOld: [%i,%i], moveToPoint: %s\n",
-						prsOld, prsNew,
-						ptNew.x, ptNew.y,
-						ptOld.x, ptOld.y,
-						(bMoveToPoint ? "Move" : "Draw"));
-					DrawPenData(ptNew, prsNew, bMoveToPoint);
-
-					// Keep track of last time we did move or draw.
-					ptOld = ptNew;
-					prsOld = prsNew;
-				}
+				RegisterForData(g_devices[idx], hWnd);
 			}
+
+			SetWindowTextW(hWnd, GetTitle().c_str());
+			ClearScreen();
+			break;
+		}
+
+		// Wacom MTAPI has different mechanisms for tracking touch. The API can handle it itself
+		// or the developer can handle it manually.
+		// See the Wacom MTAPI Developer docs for more on the difference.
+		case IDM_WINDOW_HANDLES:
+		{
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
+			{
+				UnregisterForData(g_devices[idx], hWnd);
+			}
+			g_UseHWND = !g_UseHWND;
+
+			CheckMenuItem(menu, IDM_WINDOW_HANDLES, (g_UseHWND ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, IDM_WINDOW_RECT, (g_UseHWND || g_UseWinHitRect ? MF_CHECKED : MF_UNCHECKED));
+			EnableMenuItem(menu, IDM_WINDOW_RECT, (g_UseHWND ? MF_GRAYED : MF_ENABLED));
+
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
+			{
+				RegisterForData(g_devices[idx], hWnd);
+			}
+
+			SetWindowTextW(hWnd, GetTitle().c_str());
+			ClearScreen();
+			break;
+		}
+
+		case IDM_WINDOW_RECT:
+		{
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
+			{
+				UnregisterForData(g_devices[idx], hWnd);
+			}
+
+			g_UseWinHitRect = !g_UseWinHitRect;
+			CheckMenuItem(menu, IDM_WINDOW_RECT, (g_UseWinHitRect ? MF_CHECKED : MF_UNCHECKED));
+
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
+			{
+				RegisterForData(g_devices[idx], hWnd);
+			}
+
+			SetWindowTextW(hWnd, GetTitle().c_str());
+			ClearScreen();
+			break;
+		}
+
+		case IDM_ERASE:
+		{
+			ClearScreen();
+			break;
+		}
+
+		case IDM_EXIT:
+		{
+			DestroyWindow(hWnd);
 			break;
 		}
 
@@ -754,6 +677,155 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
+		}
+		break;
+	}
+
+	case WM_PAINT:
+	{
+		PAINTSTRUCT ps = { 0 };
+		HDC hdc = BeginPaint(hWnd, &ps);
+
+		// Forcing a "no-op" LineTo allows display to refresh pen data, upon getting
+		// this WM_PAINT message due to the InvalidateRect() call in DrawPenData().
+		// If also drawing due to finger ellipses, then this hack wouldn't be needed, but
+		// we want to use the pen by itself (no touch data).
+		// Hack seems to need to do a drawing operation; MoveToEx by itself doesn't work.
+		LineTo(hdc, 0, 0);
+		EndPaint(hWnd, &ps);
+		break;
+	}
+
+	case WM_SETTINGCHANGE:
+	{
+		if (lParam)
+		{
+			DebugTrace("WM_SETTINGCHANGE %i, %S\n", wParam, lParam);
+		}
+		else
+		{
+			DebugTrace("WM_SETTINGCHANGE %i, NULL\n", wParam);
+		}
+		break;
+	}
+
+	case WM_DESTROY:
+	{
+		ReleaseDC(hWnd, g_hdc);
+		if (g_tabCtx)
+		{
+			gpWTClose(g_tabCtx);
+			g_tabCtx = NULL;
+		}
+
+		// Return Wintab and MTAPI resources.
+		Cleanup();
+
+		PostQuitMessage(0);
+		break;
+	}
+
+	case WM_SIZE:
+	case WM_MOVE:
+	{
+		WINDOWINFO appWindowInfo = { 0 };
+		appWindowInfo.cbSize = sizeof(appWindowInfo);
+		GetWindowInfo(hWnd, &appWindowInfo);
+		g_clientRect = appWindowInfo.rcClient;
+
+		if (!g_UseHWND)
+		{
+			// Make sure there's an attached touch tablet.
+			for (size_t idx = 0; idx < g_devices.size(); idx++)
+			{
+				int deviceID = g_devices[idx];
+				if (g_caps.count(deviceID) && (g_caps[deviceID].Type == WMTDeviceTypeIntegrated))
+				{
+					// Resend hitrect size and position to MTAPI
+					MoveCallback(deviceID);
+				}
+			}
+		}
+		else
+		{
+			return DefWindowProc(hWnd, message, wParam, lParam);
+		}
+		break;
+	}
+
+	// Handle MTAPI Finger data
+	case WM_FINGERDATA:
+	{
+		DrawFingerData(((WacomMTFingerCollection*)lParam)->FingerCount,
+			((WacomMTFingerCollection*)lParam)->Fingers,
+			((WacomMTFingerCollection*)lParam)->DeviceID);
+		break;
+	}
+
+	// Handle MTAPI Blob data
+	case WM_BLOBDATA:
+	{
+		DrawBlobData(((WacomMTBlobAggregate*)lParam)->BlobCount,
+			((WacomMTBlobAggregate*)lParam)->BlobArray,
+			((WacomMTBlobAggregate*)lParam)->DeviceID);
+		break;
+	}
+
+	// Capture pen data.
+	// Note that the data is being sent in system coordinates.
+	case WT_PACKET:
+	{
+		PACKET wintabPkt;
+		static POINT ptOld = { 0 };
+		static POINT ptNew = { 0 };
+		static UINT prsOld = 0;
+		static UINT prsNew = 0;
+
+		if (gpWTPacket((HCTX)lParam, wParam, &wintabPkt))
+		{
+			ptNew.x = wintabPkt.pkX;
+			ptNew.y = wintabPkt.pkY;
+			prsNew = wintabPkt.pkNormalPressure;
+
+            // orientation が PACKET に含まれていれば取得（Wintab は tenth-degrees を返す）
+            // orAzimuth: 0..3600 -> 0.0..360.0 deg
+            // orAltitude: 0..900  -> 0.0..90.0 deg
+            g_currentHorizAngle = (double)wintabPkt.pkOrientation.orAzimuth / 10.0;
+            g_currentVertAngle  = (double)wintabPkt.pkOrientation.orAltitude / 10.0;
+
+			// ← 追加：ペン先が硯の中にあれば墨を補充する
+			{
+				POINT clientPt = ptNew;
+				::ScreenToClient(g_mainWnd, &clientPt);
+				if (PtInRect(&g_inkstoneRect, clientPt) && prsNew > 0)
+				{
+					g_inkAmount = std::min(INK_MAX, g_inkAmount + INK_REFILL_RATE);
+					InvalidateRect(g_mainWnd, &g_inkstoneRect, FALSE); // 硯部分だけ再描画
+				}
+			}
+
+			if ((ptNew.x != ptOld.x) || (ptNew.y != ptOld.y))
+			{
+				bool bMoveToPoint = ((prsOld == 0) && (prsNew > 0));
+				DebugTrace("prsOld: %i, prsNew: %i, ptNew: [%i,%i], ptOld: [%i,%i], moveToPoint: %s\n",
+					prsOld, prsNew,
+					ptNew.x, ptNew.y,
+					ptOld.x, ptOld.y,
+					(bMoveToPoint ? "Move" : "Draw"));
+				DrawPenData(ptNew, prsNew, bMoveToPoint);
+
+				// Keep track of last time we did move or draw.
+				ptOld = ptNew;
+				prsOld = prsNew;
+			}
+		}
+		break;
+	}
+
+	default:
+	{
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
 	}
 	return 0;
 }
@@ -767,48 +839,48 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	UNREFERENCED_PARAMETER(lParam);
 	switch (message)
 	{
-		case WM_INITDIALOG:
-		{
-			WacomMTError res = WMTErrorInvalidParam;
+	case WM_INITDIALOG:
+	{
+		WacomMTError res = WMTErrorInvalidParam;
 
-			g_hWndAbout = hDlg;
+		g_hWndAbout = hDlg;
+		for (size_t idx = 0; idx < g_devices.size(); idx++)
+		{
+			int deviceID = g_devices[idx];
+			if (g_caps.count(deviceID))
+			{
+				res = WacomMTRegisterFingerReadHWND(deviceID, WMTProcessingModePassThrough, g_hWndAbout, 5);
+				if (res != WMTErrorSuccess)
+				{
+					break;
+				}
+			}
+		}
+		return 1;
+	}
+
+	case WM_COMMAND:
+	{
+		if ((LOWORD(wParam) == IDOK) || (LOWORD(wParam) == IDCANCEL))
+		{
 			for (size_t idx = 0; idx < g_devices.size(); idx++)
 			{
 				int deviceID = g_devices[idx];
 				if (g_caps.count(deviceID))
 				{
-					res = WacomMTRegisterFingerReadHWND(deviceID, WMTProcessingModePassThrough, g_hWndAbout, 5);
-					if (res != WMTErrorSuccess)
+					if (WacomMTUnRegisterFingerReadHWND(g_hWndAbout) != WMTErrorSuccess)
 					{
 						break;
 					}
 				}
 			}
+			DestroyWindow(hDlg);
+			g_hWndAbout = NULL;
+
 			return 1;
 		}
-
-		case WM_COMMAND:
-		{
-			if ((LOWORD(wParam) == IDOK) || (LOWORD(wParam) == IDCANCEL))
-			{
-				for (size_t idx = 0; idx < g_devices.size(); idx++)
-				{
-					int deviceID = g_devices[idx];
-					if (g_caps.count(deviceID))
-					{
-						if (WacomMTUnRegisterFingerReadHWND(g_hWndAbout) != WMTErrorSuccess)
-						{
-							break;
-						}
-					}
-				}
-				DestroyWindow(hDlg);
-				g_hWndAbout = NULL;
-
-				return 1;
-			}
-			break;
-		}
+		break;
+	}
 	}
 
 	return 0;
@@ -830,42 +902,42 @@ WacomMTError RegisterForData(int deviceID_I, HWND hWnd_I)
 
 	switch (g_DataType)
 	{
-		case EDataType::EFingerData:
+	case EDataType::EFingerData:
+	{
+		if (g_UseHWND)
 		{
-			if (g_UseHWND)
-			{
-				res = WacomMTRegisterFingerReadHWND(deviceID_I, CurrentMode(), hWnd_I, 5);
-			}
-			else
-			{
-				res = WacomMTRegisterFingerReadCallback(deviceID_I, wtHitRect.get(), CurrentMode(), FingerCallback, NULL);
-			}
-			break;
+			res = WacomMTRegisterFingerReadHWND(deviceID_I, CurrentMode(), hWnd_I, 5);
 		}
+		else
+		{
+			res = WacomMTRegisterFingerReadCallback(deviceID_I, wtHitRect.get(), CurrentMode(), FingerCallback, NULL);
+		}
+		break;
+	}
 
-		case EDataType::EBlobData:
+	case EDataType::EBlobData:
+	{
+		if (g_UseHWND)
 		{
-			if (g_UseHWND)
-			{
-				res = WacomMTRegisterBlobReadHWND(deviceID_I, CurrentMode(), hWnd_I, 5);
-			}
-			else
-			{
-				res = WacomMTRegisterBlobReadCallback(deviceID_I, wtHitRect.get(), CurrentMode(), BlobCallback, NULL);
-			}
-			break;
+			res = WacomMTRegisterBlobReadHWND(deviceID_I, CurrentMode(), hWnd_I, 5);
 		}
+		else
+		{
+			res = WacomMTRegisterBlobReadCallback(deviceID_I, wtHitRect.get(), CurrentMode(), BlobCallback, NULL);
+		}
+		break;
+	}
 
-		case EDataType::ERawData:
-		{
-			res = WacomMTRegisterRawReadCallback(deviceID_I, CurrentMode(), RawCallback, NULL);
-			break;
-		}
+	case EDataType::ERawData:
+	{
+		res = WacomMTRegisterRawReadCallback(deviceID_I, CurrentMode(), RawCallback, NULL);
+		break;
+	}
 
-		default:
-		{
-			break;
-		}
+	default:
+	{
+		break;
+	}
 	}
 
 	g_lastWTHitRect[deviceID_I] = std::move(wtHitRect);
@@ -886,30 +958,30 @@ WacomMTError MoveCallback(int deviceID)
 	{
 		switch (g_DataType)
 		{
-			case EDataType::EFingerData:
-			{
-				// move registered callback from prev hit rect to new hit rect
-				res = WacomMTMoveRegisteredFingerReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), wtHitRect.get(), NULL);
-				break;
-			}
+		case EDataType::EFingerData:
+		{
+			// move registered callback from prev hit rect to new hit rect
+			res = WacomMTMoveRegisteredFingerReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), wtHitRect.get(), NULL);
+			break;
+		}
 
-			case EDataType::EBlobData:
-			{
-				// move registered callback from prev hit rect to new hit rect
-				res = WacomMTMoveRegisteredBlobReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), wtHitRect.get(), NULL);
-				break;
-			}
+		case EDataType::EBlobData:
+		{
+			// move registered callback from prev hit rect to new hit rect
+			res = WacomMTMoveRegisteredBlobReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), wtHitRect.get(), NULL);
+			break;
+		}
 
-			case EDataType::ERawData:
-			{
-				res = WacomMTRegisterRawReadCallback(deviceID, CurrentMode(), RawCallback, NULL);
-				break;
-			}
+		case EDataType::ERawData:
+		{
+			res = WacomMTRegisterRawReadCallback(deviceID, CurrentMode(), RawCallback, NULL);
+			break;
+		}
 
-			default:
-			{
-				break;
-			}
+		default:
+		{
+			break;
+		}
 		}
 
 		g_lastWTHitRect[deviceID] = std::move(wtHitRect);
@@ -927,42 +999,42 @@ WacomMTError UnregisterForData(int deviceID, HWND hWnd_I)
 
 	switch (g_DataType)
 	{
-		case EDataType::EFingerData:
+	case EDataType::EFingerData:
+	{
+		if (g_UseHWND)
 		{
-			if (g_UseHWND)
-			{
-				res = WacomMTUnRegisterFingerReadHWND(hWnd_I);
-			}
-			else
-			{
-				res = WacomMTUnRegisterFingerReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), NULL);
-			}
-			break;
+			res = WacomMTUnRegisterFingerReadHWND(hWnd_I);
 		}
+		else
+		{
+			res = WacomMTUnRegisterFingerReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), NULL);
+		}
+		break;
+	}
 
-		case EDataType::EBlobData:
+	case EDataType::EBlobData:
+	{
+		if (g_UseHWND)
 		{
-			if (g_UseHWND)
-			{
-				res = WacomMTUnRegisterBlobReadHWND(g_mainWnd);
-			}
-			else
-			{
-				res = WacomMTUnRegisterBlobReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), NULL);
-			}
-			break;
+			res = WacomMTUnRegisterBlobReadHWND(g_mainWnd);
 		}
+		else
+		{
+			res = WacomMTUnRegisterBlobReadCallback(deviceID, g_lastWTHitRect[deviceID].get(), CurrentMode(), NULL);
+		}
+		break;
+	}
 
-		case EDataType::ERawData:
-		{
-			res = WacomMTUnRegisterRawReadCallback(deviceID, CurrentMode(), NULL);
-			break;
-		}
+	case EDataType::ERawData:
+	{
+		res = WacomMTUnRegisterRawReadCallback(deviceID, CurrentMode(), NULL);
+		break;
+	}
 
-		default:
-		{
-			break;
-		}
+	default:
+	{
+		break;
+	}
 	}
 
 	g_lastWTHitRect[deviceID].reset();
@@ -974,7 +1046,7 @@ WacomMTError UnregisterForData(int deviceID, HWND hWnd_I)
 // Purpose
 //		Callback triggered to deliver finger touch data from the MTAPI.
 //
-int FingerCallback(WacomMTFingerCollection *fingerData, void *userData)
+int FingerCallback(WacomMTFingerCollection* fingerData, void* userData)
 {
 	if (fingerData)
 	{
@@ -987,7 +1059,7 @@ int FingerCallback(WacomMTFingerCollection *fingerData, void *userData)
 // Purpose
 //		Callback triggered to deliver blob touch data from the MTAPI.
 //
-int BlobCallback(WacomMTBlobAggregate *blobData, void *userData)
+int BlobCallback(WacomMTBlobAggregate* blobData, void* userData)
 {
 	if (blobData)
 	{
@@ -1000,7 +1072,7 @@ int BlobCallback(WacomMTBlobAggregate *blobData, void *userData)
 // Purpose
 //		Callback triggered to deliver raw touch data from the MTAPI.
 //
-int RawCallback(WacomMTRawData *rawData, void *userData)
+int RawCallback(WacomMTRawData* rawData, void* userData)
 {
 	// rawData->ElementCount should equal caps.ScanX times caps.ScanY
 	if (rawData)
@@ -1014,7 +1086,7 @@ int RawCallback(WacomMTRawData *rawData, void *userData)
 // Purpose
 //		Callback triggered on device attach.
 //
-void AttachCallback(WacomMTCapability deviceInfo, void *userRef)
+void AttachCallback(WacomMTCapability deviceInfo, void* userRef)
 {
 	if (!g_caps.count(deviceInfo.DeviceID))
 	{
@@ -1029,7 +1101,7 @@ void AttachCallback(WacomMTCapability deviceInfo, void *userRef)
 // Purpose
 //		Callback triggered on device detach.
 //
-void DetachCallback(int deviceID, void *userRef)
+void DetachCallback(int deviceID, void* userRef)
 {
 	if (g_caps.count(deviceID))
 	{
@@ -1054,12 +1126,8 @@ void Rotate(double degrees, const POINT& centerPnt, std::vector<POINT>& points)
 
 	for (UINT idx = 0; idx < points.size(); idx++)
 	{
-		points[idx].x = static_cast<LONG>(cos(rad)
-			* (static_cast<double>(points[idx].x) - centerPnt.x) - (sin(rad)
-				* (static_cast<double>(points[idx].y) - centerPnt.y)) + centerPnt.x);
-		points[idx].y = static_cast<LONG>(sin(rad)
-			* (static_cast<double>(points[idx].x) - centerPnt.x) + (cos(rad)
-				* (static_cast<double>(points[idx].y) - centerPnt.y)) + centerPnt.y);
+		points[idx].x = static_cast<LONG>(cos(rad) * (static_cast<double>(points[idx].x) - centerPnt.x) - (sin(rad) * (static_cast<double>(points[idx].y) - centerPnt.y)) + centerPnt.x);
+		points[idx].y = static_cast<LONG>(sin(rad) * (static_cast<double>(points[idx].x) - centerPnt.x) + (cos(rad) * (static_cast<double>(points[idx].y) - centerPnt.y)) + centerPnt.y);
 	}
 }
 
@@ -1067,7 +1135,7 @@ void Rotate(double degrees, const POINT& centerPnt, std::vector<POINT>& points)
 // Purpose
 //		Draws Finger data from the MTAPI.
 //
-void DrawFingerData(int count, WacomMTFinger *fingers, int device)
+void DrawFingerData(int count, WacomMTFinger* fingers, int device)
 {
 	if (g_devices.size() && count && fingers)
 	{
@@ -1107,11 +1175,11 @@ void DrawFingerData(int count, WacomMTFinger *fingers, int device)
 					x *= static_cast<double>(g_clientRect.right) - g_clientRect.left;
 					x += g_clientRect.left;
 					y *= static_cast<double>(g_clientRect.bottom) - g_clientRect.top;
-					y += g_clientRect.top ;
+					y += g_clientRect.top;
 				}
 
-				//map to our window
-				POINT pt = {static_cast<LONG>(x), static_cast<LONG>(y)};
+				// map to our window
+				POINT pt = { static_cast<LONG>(x), static_cast<LONG>(y) };
 				::ScreenToClient(g_mainWnd, &pt);
 
 				// If width and height are not supported; we will fake it.
@@ -1123,10 +1191,10 @@ void DrawFingerData(int count, WacomMTFinger *fingers, int device)
 					// Make larger for visibility, if necessary.
 					if (fingers[index].Width <= 1.0)
 					{
-						// Convert logical value to millimeters by multiplying by physical width.
+						// Convert logical value to millimeters by multiplying to physical width.
 						widthMM = static_cast<double>(fingers[index].Width) * g_caps[device].PhysicalSizeX;
 					}
-					else //must be Cintiq so width already in pixels
+					else // must be Cintiq so width already in pixels
 					{
 						widthMM = static_cast<double>(fingers[index].Width) * horizontalPixelPitch;
 					}
@@ -1140,12 +1208,12 @@ void DrawFingerData(int count, WacomMTFinger *fingers, int device)
 					// Make larger for visibility, if necessary.
 					if (fingers[index].Height <= 1.0)
 					{
-						// Convert logical value to millimeters by multiplying by physical height.
+						// Convert logical value to millimeters by multiplying to physical height.
 						heightMM = static_cast<double>(fingers[index].Height) * g_caps[device].PhysicalSizeY;
 					}
-					else //must be Cintiq so height already in pixels
+					else // must be Cintiq so height already in pixels
 					{
-						heightMM = static_cast<double>(fingers[index].Height) * verticalPixelPitch; //pixel pitch of Cintiq 24 HD
+						heightMM = static_cast<double>(fingers[index].Height) * verticalPixelPitch; // pixel pitch of Cintiq 24 HD
 					}
 				}
 				int contactHeightOffset = static_cast<int>(heightMM / verticalPixelPitch / 2);
@@ -1182,9 +1250,9 @@ void DrawFingerData(int count, WacomMTFinger *fingers, int device)
 
 				// Display finger stats in upper left corner.
 				wchar_t fingerStr[128] = L"";
-				_stprintf_s( fingerStr, L"Finger:%d ID:%d Xtab:%.2f Ytab:%.2f W:%.2f [%.2f mm]  H:%.2f [%.2f mm]  Angle:%.0f      \n",
+				_stprintf_s(fingerStr, L"Finger:%d ID:%d Xtab:%.2f Ytab:%.2f W:%.2f [%.2f mm]  H:%.2f [%.2f mm]  Angle:%.0f      \n",
 					index, fingers[index].FingerID, fingers[index].X, fingers[index].Y,
-					fingers[index].Width, widthMM, fingers[index].Height, heightMM, fingers[index].Orientation );
+					fingers[index].Width, widthMM, fingers[index].Height, heightMM, fingers[index].Orientation);
 				TextOut(g_hdc, 50, 20, fingerStr, _tcslen(fingerStr));
 
 				SelectObject(g_hdc, oldPen);
@@ -1208,6 +1276,36 @@ void ClearScreen()
 	cRect.top = 0;
 
 	FillRect(g_hdc, &cRect, static_cast<HBRUSH>(GetStockObject((g_ObserverMode ? COLOR_WINDOW : COLOR_APPWORKSPACE) + 1)));
+
+	DrawInkstone(); // ← 追加：画面クリア後も硯を再描画する
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Purpose
+//		硯を描画する。墨量に応じて墨だまりの濃さも変化させる。
+//
+void DrawInkstone()
+{
+	// 硯本体（石の部分）
+	HBRUSH stoneBrush = CreateSolidBrush(RGB(80, 80, 80));
+	HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(g_hdc, stoneBrush));
+	RoundRect(g_hdc, g_inkstoneRect.left, g_inkstoneRect.top,
+		g_inkstoneRect.right, g_inkstoneRect.bottom, 12, 12);
+
+	// 墨だまり（海の部分）。墨量が多いほど濃い黒、少ないほど薄い灰色になる
+	int inkGray = static_cast<int>(255 * (1.0 - g_inkAmount));
+	HBRUSH inkBrush = CreateSolidBrush(RGB(inkGray, inkGray, inkGray));
+	SelectObject(g_hdc, inkBrush);
+	Ellipse(g_hdc,
+		g_inkstoneRect.left + 15, g_inkstoneRect.bottom - 60,
+		g_inkstoneRect.right - 15, g_inkstoneRect.bottom - 15);
+
+	SelectObject(g_hdc, oldBrush);
+	DeleteObject(stoneBrush);
+	DeleteObject(inkBrush);
+
+	// ラベル
+	TextOut(g_hdc, g_inkstoneRect.left, g_inkstoneRect.top - 18, L"\x785A", 1); // "硯"
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1218,7 +1316,7 @@ WacomMTHitRectPtr GetAppHitRect()
 {
 	if (g_UseWinHitRect)
 	{
-		WINDOWINFO appWindowInfo = {0};
+		WINDOWINFO appWindowInfo = { 0 };
 		appWindowInfo.cbSize = sizeof(appWindowInfo);
 		GetWindowInfo(g_mainWnd, &appWindowInfo);
 
@@ -1226,8 +1324,7 @@ WacomMTHitRectPtr GetAppHitRect()
 			static_cast<float>(appWindowInfo.rcClient.left),
 			static_cast<float>(appWindowInfo.rcClient.top),
 			static_cast<float>(appWindowInfo.rcClient.right - appWindowInfo.rcClient.left),
-			static_cast<float>(appWindowInfo.rcClient.bottom - appWindowInfo.rcClient.top)
-		};
+			static_cast<float>(appWindowInfo.rcClient.bottom - appWindowInfo.rcClient.top) };
 
 		return WacomMTHitRectPtr(new WacomMTHitRect(hitRect));
 	}
@@ -1240,12 +1337,12 @@ WacomMTHitRectPtr GetAppHitRect()
 //
 void DrawRawData(int count, unsigned short* rawBuf, int device)
 {
-	SIZE rawSize = {g_caps[device].ScanSizeX, g_caps[device].ScanSizeY};
+	SIZE rawSize = { g_caps[device].ScanSizeX, g_caps[device].ScanSizeY };
 	if (count && rawBuf)
 	{
 		ClearScreen();
 
-		HPEN pen = CreatePen(PS_SOLID, 2, RGB(255,0,0));
+		HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
 		HPEN oldPen = static_cast<HPEN>(SelectObject(g_hdc, pen));
 
 		for (int sy = 0; sy < rawSize.cy; sy++)
@@ -1255,14 +1352,14 @@ void DrawRawData(int count, unsigned short* rawBuf, int device)
 				unsigned short value = rawBuf[sy * rawSize.cx + sx];
 				if (value > 4)
 				{
-					int X = sx * static_cast<int>(g_caps[device].LogicalWidth)  / rawSize.cx + static_cast<int>(g_caps[device].LogicalOriginX);
+					int X = sx * static_cast<int>(g_caps[device].LogicalWidth) / rawSize.cx + static_cast<int>(g_caps[device].LogicalOriginX);
 					int Y = sy * static_cast<int>(g_caps[device].LogicalHeight) / rawSize.cy + static_cast<int>(g_caps[device].LogicalOriginY);
 					int offset = std::max(value * 6 / 255 + 5, 7);
 
 					if ((X > g_clientRect.left) && (X < g_clientRect.right) &&
-						 (Y > g_clientRect.top) &&  (Y < g_clientRect.bottom))
+						(Y > g_clientRect.top) && (Y < g_clientRect.bottom))
 					{
-						POINT pt = {X, Y};
+						POINT pt = { X, Y };
 						::ScreenToClient(g_mainWnd, &pt);
 
 						Circle(g_hdc, pt.x, pt.y, offset);
@@ -1280,7 +1377,7 @@ void DrawRawData(int count, unsigned short* rawBuf, int device)
 // Purpose
 //		Calculates the center point given a set of points.
 //
-POINT FindCenterPoint(int count, WacomMTBlobPoint *points)
+POINT FindCenterPoint(int count, WacomMTBlobPoint* points)
 {
 	UINT32 msig = 0;
 	UINT32 wmx = 0;
@@ -1293,7 +1390,7 @@ POINT FindCenterPoint(int count, WacomMTBlobPoint *points)
 		wmy += static_cast<UINT32>(points[i].Y * points[i].Sensitivity);
 	}
 
-	POINT center = {0,0};
+	POINT center = { 0, 0 };
 	if (msig)
 	{
 		center.x = wmx / msig;
@@ -1306,12 +1403,12 @@ POINT FindCenterPoint(int count, WacomMTBlobPoint *points)
 // Purpose
 //		Draw a single blob from the MTAPI.
 //
-void DrawBlob(int count, WacomMTBlobPoint *points)
+void DrawBlob(int count, WacomMTBlobPoint* points)
 {
 	if (count && points)
 	{
 		WacomMTBlobPoint apiPoint = points[0];
-		POINT curPt = {static_cast<LONG>(apiPoint.X), static_cast<LONG>(apiPoint.Y)};
+		POINT curPt = { static_cast<LONG>(apiPoint.X), static_cast<LONG>(apiPoint.Y) };
 		::ScreenToClient(g_mainWnd, &curPt);
 
 		for (int pointIndex = 1; pointIndex <= count; pointIndex++)
@@ -1336,7 +1433,7 @@ void DrawBlob(int count, WacomMTBlobPoint *points)
 // Purpose
 //		Draw blob data from the MTAPI.
 //
-void DrawBlobData(int count, WacomMTBlob *blobs, int device)
+void DrawBlobData(int count, WacomMTBlob* blobs, int device)
 {
 	if (count && blobs)
 	{
@@ -1347,12 +1444,12 @@ void DrawBlobData(int count, WacomMTBlob *blobs, int device)
 		ClearScreen();
 
 		{
-			POINT pt = { static_cast<LONG>(blobs->X), static_cast<LONG>(blobs->Y)};
+			POINT pt = { static_cast<LONG>(blobs->X), static_cast<LONG>(blobs->Y) };
 
 			if ((pt.x > g_clientRect.left) && (pt.x < g_clientRect.right) &&
-				 (pt.y > g_clientRect.top) &&  (pt.y < g_clientRect.bottom))
+				(pt.y > g_clientRect.top) && (pt.y < g_clientRect.bottom))
 			{
-				//map to our window
+				// map to our window
 				::ScreenToClient(g_mainWnd, &pt);
 				Circle(g_hdc, pt.x, pt.y, 2);
 			}
@@ -1361,12 +1458,12 @@ void DrawBlobData(int count, WacomMTBlob *blobs, int device)
 			{
 				bool confident = blobs[blobIndex].Confidence;
 
-				if ( g_useConfidenceBits && !confident )
+				if (g_useConfidenceBits && !confident)
 				{
-					continue;	// skip drawing this blob
+					continue; // skip drawing this blob
 				}
 
-				HPEN oldPen = static_cast<HPEN>(SelectObject(g_hdc, 
+				HPEN oldPen = static_cast<HPEN>(SelectObject(g_hdc,
 					confident ? g_confidencePen : g_noConfidencePen));
 
 				DrawBlob(blobs[blobIndex].PointCount, blobs[blobIndex].BlobPoints);
@@ -1395,42 +1492,39 @@ HCTX InitWintabAPI(HWND hwnd_I)
 	}
 
 	char TabletName[50] = "";
+	// 端末情報を取得（ログ出力等で使える）
 	gpWTInfoA(WTI_DEVICES, DVC_NAME, TabletName);
 	gpWTInfoA(WTI_INTERFACE, IFC_WINTABID, TabletName);
 
-	// check if WinTab available.
+	// WinTab が利用可能か確認
 	if (!gpWTInfoA(0, 0, NULL))
 	{
 		ShowError("WinTab Services Not Available.");
-		return FALSE;
+		return 0;
 	}
 
-	// get default region
-	LOGCONTEXTA logContext = {0};
+	// デフォルトコンテキスト取得
+	LOGCONTEXTA logContext = { 0 };
 	gpWTInfoA(WTI_DEFSYSCTX, 0, &logContext);
 
-	// No need to specify lcInOrg* and lcInExt* as they are the entire
-	// physical tablet area by default.
+	// 必要なオプションを設定
+	logContext.lcOptions |= CXO_MESSAGES; // メッセージ受け取り
+	logContext.lcOptions |= CXO_SYSTEM;   // システムカーソル移動
 
-	// Get messages
-	logContext.lcOptions |= CXO_MESSAGES;
-
-	// Move the system cursor.
-	logContext.lcOptions |= CXO_SYSTEM;
-
+	// 取得するパケットデータ／モードを設定（PK_ORIENTATION を含める）
 	logContext.lcPktData = PACKETDATA;
 	logContext.lcPktMode = PACKETMODE;
 	logContext.lcMoveMask = PACKETDATA;
 	logContext.lcBtnUpMask = logContext.lcBtnDnMask;
 
-	// In Wintab, the tablet origin is lower left.  Move origin to upper left
-	// so that it coincides with screen origin.
+	// Y軸の向きをスクリーン座標に合わせる
 	logContext.lcOutExtY = -GetSystemMetrics(SM_CYVIRTUALSCREEN);
-	
+
+	// 筆圧の最大値を取得
 	gpWTInfoA(WTI_DEVICES + 0, DVC_NPRESSURE, &Pressure);
 	g_maxPressure = Pressure.axMax;
 
-	// open the region
+	// コンテキストをオープンしてハンドルを返す
 	return gpWTOpenA(hwnd_I, (LPLOGCONTEXT)&logContext, TRUE);
 }
 
@@ -1459,13 +1553,13 @@ WacomMTError InitWacomMTAPI(HWND hWnd_I)
 		DumpCaps(false);
 	}
 
-	res = WacomMTRegisterAttachCallback(AttachCallback, NULL); 
+	res = WacomMTRegisterAttachCallback(AttachCallback, NULL);
 	if (res != WMTErrorSuccess)
 	{
 		return res;
 	}
 
-	res = WacomMTRegisterDetachCallback(DetachCallback, NULL); 
+	res = WacomMTRegisterDetachCallback(DetachCallback, NULL);
 	if (res != WMTErrorSuccess)
 	{
 		return res;
@@ -1474,7 +1568,7 @@ WacomMTError InitWacomMTAPI(HWND hWnd_I)
 	int loopCount = static_cast<int>(g_devices.size());
 	for (int idx = 0; idx < loopCount; idx++)
 	{
-		res = RegisterForData(g_devices[idx], hWnd_I); 
+		res = RegisterForData(g_devices[idx], hWnd_I);
 		if (res != WMTErrorSuccess)
 		{
 			return res;
@@ -1493,48 +1587,226 @@ void DrawPenData(POINT point_I, UINT pressure_I, bool bMoveToPoint_I)
 	// Prevent hover drawing.
 	if (!pressure_I)
 	{
+		g_firstPoint = false;
 		return;
+	}
+	DWORD now = GetTickCount();
+
+	if (g_firstPoint)
+	{
+		g_prevPoint = point_I;
+		g_prevTime = now;
+		g_prevPressure = pressure_I;
+		g_firstPoint = false;
 	}
 
 	EnterCriticalSection(&g_graphicsCriticalSection);
 
-	int penWidth = static_cast<int>(1 + std::floor(10 * (double) pressure_I / (double) g_maxPressure));
-	HPEN pen = CreatePen(PS_SOLID, penWidth, RGB(0, 0, 255));
-	HPEN oldPen = static_cast<HPEN>(SelectObject(g_hdc, pen));
+	// Movement / kinematic info
+	double dx = point_I.x - g_prevPoint.x;
+	double dy = point_I.y - g_prevPoint.y;
+	DWORD dt = std::max<DWORD>(1, now - g_prevTime);
+	double speed = sqrt(dx * dx + dy * dy) / (double)dt;
+	double angle = atan2(dy, dx);
+	double deltaAngle = fabs(angle - g_prevAngle);
+
+
+	// グラフ用データは速度算出後に追加
+	AddPenGraphData(speed, g_currentVertAngle, g_currentHorizAngle);
+
+	// 基本の線幅（既存アルゴリズム）
+	int penWidth = static_cast<int>(1 + std::floor(pow(13 * (double)pressure_I / (double)g_maxPressure, 1.8)));
+
+	// 筆圧を0～1に正規化
+	double pressure = (double)pressure_I / (double)g_maxPressure;
+
+	// 平滑化された平均速度など既存処理
+	g_avgSpeed = 0.8 * g_avgSpeed + 0.2 * speed;
+
+	// 既存の調整ロジック
+	if (speed < 0.05 && pressure > 0.6) penWidth = static_cast<int>(penWidth * 1.2);
+	if (speed > 0.25 && pressure < 0.3) penWidth = std::max<int>(1, static_cast<int>(penWidth * 0.3));
+	if (deltaAngle > 0.7) penWidth = std::max<int>(1, static_cast<int>(penWidth * 0.4));
+
+	// 墨量消費（既存）
+	g_inkAmount = std::max(0.0, g_inkAmount - INK_CONSUME_RATE * (1.0 + speed * 0.1));
+
+	// 墨色（0==黒）
+	int inkGray = static_cast<int>(255 * (1.0 - g_inkAmount));
+	if (inkGray < 0) inkGray = 0;
+	if (inkGray > 255) inkGray = 255;
+	COLORREF brushColor = RGB(inkGray, inkGray, inkGray);
+
+	// かすれ表現：墨が少ないとペン幅も細くする（既存）
+	if (g_inkAmount < 0.3) penWidth = std::max<int>(1, static_cast<int>(penWidth * (g_inkAmount / 0.3)));
 
 	POINT ptNew = point_I;
 
-	// Compare the new point with cached client rectangle in screen coordinates.
+	// クライアント矩形チェック
 	if ((ptNew.x >= g_clientRect.left) &&
-		 (ptNew.y >= g_clientRect.top) &&
-		 (ptNew.x <= g_clientRect.right) &&
-		 (ptNew.y <= g_clientRect.bottom))
+		(ptNew.y >= g_clientRect.top) &&
+		(ptNew.x <= g_clientRect.right) &&
+		(ptNew.y <= g_clientRect.bottom))
 	{
-		// Convert from screen to client coordinates to render.
-		// This will let us put the app window anywhere on the desktop.
+		// Screen -> Client
 		::ScreenToClient(g_mainWnd, &ptNew);
-		DebugTrace("\tX:%ld  Y:%ld\n", ptNew.x, ptNew.y);
 
-		// Move to a starting point if so directed.
-		// Prevents streaks from last draw point or edge of client.
+		POINT prevClient = g_prevPoint;
+		::ScreenToClient(g_mainWnd, &prevClient);
+
 		if (bMoveToPoint_I)
 		{
-			DebugTrace("MoveTo: %i, %i\n", ptNew.x, ptNew.y);
 			MoveToEx(g_hdc, ptNew.x, ptNew.y, NULL);
 		}
 		else
 		{
-			DebugTrace("LineTo: %i, %i\n", ptNew.x, ptNew.y);
-			LineTo(g_hdc, ptNew.x, ptNew.y);
+			int dxLine = ptNew.x - prevClient.x;
+			int dyLine = ptNew.y - prevClient.y;
+			int steps = std::max(abs(dxLine), abs(dyLine));
+			if (steps == 0) steps = 1;
+
+			// かすれ率（既存ロジックを踏襲）
+			double scratchRate =
+				(1.0 - g_inkAmount) * 0.5 +
+				(1.0 - pressure) * 0.3 +
+				std::min(speed * 0.2, 0.2);
+			if (scratchRate < 0.0) scratchRate = 0.0;
+			if (scratchRate > 0.9) scratchRate = 0.9;
+
+			bool drawing = true;
+			int skipCount = 0;
+
+			// ブラシとペン設定（塗り）
+			HBRUSH hBrush = CreateSolidBrush(brushColor);
+			HBRUSH hOldBrush = (HBRUSH)SelectObject(g_hdc, hBrush);
+			HPEN hNullPen = (HPEN)GetStockObject(NULL_PEN);
+			HPEN hOldPen = (HPEN)SelectObject(g_hdc, hNullPen);
+
+			for (int i = 0; i <= steps; i++)
+			{
+				double t = (double)i / steps;
+				int cx = (int)(prevClient.x + dxLine * t);
+				int cy = (int)(prevClient.y + dyLine * t);
+
+				if (skipCount > 0) { skipCount--; drawing = false; }
+				else
+				{
+					drawing = true;
+					if ((double)rand() / RAND_MAX < scratchRate)
+					{
+						skipCount = rand() % 6 + 2;
+						drawing = false;
+					}
+				}
+				if (!drawing) continue;
+
+				// -----------------------
+				// 筆先形状（複数の回転長方形を並べて"毛の幅"を表現）
+				// -----------------------
+				// tilt: 0..1, 0 = 垂直(小接地), 1 = 平ら(広接地)
+				double vert = g_currentVertAngle;
+				if (vert < 0.0) vert = 0.0;
+				if (vert > 90.0) vert = 90.0;
+				double tilt = 1.0 - (vert / 90.0);
+
+				// pressure: 0..1
+				double p = pressure;
+
+				// パラメータ（調整可）
+				const double MAX_SPREAD = 48.0;   // 平らなときの最大伸び
+				const double BASE_THICK = 10.0;   // 基本厚み
+				double length = std::max(1.0, MAX_SPREAD * tilt * (0.35 + 0.65 * p));
+				double thickness = std::max(1.0, BASE_THICK * (0.4 + 0.6 * p) * (0.35 + 0.65 * (1.0 - tilt)));
+
+				// 水平角度をラジアンに変換（主軸方向）
+				double angDeg = g_currentHorizAngle + 90.0;
+				if (angDeg >= 360.0) angDeg = fmod(angDeg, 360.0);
+				double angRad = angDeg * 3.14159265358979323846 / 180.0;
+				double ux = cos(angRad);
+				double uy = sin(angRad);
+				// perpendicular vector
+				double vx = -uy;
+				double vy = ux;
+
+				double halfL = length * 0.5;
+				double halfT = thickness * 0.5;
+
+				// サンプル数（厚み方向）
+				int samples = 5; // 奇数推奨（中央を含む）
+				if (samples < 3) samples = 3;
+
+				// ガウス幅（厚み方向の毛の広がり）
+				double sigma = thickness * 0.35;
+				if (sigma < 1.0) sigma = 1.0;
+
+				// 各サンプルで回転長方形を描く
+				for (int s = 0; s < samples; s++)
+				{
+					// s の正規化 -1..1
+					double u = (double)s / (samples - 1); // 0..1
+					double lateral = (u - 0.5) * thickness * 1.2; // 中央が0、両端に広がる
+
+					// ガウス重み（中央が一番太く、外側は小さく）
+					double w = exp(- (lateral * lateral) / (2.0 * sigma * sigma));
+					// サンプルごとの厚みスケールと長さスケール
+					double sampleHalfT = halfT * (0.5 + 0.5 * w);    // 中央ほど厚い
+					double sampleHalfL = halfL * (0.6 + 0.4 * w);    // 中央ほどやや長い
+
+					// サンプル中心点
+					double sx = cx + vx * lateral;
+					double sy = cy + vy * lateral;
+
+					// 回転長方形の4頂点
+					double px1 = sx + ux * sampleHalfL + vx * sampleHalfT;
+					double py1 = sy + uy * sampleHalfL + vy * sampleHalfT;
+					double px2 = sx + ux * sampleHalfL - vx * sampleHalfT;
+					double py2 = sy + uy * sampleHalfL - vy * sampleHalfT;
+					double px3 = sx - ux * sampleHalfL - vx * sampleHalfT;
+					double py3 = sy - uy * sampleHalfL - vy * sampleHalfT;
+					double px4 = sx - ux * sampleHalfL + vx * sampleHalfT;
+					double py4 = sy - uy * sampleHalfL + vy * sampleHalfT;
+
+					POINT poly[4];
+					poly[0].x = (LONG)std::lround(px1);
+					poly[0].y = (LONG)std::lround(py1);
+					poly[1].x = (LONG)std::lround(px2);
+					poly[1].y = (LONG)std::lround(py2);
+					poly[2].x = (LONG)std::lround(px3);
+					poly[2].y = (LONG)std::lround(py3);
+					poly[3].x = (LONG)std::lround(px4);
+					poly[3].y = (LONG)std::lround(py4);
+
+					Polygon(g_hdc, poly, 4);
+				}
+
+				// 端の丸め（主軸端に小さな円を置いて滑らかにする）
+				int end1x = (int)std::lround(cx + ux * halfL);
+				int end1y = (int)std::lround(cy + uy * halfL);
+				int end2x = (int)std::lround(cx - ux * halfL);
+				int end2y = (int)std::lround(cy - uy * halfL);
+				int r = (int)std::lround(halfT * 0.9);
+				if (r < 1) r = 1;
+				Ellipse(g_hdc, end1x - r, end1y - r, end1x + r, end1y + r);
+				Ellipse(g_hdc, end2x - r, end2y - r, end2x + r, end2y + r);
+			}
+
+			// GDI cleanup
+			SelectObject(g_hdc, hOldPen);
+			SelectObject(g_hdc, hOldBrush);
+			DeleteObject(hBrush);
 		}
 	}
 
-	SelectObject(g_hdc, oldPen);
-	DeleteObject(pen);
-
-	InvalidateRect(g_mainWnd, NULL, FALSE);
+	// 状態更新
+	g_prevPoint = point_I;
+	g_prevAngle = angle;
+	g_prevTime = now;
+	g_prevPressure = pressure_I;
 
 	LeaveCriticalSection(&g_graphicsCriticalSection);
+
+	// 非同期で画面更新
+	InvalidateRect(g_mainWnd, NULL, FALSE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1548,7 +1820,11 @@ void Cleanup(void)
 
 	// Release Wintab resources.
 	UnloadWintab();
+
+	DestroyPressureGraph();
+
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Purpose
@@ -1571,23 +1847,23 @@ void DumpCaps(bool showMessageBox_I)
 		g_caps[g_devices[idx]] = cap;
 
 		msg << "MT Capabilities for idx: " << idx << std::endl;
-		msg << "\tVersion: " << g_caps[idx].Version << std::endl;
-		msg << "\tdeviceID_I: " << g_caps[idx].DeviceID << std::endl;
-		msg << "\tType: " << (int)g_caps[idx].Type << std::endl;
-		msg << "\tLogicalOriginX: " << g_caps[idx].LogicalOriginX << std::endl;
-		msg << "\tLogicalOriginY: " << g_caps[idx].LogicalOriginY << std::endl;
-		msg << "\tLogicalWidth: " << g_caps[idx].LogicalWidth << std::endl;
-		msg << "\tLogicalHeight: " << g_caps[idx].LogicalHeight << std::endl;
-		msg << "\tPhysicalSizeX: " << g_caps[idx].PhysicalSizeX << "\n";
-		msg << "\tPhysicalSizeY: " << g_caps[idx].PhysicalSizeY << "\n";
-		msg << "\tReportedSizeX: " << g_caps[idx].ReportedSizeX << "\n";
-		msg << "\tReportedSizeY: " << g_caps[idx].ReportedSizeY << "\n";
-		msg << "\tScanSizeX: " << g_caps[idx].ScanSizeX << "\n";
-		msg << "\tScanSizeY: " << g_caps[idx].ScanSizeY << "\n";
-		msg << "\tFingerMax: " << g_caps[idx].FingerMax << "\n";
-		msg << "\tBlobMax: " << g_caps[idx].BlobMax << "\n";
-		msg << "\tBlobPointsMax: " << g_caps[idx].BlobPointsMax << "\n";
-		msg << "\tCapabilityFlags: " << std::hex << static_cast<int>(g_caps[idx].CapabilityFlags) << "\n\n";
+		msg << "\tVersion: " << g_caps[g_devices[idx]].Version << std::endl;
+		msg << "\tdeviceID_I: " << g_caps[g_devices[idx]].DeviceID << std::endl;
+		msg << "\tType: " << (int)g_caps[g_devices[idx]].Type << std::endl;
+		msg << "\tLogicalOriginX: " << g_caps[g_devices[idx]].LogicalOriginX << std::endl;
+		msg << "\tLogicalOriginY: " << g_caps[g_devices[idx]].LogicalOriginY << std::endl;
+		msg << "\tLogicalWidth: " << g_caps[g_devices[idx]].LogicalWidth << std::endl;
+		msg << "\tLogicalHeight: " << g_caps[g_devices[idx]].LogicalHeight << std::endl;
+		msg << "\tPhysicalSizeX: " << g_caps[g_devices[idx]].PhysicalSizeX << "\n";
+		msg << "\tPhysicalSizeY: " << g_caps[g_devices[idx]].PhysicalSizeY << "\n";
+		msg << "\tReportedSizeX: " << g_caps[g_devices[idx]].ReportedSizeX << "\n";
+		msg << "\tReportedSizeY: " << g_caps[g_devices[idx]].ReportedSizeY << "\n";
+		msg << "\tScanSizeX: " << g_caps[g_devices[idx]].ScanSizeX << "\n";
+		msg << "\tScanSizeY: " << g_caps[g_devices[idx]].ScanSizeY << "\n";
+		msg << "\tFingerMax: " << g_caps[g_devices[idx]].FingerMax << "\n";
+		msg << "\tBlobMax: " << g_caps[g_devices[idx]].BlobMax << "\n";
+		msg << "\tBlobPointsMax: " << g_caps[g_devices[idx]].BlobPointsMax << "\n";
+		msg << "\tCapabilityFlags: " << std::hex << static_cast<int>(g_caps[g_devices[idx]].CapabilityFlags) << "\n\n";
 	}
 
 	DebugTrace("%s\n", msg.str().c_str());
@@ -1604,12 +1880,11 @@ void DumpCaps(bool showMessageBox_I)
 //
 bool ClientHitRectChanged(const WacomMTHitRectPtr& wtHitRect_I, int deviceID)
 {
-	if (!wtHitRect_I && !g_lastWTHitRect[deviceID]) return false;
-	if (!wtHitRect_I || !g_lastWTHitRect[deviceID]) return true;
-	return ( (wtHitRect_I->originX != g_lastWTHitRect[deviceID]->originX)
-			|| (wtHitRect_I->originY != g_lastWTHitRect[deviceID]->originY)
-			|| (wtHitRect_I->width   != g_lastWTHitRect[deviceID]->width  )
-			|| (wtHitRect_I->height  != g_lastWTHitRect[deviceID]->height ));
+	if (!wtHitRect_I && !g_lastWTHitRect[deviceID])
+		return false;
+	if (!wtHitRect_I || !g_lastWTHitRect[deviceID])
+		return true;
+	return ((wtHitRect_I->originX != g_lastWTHitRect[deviceID]->originX) || (wtHitRect_I->originY != g_lastWTHitRect[deviceID]->originY) || (wtHitRect_I->width != g_lastWTHitRect[deviceID]->width) || (wtHitRect_I->height != g_lastWTHitRect[deviceID]->height));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
