@@ -49,3 +49,7 @@
 #endif
 #endif
 
+#define _APS_NO_MFC					130
+#define IDC_BTN_CLEAR 3001
+#define IDC_BTN_SAVE  3002
+#define IDC_LBL_TITLE 3003
