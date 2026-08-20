@@ -773,6 +773,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	static POINT s_ptMouseOld = { 0 };
+	static bool s_isPenActive = false;
 
 	switch (message)
 	{
@@ -940,10 +941,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			else if (PtIn(rSubLarge, pt)) g_brush = Brush::Large;
 			else if (PtIn(rPaper, pt))
 			{
-				SetCapture(hWnd);
-				POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
-				s_ptMouseOld = paperPt;
-				InvalidateRect(hWnd, NULL, FALSE);
+				if (!s_isPenActive)
+				{
+					SetCapture(hWnd);
+					POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
+					s_ptMouseOld = paperPt;
+					g_gpuInk.BeginStroke(paperPt, 255);
+					InvalidateRect(hWnd, NULL, FALSE);
+				}
 			}
 		}
 		break;
@@ -951,7 +956,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_MOUSEMOVE:
 	{
-		if ((wParam & MK_LBUTTON) && g_screen == Screen::Studio)
+		if (!s_isPenActive && (wParam & MK_LBUTTON) && g_screen == Screen::Studio)
 		{
 			POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 			if (PtIn(rPaper, pt))
@@ -985,7 +990,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_LBUTTONUP:
 	{
-		if (g_screen == Screen::Studio)
+		if (!s_isPenActive && g_screen == Screen::Studio)
 		{
 			g_gpuInk.EndStroke();
 			ReleaseCapture();
@@ -1059,6 +1064,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			if (prsNew > 0)
 			{
+				s_isPenActive = true;
+
 				POINT clientPt = { ptNew.x, ptNew.y };
 				if (g_openSystemContext)
 				{
@@ -1074,12 +1081,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				// Paper 座標系へ変換
 				POINT paperPt = { clientPt.x - rPaper.left, clientPt.y - rPaper.top };
 				POINT oldPaperPt = { oldClientPt.x - rPaper.left, oldClientPt.y - rPaper.top };
+				s_ptMouseOld = paperPt;
 
 				if (!s_strokeActive || prsOld == 0 || !g_gpuInk.IsInStroke())
 				{
 					s_strokeActive = true;
 					ptOld = ptNew;
 					oldPaperPt = paperPt;
+					g_gpuInk.BeginStroke(paperPt, prsNew);
 				}
 
 				double dx = (double)(paperPt.x - oldPaperPt.x);
@@ -1131,6 +1140,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			else
 			{
 				s_strokeActive = false;
+
+				POINT clientPt = { ptNew.x, ptNew.y };
+				if (g_openSystemContext)
+				{
+					ScreenToClient(hWnd, &clientPt);
+				}
+				POINT paperPt = { clientPt.x - rPaper.left, clientPt.y - rPaper.top };
+				s_ptMouseOld = paperPt;
+
 				if (g_gpuInk.IsInStroke())
 				{
 					g_gpuInk.EndStroke();
@@ -1159,6 +1177,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		bool inRange = (lParam != 0);
 		if (!inRange)
 		{
+			s_isPenActive = false;
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
 			g_gpuInk.EndStroke();
 		}

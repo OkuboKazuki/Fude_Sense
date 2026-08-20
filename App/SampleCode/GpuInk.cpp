@@ -11,7 +11,6 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "Msimg32.lib")
 
 // ============================================================================
 // Ink Simulation Parameters (GpuInk)
@@ -91,18 +90,6 @@ void GpuInk::ReleaseResources_NoLock()
 		m_pInkBitmap = nullptr;
 	}
 
-	if (m_pBrushBlack)
-	{
-		m_pBrushBlack->Release();
-		m_pBrushBlack = nullptr;
-	}
-
-	if (m_pBitmapRenderTarget)
-	{
-		m_pBitmapRenderTarget->Release();
-		m_pBitmapRenderTarget = nullptr;
-	}
-
 	if (m_pDCRenderTarget)
 	{
 		m_pDCRenderTarget->Release();
@@ -157,13 +144,6 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 		return false;
 	}
 
-	// Bitmap Render Target の生成
-	D2D1_SIZE_F size = D2D1::SizeF(static_cast<float>(m_width), static_cast<float>(m_height));
-	hr = m_pDCRenderTarget->CreateCompatibleRenderTarget(size, &m_pBitmapRenderTarget);
-	if (SUCCEEDED(hr) && m_pBitmapRenderTarget)
-	{
-		m_pBitmapRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &m_pBrushBlack);
-	}
 
 	// Dynamic Bitmap 描画用バッファ
 	size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
@@ -187,9 +167,8 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 	return SUCCEEDED(hr);
 }
 
-bool GpuInk::Initialize(HWND hWnd, int width, int height)
+bool GpuInk::Initialize(HWND /*hWnd*/, int width, int height)
 {
-	m_hWnd = hWnd;
 	return Initialize(width, height);
 }
 
@@ -266,7 +245,6 @@ void GpuInk::BeginStroke(POINT pt, UINT pressure)
 	m_lastPt = pt;
 	m_lastPressure = pressure;
 	m_smoothedWidth = 0.0;
-	m_strokeInkLeft = 1.0;
 	m_recentMaxSpeed = 0.0;
 	m_recentMaxDist = 0.0;
 	m_lastAcceleration = 0.0;
@@ -521,7 +499,7 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 		double stepPres = pressureFactor;
 		uint8_t alpha = static_cast<uint8_t>(std::min(255u, static_cast<unsigned int>(30 + stepPres * 225.0)));
 
-		StampBrush(p.x, p.y, stampRadius, ux, uy, elongation, alpha);
+		StampBrush(p.x, p.y, stampRadius, alpha);
 	}
 }
 
@@ -574,7 +552,7 @@ void GpuInk::EndStroke()
 	m_inStroke = false;
 }
 
-void GpuInk::StampBrush(int cx, int cy, int radius, double /*dirX*/, double /*dirY*/, double /*elongation*/, unsigned char alpha)
+void GpuInk::StampBrush(int cx, int cy, int radius, unsigned char alpha)
 {
 	if (radius <= 0) radius = 1;
 	if (m_ink.empty() || m_pixelBuffer.empty()) return;
@@ -685,7 +663,7 @@ void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
 		p.y = static_cast<LONG>(a.y + (b.y - a.y) * t + 0.5);
 
 		// 固定インク値 255 でスタンプ
-		StampBrush(p.x, p.y, stampRadius, ux, uy, 1.0, 255);
+		StampBrush(p.x, p.y, stampRadius, 255);
 	}
 
 	m_lastPt = b;

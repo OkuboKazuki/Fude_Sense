@@ -7,13 +7,13 @@
 #include <windows.h>
 #include <d2d1.h>
 #include <d2d1_1.h>
-#include <d3d11.h>
 #include <vector>
 #include <cstdint>
 #include <mutex>
 #include <thread>
 #include <atomic>
 #include <chrono>
+
 struct KinematicsInfo
 {
 	double currentSpeed;
@@ -70,7 +70,7 @@ private:
 	bool Initialize_NoLock(int width, int height);
 	void EnsureInitialized();
 
-	void StampBrush(int cx, int cy, int radius, double dirX, double dirY, double elongation, unsigned char alpha);
+	void StampBrush(int cx, int cy, int radius, unsigned char alpha);
 	void StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeconds = 0.0);
 
 	bool PropagateInk_NoLock();
@@ -80,19 +80,14 @@ private:
 	void ResetDirtyRect_NoLock();
 	void ExpandDirtyRect_NoLock(int x, int y);
 
-	void RebuildBitmapFromInk_NoLock();
-
 private:
 	int m_width = 0;
 	int m_height = 0;
-	HWND m_hWnd = NULL;
 
 	// Direct2D リソース
 	ID2D1Factory* m_pD2DFactory = nullptr;
 	ID2D1DCRenderTarget* m_pDCRenderTarget = nullptr;
-	ID2D1BitmapRenderTarget* m_pBitmapRenderTarget = nullptr;
 	ID2D1Bitmap* m_pInkBitmap = nullptr;
-	ID2D1SolidColorBrush* m_pBrushBlack = nullptr;
 
 	// メモリバッファ (CPU / GPU 物理にじみ計算)
 	std::vector<int> m_ink;
@@ -114,7 +109,6 @@ private:
 	bool m_inStroke = false;
 	POINT m_lastPt = { 0, 0 };
 	UINT m_lastPressure = 0;
-	double m_strokeInkLeft = 1.0;
 
 	double m_lastSpeed = 0.0;
 	double m_recentMaxSpeed = 0.0;
@@ -134,7 +128,6 @@ private:
 
 	std::chrono::steady_clock::time_point m_lastTime;
 
-	double m_lastRadius = 0.0;
 	double m_smoothedWidth = 0.0;
 	double m_lastDirX = 1.0;
 	double m_lastDirY = 0.0;
