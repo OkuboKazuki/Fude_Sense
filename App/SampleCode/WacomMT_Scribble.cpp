@@ -1012,10 +1012,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			static UINT prsNew = 0;
 			static ORIENTATION ortOld = { 0 };
 			static ORIENTATION ortNew = { 0 };
+			static double s_smoothedPressure = 0.0;
 			static double s_smoothedWidth = 0.0;
 			static bool s_strokeActive = false;
-			static std::deque<UINT> s_pressureQueue;
-			const size_t PRESSURE_MA_WINDOW = 5;
 
 			ptNew.x = pkt.pkX;
 			ptNew.y = pkt.pkY;
@@ -1034,29 +1033,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			if (prsRaw > 0)
 			{
-				// ストローク開始時または前回の筆圧が0の場合は移動平均キューをクリア
-				if (!s_strokeActive || prsOld == 0 || !g_gpuInk.IsInStroke())
+				// ストローク開始時または前回の筆圧が0の場合は初期化
+				if (!s_strokeActive || prsOld == 0 || !g_gpuInk.IsInStroke() || s_smoothedPressure <= 0.0)
 				{
-					s_pressureQueue.clear();
+					s_smoothedPressure = static_cast<double>(prsRaw);
+				}
+				else
+				{
+					// 非対称平滑化 (Asymmetric pressure smoothing)
+					// 筆圧増加・安定時: alpha = 0.35 (ノイズ軽減)
+					// 筆圧減少時 (払い・跳ね等): alpha = 0.85 (高い応答性で即座に筆圧低下へ追従)
+					double doublePrs = static_cast<double>(prsRaw);
+					double alphaPrs = (doublePrs < s_smoothedPressure) ? 0.85 : 0.35;
+					s_smoothedPressure = s_smoothedPressure * (1.0 - alphaPrs) + doublePrs * alphaPrs;
 				}
 
-				s_pressureQueue.push_back(prsRaw);
-				if (s_pressureQueue.size() > PRESSURE_MA_WINDOW)
-				{
-					s_pressureQueue.pop_front();
-				}
-
-				// 移動平均 (Moving Average) による筆圧の平滑化
-				double sumPrs = 0.0;
-				for (UINT p : s_pressureQueue)
-				{
-					sumPrs += static_cast<double>(p);
-				}
-				prsNew = static_cast<UINT>(std::round(sumPrs / static_cast<double>(s_pressureQueue.size())));
+				prsNew = static_cast<UINT>(std::round(s_smoothedPressure));
+				if (prsNew == 0 && prsRaw > 0) prsNew = 1;
 			}
 			else
 			{
-				s_pressureQueue.clear();
+				s_smoothedPressure = 0.0;
 				prsNew = 0;
 			}
 
@@ -1134,8 +1131,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 				else
 				{
-					const double alpha = 0.3;
-					s_smoothedWidth = s_smoothedWidth * (1.0 - alpha) + rawWidth * alpha;
+					// 線幅減少時（払い・跳ね）または高速移動時はアルファを大きくして即座に追従
+					double alphaWidth = 0.3;
+					if (rawWidth < s_smoothedWidth || dist > 3.0)
+					{
+						alphaWidth = 0.8;
+					}
+					s_smoothedWidth = s_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
 				}
 
 				g_gpuInk.DrawSegment(oldPaperPt, paperPt, s_smoothedWidth, 255);
