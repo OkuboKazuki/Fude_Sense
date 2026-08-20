@@ -1729,6 +1729,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				pressureFactor = std::pow(pressureFactor, g_brushHardness);
 				if (std::isnan(pressureFactor) || std::isinf(pressureFactor)) pressureFactor = 0.5;
 
+				g_gpuInk.SetPressureFactor(pressureFactor);
+
 				double altitudeDegrees = (double)ortNew.orAltitude / 10.0;
 				double azimuthRad = ((double)ortNew.orAzimuth / 10.0) * (3.14159265358979323846 / 180.0);
 				double tiltFactor = (90.0 - altitudeDegrees) / 90.0;

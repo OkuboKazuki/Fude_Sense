@@ -532,6 +532,14 @@ void GpuInk::UpdatePenZ(int z, int altitude, int azimuth, bool hovering)
 	m_isHovering = hovering;
 }
 
+void GpuInk::SetPressureFactor(double factor)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	if (factor < 0.0) factor = 0.0;
+	if (factor > 1.0) factor = 1.0;
+	m_pressureFactor = factor;
+}
+
 // ストローク終了 (ユーザー指示に基づき「跳ね払い」のスタンプ生成処理は削除)
 void GpuInk::EndStroke()
 {
@@ -571,6 +579,25 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	double rad = radius;
 	double semiMajor = rad * (1.0 + tiltFactor * 1.5);
 	double semiMinor = std::max(0.5, rad * (1.0 - tiltFactor * 0.4));
+
+	// 傾き方向（ペンが倒れている方向）の単位ベクトル
+	double tiltDirX = std::sin(azimuthRad);
+	double tiltDirY = -std::cos(azimuthRad);
+
+	// 正規化圧力が 1 の時に先端（入力座標）が楕円の端（境界）に位置するようにシフト
+	// 楕円の傾き方向の半径は semiMajor
+	// 正規化圧力 pNorm (0.0 〜 1.0) と傾き (tiltFactor) に応じてシフト量を算出
+	// pNorm = 1.0, tiltFactor = 1.0 の時、シフト量は exactly semiMajor となり、先端が楕円の端に位置する
+	double pNorm = m_pressureFactor;
+	if (pNorm <= 0.0 && radius > 0.5)
+	{
+		pNorm = std::min(1.0, (radius - 0.5) / 18.0);
+	}
+
+	double offset = semiMajor * tiltFactor * pNorm;
+
+	cx += tiltDirX * offset;
+	cy += tiltDirY * offset;
 
 	int ext = static_cast<int>(std::ceil(semiMajor));
 	int icx = static_cast<int>(std::lround(cx));

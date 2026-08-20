@@ -54,6 +54,7 @@ public:
 
 	KinematicsInfo GetKinematicsInfo();
 	void UpdatePenZ(int z, int altitude, int azimuth, bool hovering);
+	void SetPressureFactor(double factor);
 
 	// 描画 (ウィンドウの WM_PAINT ハンドラ)
 	// dispW/dispH を指定するとその解像度にスケーリングして描画（ズーム対応）
@@ -127,6 +128,7 @@ private:
 	int m_penAltitude = 0;
 	int m_penAzimuth = 0;
 	bool m_isHovering = true;
+	double m_pressureFactor = 0.0;
 
 	std::chrono::steady_clock::time_point m_lastTime;
 
