@@ -12,6 +12,8 @@
 #include <windowsx.h>
 #include <iostream>
 #include <vector>
+#include <deque>
+#include <cmath>
 #include <map>
 #include <utility>
 #include <algorithm>
@@ -1041,26 +1043,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			static ORIENTATION ortNew = { 0 };
 			static double s_smoothedWidth = 0.0;
 			static bool s_strokeActive = false;
+			static std::deque<UINT> s_pressureQueue;
+			const size_t PRESSURE_MA_WINDOW = 5;
 
 			ptNew.x = pkt.pkX;
 			ptNew.y = pkt.pkY;
-			prsNew = pkt.pkNormalPressure;
+			UINT prsRaw = pkt.pkNormalPressure;
 			ortNew = pkt.pkOrientation;
-
-			g_gpuInk.UpdatePenZ(static_cast<int>(pkt.pkZ),
-				static_cast<int>(ortNew.orAltitude),
-				static_cast<int>(ortNew.orAzimuth),
-				prsNew == 0);
 
 			double maxPrs = (g_contextMap.count(hCtx) > 0 && g_contextMap[hCtx].maxPressure > 0)
 				? (double)g_contextMap[hCtx].maxPressure
 				: (g_maxPressure > 0 ? (double)g_maxPressure : 1024.0);
 
 			UINT minPrsThreshold = static_cast<UINT>(maxPrs * 0.01);
-			if (prsNew <= minPrsThreshold)
+			if (prsRaw <= minPrsThreshold)
 			{
+				prsRaw = 0;
+			}
+
+			if (prsRaw > 0)
+			{
+				// ストローク開始時または前回の筆圧が0の場合は移動平均キューをクリア
+				if (!s_strokeActive || prsOld == 0 || !g_gpuInk.IsInStroke())
+				{
+					s_pressureQueue.clear();
+				}
+
+				s_pressureQueue.push_back(prsRaw);
+				if (s_pressureQueue.size() > PRESSURE_MA_WINDOW)
+				{
+					s_pressureQueue.pop_front();
+				}
+
+				// 移動平均 (Moving Average) による筆圧の平滑化
+				double sumPrs = 0.0;
+				for (UINT p : s_pressureQueue)
+				{
+					sumPrs += static_cast<double>(p);
+				}
+				prsNew = static_cast<UINT>(std::round(sumPrs / static_cast<double>(s_pressureQueue.size())));
+			}
+			else
+			{
+				s_pressureQueue.clear();
 				prsNew = 0;
 			}
+
+			g_gpuInk.UpdatePenZ(static_cast<int>(pkt.pkZ),
+				static_cast<int>(ortNew.orAltitude),
+				static_cast<int>(ortNew.orAzimuth),
+				prsNew == 0);
 
 			if (prsNew > 0)
 			{
