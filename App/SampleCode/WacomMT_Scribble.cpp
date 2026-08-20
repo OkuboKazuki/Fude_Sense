@@ -117,7 +117,6 @@ namespace {
     constexpr double INK_MAX = 1.0;
 
     // 筆の墨量（0.0〜1.0）：硯に浸けると満タン、書くほど消耗する
-    double g_brushInk = 0.0;    // 初期は0（最初に硯に浸ける必要あり）
     bool g_strokeStarted = false; // 現在のストロークの開始フラグ
 
     enum class TbButton { None, Brush, Shitajiki, Paper, Eraser, Hand, NewPaper, InkRefill };
@@ -776,23 +775,12 @@ namespace {
         Fill(dc, rStatus, RGB(18, 19, 23)); 
         HFONT f = Font(12); RECT t = { 12, h - 22, w - 12, h - 4 };
         wchar_t buf[192]; 
-        int brushInkPct = (int)(g_brushInk * 100.0);
-        if (g_brushInk <= 0.0) {
-            wsprintfW(buf, L"状態: ★硯に筆を浸けてください | ツール: %s | 筆: %s | 下敷き: %s | 筆の墨量: 0%% | 硯残量: %d%%",
-                g_tool == Tool::BrushTool ? L"筆" : (g_tool == Tool::EraserTool ? L"消しゴム" : L"手のひら"),
-                BrushName(g_brush),
-                GridPatternName(g_gridPattern),
-                (int)(g_ink * 100.0));
-            Text(dc, t, buf, f, RGB(255, 160, 60));  // 橙色で警告表示
-        } else {
-            wsprintfW(buf, L"状態: 準備完了 | ツール: %s | 筆: %s | 下敷き: %s | 筆の墨量: %d%% | 硯残量: %d%%",
-                g_tool == Tool::BrushTool ? L"筆" : (g_tool == Tool::EraserTool ? L"消しゴム" : L"手のひら"),
-                BrushName(g_brush),
-                GridPatternName(g_gridPattern),
-                brushInkPct,
-                (int)(g_ink * 100.0));
-            Text(dc, t, buf, f, RGB(150, 155, 165));
-        }
+        wsprintfW(buf, L"状態: 準備完了 | ツール: %s | 筆: %s | 下敷き: %s | 墨量: %d%%", 
+            g_tool == Tool::BrushTool ? L"筆" : (g_tool == Tool::EraserTool ? L"消しゴム" : L"手のひら"), 
+            BrushName(g_brush), 
+            GridPatternName(g_gridPattern),
+            (int)(g_ink * 100.0));
+        Text(dc, t, buf, f, RGB(150, 155, 165));
         DeleteObject(f);
     }
 
@@ -1449,8 +1437,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// Large InkStone Clicks (Ink Dip + Refill)
 		else if (PtIn(rInkStoneLarge, pt) || PtIn(rInkRefillBtn, pt))
 		{
-			// 硯に筆を浸ける → 筆の墨量を満タンに補充
-			g_brushInk = 1.0;
 			g_ink = INK_MAX;
 			g_strokeStarted = false;
 			InvalidateRect(hWnd, &rRight, FALSE);
@@ -1527,47 +1513,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			if (PtIn(rPaper, pt))
 			{
-				// 墨が0なら描けない（硯に浸けてから書く必要あり）
-				if (g_brushInk <= 0.0)
+				POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
+				double dx = (double)(paperPt.x - s_ptMouseOld.x);
+				double dy = (double)(paperPt.y - s_ptMouseOld.y);
+				double dist = std::hypot(dx, dy);
+
+				if (dist > 0.1)
 				{
-					s_ptMouseOld = { pt.x - rPaper.left, pt.y - rPaper.top };
+					double baseWidth = 36.0;
+					if (g_brush == Brush::Small) baseWidth = 16.0;
+					else if (g_brush == Brush::Large) baseWidth = 56.0;
+
+					double pressureFactor = 0.5;
+					double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+					double haraiFactor = std::pow(pressureFactor, haraiPower);
+					double rawWidth = baseWidth * haraiFactor;
+					int penWidth = (int)std::round(rawWidth);
+					if (penWidth < 1) penWidth = 1;
+
+					g_gpuInk.DrawSegment(s_ptMouseOld, paperPt, (double)penWidth, 255);
 				}
-				else
-				{
-					POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
-					double dx = (double)(paperPt.x - s_ptMouseOld.x);
-					double dy = (double)(paperPt.y - s_ptMouseOld.y);
-					double dist = std::hypot(dx, dy);
-
-					if (dist > 0.1)
-					{
-						double baseWidth = 36.0;
-						if (g_brush == Brush::Small) baseWidth = 16.0;
-						else if (g_brush == Brush::Large) baseWidth = 56.0;
-
-						double pressureFactor = 0.5;
-						double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
-						double haraiFactor = std::pow(pressureFactor, haraiPower);
-						double rawWidth = baseWidth * haraiFactor;
-						int penWidth = (int)std::round(rawWidth);
-						if (penWidth < 1) penWidth = 1;
-
-						// 墨量に応じたアルファ値（かすれ表現）
-						double inkAlpha = Clamp(g_brushInk, 0.0, 1.0);
-						int alpha = (int)(inkAlpha * inkAlpha * 255); // 二乗でリアルなかすれ感
-						if (alpha < 20) alpha = 20; // 完全消去の手前で止める
-
-						g_gpuInk.DrawSegment(s_ptMouseOld, paperPt, (double)penWidth, alpha);
-
-						// 筆の墨量を消耗（大筆は早く減る）
-						double consumeRate = (g_brush == Brush::Small) ? 0.00018 :
-										 (g_brush == Brush::Large) ? 0.00055 : 0.00032;
-						g_brushInk -= dist * consumeRate;
-						if (g_brushInk < 0.0) g_brushInk = 0.0;
-					}
-					s_ptMouseOld = paperPt;
-					InvalidateRect(hWnd, NULL, FALSE);
-				}
+				s_ptMouseOld = paperPt;
+				InvalidateRect(hWnd, NULL, FALSE);
 			}
 		}
 		break;
@@ -1752,26 +1719,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 
 					// 墨が0なら描かない（硯に浸ける必要あり）
-					if (g_brushInk <= 0.0) goto skip_draw;
-
-					{
-						// 墨量に応じたアルファ値（かすれ表現）
-						double inkAlpha = Clamp(g_brushInk, 0.0, 1.0);
-						int alpha = (int)(inkAlpha * inkAlpha * 255);
-						if (alpha < 20) alpha = 20;
-
-						g_gpuInk.DrawSegmentLinear(oldPaperPt, paperPt, startWidth, s_smoothedWidth, alpha);
-
-						// 筆の墨量を消耗（筆サイズ・ストローク幅に応じて）
-						double consumeRate = (g_brush == Brush::Small) ? 0.00015 :
-										 (g_brush == Brush::Large) ? 0.00050 : 0.00028;
-						g_brushInk -= dist * consumeRate;
-						if (g_brushInk < 0.0) g_brushInk = 0.0;
-						// 墨残量（硯）も少しずつ減らす
-						g_ink -= dist * consumeRate * 0.05;
-						if (g_ink < 0.0) g_ink = 0.0;
-					}
-					skip_draw:;
+					g_gpuInk.DrawSegmentLinear(oldPaperPt, paperPt, startWidth, s_smoothedWidth, 255);
 			}
 			else
 			{
