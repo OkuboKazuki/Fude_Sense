@@ -122,11 +122,14 @@ namespace {
     Tool g_tool = Tool::BrushTool;
     int g_grid = 1;
     double g_ink = INK_MAX;
+	double g_brushHardness = 1.0; // 筆の硬さ (0.5: 非常に柔らかい 〜 2.0: 非常に硬い)
+	bool g_isDraggingHardness = false; // スライドバードラッグ状態
 
     RECT rTop{}, rTools{}, rSub{}, rCanvasArea{}, rRight{}, rStatus{};
     RECT rPaper{}, rToolBrush{}, rToolEraser{}, rToolHand{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{}, rNewPaper{}, rGrid{};
     RECT rNavigator{}, rProperty{}, rLayers{}, rInkStone{};
+	RECT rHardnessTrack{}; // スライドバーのトラック領域
 
     template<class T> T Clamp(T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
     int RW(const RECT& r) { return r.right - r.left; }
@@ -191,9 +194,10 @@ namespace {
         rNewPaper = { rSub.left + 10, h - statusH - 104, rSub.right - 10, h - statusH - 62 };
         rGrid = { rSub.left + 10, h - statusH - 54, rSub.right - 10, h - statusH - 12 };
         rNavigator = { rRight.left + 8, topH + 8, rRight.right - 8, topH + 190 };
-        rProperty = { rRight.left + 8, topH + 198, rRight.right - 8, topH + 430 };
-        rLayers = { rRight.left + 8, topH + 438, rRight.right - 8, h - statusH - 8 };
-        rInkStone = { rProperty.left + 18, rProperty.top + 125, rProperty.right - 18, rProperty.bottom - 18 };
+        rProperty = { rRight.left + 8, topH + 198, rRight.right - 8, topH + 450 };
+		rHardnessTrack = { rProperty.left + 80, rProperty.top + 88, rProperty.right - 15, rProperty.top + 96 };
+		rLayers = { rRight.left + 8, topH + 458, rRight.right - 8, h - statusH - 8 };
+        rInkStone = { rProperty.left + 18, rProperty.top + 132, rProperty.right - 18, rProperty.bottom - 12 };
         int aw = std::max(1, RW(rCanvasArea) - 56), ah = std::max(1, RH(rCanvasArea) - 56);
         int paper = std::max(1, std::min(aw, ah));
         int px = rCanvasArea.left + (RW(rCanvasArea) - paper) / 2;
@@ -243,20 +247,59 @@ namespace {
         HPEN p = CreatePen(PS_SOLID, 1, RGB(112, 151, 191)); HPEN op = (HPEN)SelectObject(dc, p); HBRUSH ob = (HBRUSH)SelectObject(dc, GetStockObject(NULL_BRUSH));
         Rectangle(dc, mini.left, mini.top, mini.right, mini.bottom); SelectObject(dc, ob); SelectObject(dc, op); DeleteObject(p);
     }
-    void DrawProperties(HDC dc) {
-        Fill(dc, rProperty, RGB(50, 52, 57)); DrawPanelTitle(dc, rProperty, L"ツールプロパティ");
-        HFONT f = Font(14), fb = Font(14, FW_BOLD); RECT a = { rProperty.left + 12,rProperty.top + 34,rProperty.right - 10,rProperty.top + 58 };
-        wchar_t buf[64]; wsprintfW(buf, L"筆: %s", BrushName(g_brush)); Text(dc, a, buf, fb, RGB(226, 228, 231));
-        RECT lab = { rProperty.left + 12,rProperty.top + 62,rProperty.left + 72,rProperty.top + 84 }; Text(dc, lab, L"筆圧", f, RGB(190, 193, 198));
-        RECT track = { rProperty.left + 72,rProperty.top + 69,rProperty.right - 15,rProperty.top + 77 }; Fill(dc, track, RGB(31, 33, 36));
-        RECT level = track; level.right = level.left + (int)(RW(track) * 0.72); Fill(dc, level, RGB(76, 123, 169));
-        RECT il = { rProperty.left + 12,rProperty.top + 91,rProperty.right - 12,rProperty.top + 114 }; wsprintfW(buf, L"墨量: %d%%", (int)(g_ink * 100.0)); Text(dc, il, buf, f, RGB(190, 193, 198));
-        Box(dc, rInkStone, RGB(42, 43, 46), RGB(72, 74, 79), 1, 6);
-        HBRUSH ib = CreateSolidBrush(RGB(12, 12, 13)); HPEN ip = CreatePen(PS_SOLID, 1, RGB(5, 5, 5)); HBRUSH oib = (HBRUSH)SelectObject(dc, ib); HPEN oip = (HPEN)SelectObject(dc, ip);
-        Ellipse(dc, rInkStone.left + 18, rInkStone.top + 12, rInkStone.right - 18, rInkStone.bottom - 12);
-        SelectObject(dc, oip); SelectObject(dc, oib); DeleteObject(ip); DeleteObject(ib);
-        DeleteObject(f); DeleteObject(fb);
-    }
+	void DrawProperties(HDC dc) {
+		Fill(dc, rProperty, RGB(50, 52, 57));
+		DrawPanelTitle(dc, rProperty, L"ツールプロパティ");
+
+		HFONT f = Font(13), fb = Font(13, FW_BOLD); // フォントサイズを少しだけコンパクト化 (14 -> 13)
+		wchar_t buf[64];
+
+		// 1. 筆種別表示 (Y: 32 ～ 52)
+		RECT a = { rProperty.left + 12, rProperty.top + 32, rProperty.right - 10, rProperty.top + 52 };
+		wsprintfW(buf, L"筆: %s", BrushName(g_brush));
+		Text(dc, a, buf, fb, RGB(226, 228, 231));
+
+		// 2. 筆圧表示 (Y: 56 ～ 76)
+		RECT lab = { rProperty.left + 12, rProperty.top + 56, rProperty.left + 72, rProperty.top + 76 };
+		Text(dc, lab, L"筆圧", f, RGB(190, 193, 198));
+		RECT track = { rProperty.left + 72, rProperty.top + 63, rProperty.right - 15, rProperty.top + 71 };
+		Fill(dc, track, RGB(31, 33, 36));
+		RECT level = track; level.right = level.left + (int)(RW(track) * 0.72);
+		Fill(dc, level, RGB(76, 123, 169));
+
+		// 3. 筆の硬さ表示 & スライドバー (Y: 80 ～ 100)
+		RECT hLab = { rProperty.left + 12, rProperty.top + 80, rProperty.left + 78, rProperty.top + 100 };
+		Text(dc, hLab, L"筆の硬さ", f, RGB(190, 193, 198));
+		Fill(dc, rHardnessTrack, RGB(31, 33, 36)); // トラック背景
+
+		// つまみ描画
+		double normHardness = (g_brushHardness - 0.5) / (2.0 - 0.5);
+		int thumbX = rHardnessTrack.left + (int)(RW(rHardnessTrack) * normHardness);
+		RECT thumb = { thumbX - 4, rHardnessTrack.top - 4, thumbX + 4, rHardnessTrack.bottom + 4 };
+		Box(dc, thumb, RGB(140, 180, 220), RGB(200, 220, 255), 1, 2);
+
+		// 4. 墨量表示 (Y: 106 ～ 126)  ← 「筆の硬さ」の下に十分なマージンを確保
+		RECT il = { rProperty.left + 12, rProperty.top + 106, rProperty.right - 12, rProperty.top + 126 };
+		wsprintfW(buf, L"墨量: %d%%", (int)(g_ink * 100.0));
+		Text(dc, il, buf, f, RGB(190, 193, 198));
+
+		// 5. 硯 (Y: 132 ～)  ← 「墨量」の下から開始
+		Box(dc, rInkStone, RGB(42, 43, 46), RGB(72, 74, 79), 1, 6);
+		HBRUSH ib = CreateSolidBrush(RGB(12, 12, 13));
+		HPEN ip = CreatePen(PS_SOLID, 1, RGB(5, 5, 5));
+		HBRUSH oib = (HBRUSH)SelectObject(dc, ib);
+		HPEN oip = (HPEN)SelectObject(dc, ip);
+
+		Ellipse(dc, rInkStone.left + 18, rInkStone.top + 10, rInkStone.right - 18, rInkStone.bottom - 10);
+
+		SelectObject(dc, oip);
+		SelectObject(dc, oib);
+		DeleteObject(ip);
+		DeleteObject(ib);
+
+		DeleteObject(f);
+		DeleteObject(fb);
+	}
     void DrawLayers(HDC dc) {
         Fill(dc, rLayers, RGB(50, 52, 57)); DrawPanelTitle(dc, rLayers, L"レイヤー");
         RECT row = { rLayers.left + 8,rLayers.top + 38,rLayers.right - 8,rLayers.top + 76 }; Box(dc, row, RGB(66, 89, 113), RGB(95, 128, 162), 1, 4);
@@ -876,6 +919,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 
+		// ★追加: スライドバーのクリック判定（上下に当たり判定を少し広く取る）
+		RECT hitBox = rHardnessTrack;
+		hitBox.top -= 6; hitBox.bottom += 6;
+		if (PtIn(hitBox, pt))
+		{
+			g_isDraggingHardness = true;
+			SetCapture(hWnd);
+
+			// 値の更新処理
+			double norm = (double)(pt.x - rHardnessTrack.left) / (double)RW(rHardnessTrack);
+			norm = Clamp(norm, 0.0, 1.0);
+			g_brushHardness = 0.5 + norm * (2.0 - 0.5); // 0.5 〜 2.0 にマッピング
+			InvalidateRect(hWnd, NULL, FALSE);
+			break;
+		}
+
 		if (PtIn(rNewPaper, pt))
 		{
 			ClearScreen();
@@ -930,6 +989,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (!s_isPenActive && (wParam & MK_LBUTTON) && g_screen == Screen::Studio)
 		{
 			POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+			
+			// ★追加: スライドバードラッグ中の処理
+			if (g_isDraggingHardness)
+			{
+				double norm = (double)(pt.x - rHardnessTrack.left) / (double)RW(rHardnessTrack);
+				norm = Clamp(norm, 0.0, 1.0);
+				g_brushHardness = 0.5 + norm * (2.0 - 0.5);
+				InvalidateRect(hWnd, NULL, FALSE);
+				break;
+			}
+
 			if (PtIn(rPaper, pt))
 			{
 				POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
@@ -961,6 +1031,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_LBUTTONUP:
 	{
+
+		// ★追加: ドラッグ解除
+		if (g_isDraggingHardness)
+		{
+			g_isDraggingHardness = false;
+			ReleaseCapture();
+			InvalidateRect(hWnd, NULL, FALSE);
+			break;
+		}
+
 		if (!s_isPenActive && g_screen == Screen::Studio)
 		{
 			g_gpuInk.EndStroke();
@@ -1012,7 +1092,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			static ORIENTATION ortNew = { 0 };
 			static double s_smoothedWidth = 0.0;
 			static bool s_strokeActive = false;
-
 			ptNew.x = pkt.pkX;
 			ptNew.y = pkt.pkY;
 			prsNew = pkt.pkNormalPressure;
@@ -1076,6 +1155,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				double pressureFactor = (double)prsNew / (maxPrs > 0 ? maxPrs : 1.0);
 				if (pressureFactor > 1.0) pressureFactor = 1.0;
 				if (pressureFactor < 0.0) pressureFactor = 0.0;
+
+				// ★追加: 筆の硬さ（ガンマ補正）を筆圧に適用
+				pressureFactor = std::pow(pressureFactor, g_brushHardness);
 
 				double altitudeDegrees = (double)ortNew.orAltitude / 10.0;
 				double azimuthRad = ((double)ortNew.orAzimuth / 10.0) * (3.14159265358979323846 / 180.0);
