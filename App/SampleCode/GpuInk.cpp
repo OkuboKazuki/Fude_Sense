@@ -711,12 +711,16 @@ void GpuInk::AddPoint(POINT pt, UINT pressure)
 	m_lastTime = now;
 }
 
-void GpuInk::Render(HDC hdc, int destX, int destY)
+void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 {
 	if (!hdc) return;
 
 	std::lock_guard<std::mutex> lock(m_mutex);
 	if (!m_pDCRenderTarget || !m_pInkBitmap || m_width <= 0 || m_height <= 0) return;
+
+	// dispW/dispH が指定されていない場合は 1:1 描画
+	if (dispW <= 0) dispW = m_width;
+	if (dispH <= 0) dispH = m_height;
 
 	// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
 	if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
@@ -738,14 +742,17 @@ void GpuInk::Render(HDC hdc, int destX, int destY)
 		m_uploadMaxY = -1;
 	}
 
-	RECT rc = { destX, destY, destX + m_width, destY + m_height };
+	RECT rc = { destX, destY, destX + dispW, destY + dispH };
 	HRESULT hr = m_pDCRenderTarget->BindDC(hdc, &rc);
 	if (SUCCEEDED(hr))
 	{
 		m_pDCRenderTarget->SetDpi(96.0f, 96.0f);
 		m_pDCRenderTarget->BeginDraw();
-		D2D1_RECT_F destRect = D2D1::RectF(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
-		m_pDCRenderTarget->DrawBitmap(m_pInkBitmap, &destRect);
+		// srcRect: ビットマップ全体 → destRect: 表示サイズ（ズーム適用）
+		D2D1_RECT_F srcRect  = D2D1::RectF(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
+		D2D1_RECT_F destRect = D2D1::RectF(0.0f, 0.0f, static_cast<float>(dispW),   static_cast<float>(dispH));
+		m_pDCRenderTarget->DrawBitmap(m_pInkBitmap, &destRect, 1.0f,
+			D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, &srcRect);
 		m_pDCRenderTarget->EndDraw();
 	}
 }

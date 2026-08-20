@@ -116,9 +116,23 @@ static ATOM g_monitorWndClassAtom = 0;
 namespace {
     constexpr double INK_MAX = 1.0;
 
-    enum class TbButton { None, Brush, Shitajiki, Eraser, Hand, NewPaper, InkRefill };
+    // 筆の墨量（0.0〜1.0）：硯に浸けると満タン、書くほど消耗する
+    double g_brushInk = 0.0;    // 初期は0（最初に硯に浸ける必要あり）
+    bool g_strokeStarted = false; // 現在のストロークの開始フラグ
 
-    enum class LeftTab { Brush, Shitajiki };
+    enum class TbButton { None, Brush, Shitajiki, Paper, Eraser, Hand, NewPaper, InkRefill };
+
+    enum class LeftTab { Brush, Shitajiki, Paper };
+
+    // 半紙の種類（実寸の縦横比に対応）
+    enum class PaperType {
+        Hanshi,    // 半紙   242x333  W:H=1:1.38
+        Jofuku,    // 条幅   350x680  W:H=1:1.94
+        Shikishi,  // 色紙   272x242  W:H=1:0.89 (横長)
+        Tanzaku,   // 短冊   60x180   W:H=1:3.0
+        Zenshi,    // 全紙   350x680  W:H=1:1.94
+        Gasenshi   // 画仙紙 300x600  W:H=1:2.0
+    };
     enum class GridPattern {
         None,           // なし
         Cross1,         // 1字 (十字補助)
@@ -147,15 +161,24 @@ namespace {
     GridPattern g_gridPattern = GridPattern::Grid4;
     GridColorTheme g_gridColor = GridColorTheme::RedLine;
 
+    PaperType g_paperType = PaperType::Hanshi;
+    double g_paperZoom = 1.0;      // 1.0〜4.0
+    int g_paperPanX   = 0;         // 表示オフセットX(px)
+    int g_paperPanY   = 0;         // 表示オフセットY(px)
+    bool g_isPanning  = false;     // 手のひらツールでパン中
+    POINT g_panStart  = {0, 0};    // パン開始点
+
     TbButton g_hoverTb = TbButton::None;
     int g_hoverSub = 0;
 
     RECT rTop{}, rTaskbar{}, rSub{}, rCanvasArea{}, rRight{}, rStatus{};
-    RECT rTbLogo{}, rTbBrush{}, rTbShitajiki{}, rTbEraser{}, rTbHand{}, rTbNewPaper{}, rTbInk{};
-    RECT rPaper{};
+    RECT rTbLogo{}, rTbBrush{}, rTbShitajiki{}, rTbPaper{}, rTbEraser{}, rTbHand{}, rTbNewPaper{}, rTbInk{};
+    RECT rPaper{};        // 実際の表示座標（ズーム適用後）
+    RECT rPaperBase{};    // ズーム1.0のときの基準座標
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
     RECT rGridTile[9]{};
     RECT rColorBtn[3]{};
+    RECT rPaperTile[6]{}; // 半紙種類タイル
     RECT rInkStoneLarge{}, rInkRefillBtn{};
     int g_hoverInkStone = 0;
 
@@ -207,7 +230,7 @@ namespace {
     }
 
     void Layout(int w, int h) {
-        const int tbW = 86, topH = 54, statusH = 26, subW = 250, rightW = 260;
+        const int tbW = 116, topH = 54, statusH = 26, subW = 360, rightW = 370;
         rTaskbar = { 0, 0, tbW, h - statusH };
         rTop = { tbW, 0, w, topH };
         rSub = { tbW, topH, tbW + subW, h - statusH };
@@ -215,41 +238,41 @@ namespace {
         rCanvasArea = { rSub.right, topH, rRight.left, h - statusH };
         rStatus = { 0, h - statusH, w, h };
 
-        // Left Taskbar items (86px width, items are 70x50px)
-        rTbLogo = { 8, 8, tbW - 8, 48 };
-        int tbY = 58;
-        rTbBrush     = { 8, tbY, tbW - 8, tbY + 50 }; tbY += 54;
-        rTbShitajiki = { 8, tbY, tbW - 8, tbY + 50 }; tbY += 54;
-        rTbEraser    = { 8, tbY, tbW - 8, tbY + 50 }; tbY += 54;
-        rTbHand      = { 8, tbY, tbW - 8, tbY + 50 }; tbY += 60; // 区切りマージン
-        rTbNewPaper  = { 8, tbY, tbW - 8, tbY + 50 }; tbY += 54;
-        rTbInk       = { 8, tbY, tbW - 8, tbY + 50 }; tbY += 54;
+        // Left Taskbar items (116px width, items are 96x68px)
+        rTbLogo = { 10, 8, tbW - 10, 54 };
+        int tbY = 66;
+        rTbBrush     = { 10, tbY, tbW - 10, tbY + 66 }; tbY += 74;
+        rTbShitajiki = { 10, tbY, tbW - 10, tbY + 66 }; tbY += 74;
+        rTbEraser    = { 10, tbY, tbW - 10, tbY + 66 }; tbY += 74;
+        rTbHand      = { 10, tbY, tbW - 10, tbY + 66 }; tbY += 84; // 区切りマージン
+        rTbNewPaper  = { 10, tbY, tbW - 10, tbY + 66 }; tbY += 74;
+        rTbInk       = { 10, tbY, tbW - 10, tbY + 66 }; tbY += 74;
 
-        // Subtool Panel Items (筆用)
-        rSubSmall  = { rSub.left + 12, topH + 42, rSub.right - 12, topH + 110 };
-        rSubMedium = { rSub.left + 12, topH + 120, rSub.right - 12, topH + 188 };
-        rSubLarge  = { rSub.left + 12, topH + 198, rSub.right - 12, topH + 266 };
+        // Subtool Panel Items (筆用: 360px幅、ゆったりとした大型カード)
+        rSubSmall  = { rSub.left + 16, topH + 48, rSub.right - 16, topH + 132 };
+        rSubMedium = { rSub.left + 16, topH + 144, rSub.right - 16, topH + 228 };
+        rSubLarge  = { rSub.left + 16, topH + 240, rSub.right - 16, topH + 324 };
 
-        // Subtool Panel Items (下敷き用: 9パターンのタイル + カラー選択)
-        int tileW = (subW - 32) / 2; // 約 109px
-        int tileH = 46;
-        int gx0 = rSub.left + 12;
-        int gy0 = topH + 42;
+        // Subtool Panel Items (下敷き用: 360px幅、大型タイル2列配置)
+        int tileW = (subW - 44) / 2; // 約 158px
+        int tileH = 56;
+        int gx0 = rSub.left + 16;
+        int gy0 = topH + 48;
 
         for (int i = 0; i < 9; ++i) {
             int col = i % 2;
             int row = i / 2;
             if (i == 8) {
-                rGridTile[i] = { gx0, gy0 + row * (tileH + 6), gx0 + tileW * 2 + 8, gy0 + row * (tileH + 6) + tileH };
+                rGridTile[i] = { gx0, gy0 + row * (tileH + 8), gx0 + tileW * 2 + 12, gy0 + row * (tileH + 8) + tileH };
             } else {
-                rGridTile[i] = { gx0 + col * (tileW + 8), gy0 + row * (tileH + 6), gx0 + col * (tileW + 8) + tileW, gy0 + row * (tileH + 6) + tileH };
+                rGridTile[i] = { gx0 + col * (tileW + 12), gy0 + row * (tileH + 8), gx0 + col * (tileW + 12) + tileW, gy0 + row * (tileH + 8) + tileH };
             }
         }
 
-        int colorY = gy0 + 5 * (tileH + 6) + 20;
-        int colBtnW = (subW - 32) / 3;
+        int colorY = gy0 + 5 * (tileH + 8) + 24;
+        int colBtnW = (subW - 44) / 3;
         for (int i = 0; i < 3; ++i) {
-            rColorBtn[i] = { gx0 + i * (colBtnW + 4), colorY, gx0 + i * (colBtnW + 4) + colBtnW, colorY + 34 };
+            rColorBtn[i] = { gx0 + i * (colBtnW + 6), colorY, gx0 + i * (colBtnW + 6) + colBtnW, colorY + 42 };
         }
 
         // Canvas / Paper
@@ -259,13 +282,18 @@ namespace {
         int py = rCanvasArea.top + (RH(rCanvasArea) - paper) / 2;
         rPaper = { px, py, px + paper, py + paper };
 
-        // Right side: 大型硯（半紙と硯の比率 1 : 1.56 を考慮した本格サイズ）
-        int stoneW = std::min(224, RW(rRight) - 36);
-        int stoneH = (int)(stoneW * 1.56); // 約 350px
+        // Right side: 超大型本格硯（半紙の垂直中央に合わせてどっしりと配置）
+        int stoneW = std::min(324, RW(rRight) - 40);
+        int stoneH = (int)(stoneW * 1.54); // 約 500px
         int stoneX = rRight.left + (RW(rRight) - stoneW) / 2;
-        int stoneY = topH + 52;
+
+        // 半紙の垂直中心 (py + paper / 2) に硯の中心を合わせる
+        int paperCenterY = py + paper / 2;
+        int stoneY = paperCenterY - (stoneH + 60) / 2;
+        stoneY = std::max(topH + 36, stoneY);
+
         rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
-        rInkRefillBtn = { stoneX, stoneY + stoneH + 16, stoneX + stoneW, stoneY + stoneH + 54 };
+        rInkRefillBtn = { stoneX, stoneY + stoneH + 16, stoneX + stoneW, stoneY + stoneH + 58 };
     }
 
     void DrawPanelTitle(HDC dc, RECT r, const wchar_t* s) {
@@ -317,15 +345,15 @@ namespace {
 
         // Active vertical indicator bar on the left
         if (active) {
-            RECT ind = { r.left - 4, r.top + 8, r.left - 1, r.bottom - 8 };
+            RECT ind = { r.left - 5, r.top + 10, r.left - 1, r.bottom - 10 };
             Fill(dc, ind, RGB(59, 130, 246));
         }
 
-        HFONT fIcon = Font(18, FW_BOLD);
-        HFONT fLabel = Font(10, FW_NORMAL);
+        HFONT fIcon = Font(26, FW_BOLD);
+        HFONT fLabel = Font(13, FW_NORMAL);
 
-        RECT rIcon = { r.left, r.top + 5, r.right, r.top + 30 };
-        RECT rLabel = { r.left, r.top + 30, r.right, r.bottom - 4 };
+        RECT rIcon = { r.left, r.top + 6, r.right, r.top + 40 };
+        RECT rLabel = { r.left, r.top + 40, r.right, r.bottom - 6 };
 
         Center(dc, rIcon, icon, fIcon, textMain);
         Center(dc, rLabel, label, fLabel, textSub);
@@ -347,15 +375,15 @@ namespace {
 
         // Top App Logo Badge ("書")
         Box(dc, rTbLogo, RGB(35, 38, 48), RGB(180, 150, 85), 1, 8);
-        HFONT fLogo = Font(22, FW_BOLD);
+        HFONT fLogo = Font(26, FW_BOLD);
         Center(dc, rTbLogo, L"書", fLogo, RGB(245, 215, 130));
         DeleteObject(fLogo);
 
         // Divider
         HPEN pDiv = CreatePen(PS_SOLID, 1, RGB(38, 40, 48));
         op = (HPEN)SelectObject(dc, pDiv);
-        MoveToEx(dc, 14, 56, nullptr);
-        LineTo(dc, rTaskbar.right - 14, 56);
+        MoveToEx(dc, 16, 62, nullptr);
+        LineTo(dc, rTaskbar.right - 16, 62);
         SelectObject(dc, op);
         DeleteObject(pDiv);
 
@@ -382,21 +410,21 @@ namespace {
             border = RGB(44, 47, 56);
         }
 
-        Box(dc, r, bg, border, 1, 6);
+        Box(dc, r, bg, border, 1, 8);
 
         // Brush Tip Preview Stroke on the left
-        RECT tipBox = { r.left + 10, r.top + 12, r.left + 32, r.bottom - 12 };
+        RECT tipBox = { r.left + 12, r.top + 16, r.left + 46, r.bottom - 16 };
         int cy = (tipBox.top + tipBox.bottom) / 2;
-        HPEN sp = CreatePen(PS_SOLID, strokeWidth, active ? RGB(100, 180, 255) : RGB(160, 165, 175));
+        HPEN sp = CreatePen(PS_SOLID, (int)(strokeWidth * 1.5 + 1), active ? RGB(100, 180, 255) : RGB(160, 165, 175));
         HPEN osp = (HPEN)SelectObject(dc, sp);
         MoveToEx(dc, tipBox.left + 4, cy, nullptr);
         LineTo(dc, tipBox.right - 4, cy);
         SelectObject(dc, osp);
         DeleteObject(sp);
 
-        HFONT f1 = Font(15, FW_BOLD), f2 = Font(12);
-        RECT a = { r.left + 38, r.top + 10, r.right - 8, r.top + 34 };
-        RECT b = { r.left + 38, r.top + 34, r.right - 8, r.bottom - 8 };
+        HFONT f1 = Font(18, FW_BOLD), f2 = Font(14);
+        RECT a = { r.left + 54, r.top + 14, r.right - 12, r.top + 44 };
+        RECT b = { r.left + 54, r.top + 44, r.right - 12, r.bottom - 12 };
         Text(dc, a, name, f1, active ? RGB(255, 255, 255) : RGB(230, 233, 238));
         Text(dc, b, detail, f2, active ? RGB(170, 205, 245) : RGB(150, 155, 165));
         DeleteObject(f1);
@@ -423,9 +451,9 @@ namespace {
         }
 
         Box(dc, r, bg, border, 1, 6);
-        HFONT f1 = Font(13, FW_BOLD), f2 = Font(10);
-        RECT r1 = { r.left + 4, r.top + 4, r.right - 4, r.top + 23 };
-        RECT r2 = { r.left + 4, r.top + 23, r.right - 4, r.bottom - 3 };
+        HFONT f1 = Font(16, FW_BOLD), f2 = Font(12);
+        RECT r1 = { r.left + 4, r.top + 6, r.right - 4, r.top + 30 };
+        RECT r2 = { r.left + 4, r.top + 30, r.right - 4, r.bottom - 4 };
         Center(dc, r1, title, f1, textMain);
         Center(dc, r2, sub, f2, textSub);
         DeleteObject(f1);
@@ -435,21 +463,21 @@ namespace {
     void DrawColorThemeBtn(HDC dc, RECT r, const wchar_t* label, COLORREF dotColor, bool active, bool hover) {
         COLORREF bg = active ? RGB(38, 54, 82) : (hover ? RGB(40, 44, 52) : RGB(28, 30, 36));
         COLORREF border = active ? RGB(70, 120, 195) : (hover ? RGB(66, 72, 86) : RGB(42, 45, 54));
-        Box(dc, r, bg, border, 1, 5);
+        Box(dc, r, bg, border, 1, 6);
 
         // Color dot
         HBRUSH db = CreateSolidBrush(dotColor);
         HBRUSH odb = (HBRUSH)SelectObject(dc, db);
         HPEN dp = CreatePen(PS_SOLID, 1, active ? RGB(255, 255, 255) : RGB(100, 105, 115));
         HPEN odp = (HPEN)SelectObject(dc, dp);
-        Ellipse(dc, r.left + 6, r.top + (RH(r) - 10) / 2, r.left + 16, r.top + (RH(r) + 10) / 2);
+        Ellipse(dc, r.left + 10, r.top + (RH(r) - 14) / 2, r.left + 24, r.top + (RH(r) + 14) / 2);
         SelectObject(dc, odp);
         SelectObject(dc, odb);
         DeleteObject(dp);
         DeleteObject(db);
 
-        HFONT f = Font(11, active ? FW_BOLD : FW_NORMAL);
-        RECT tr = { r.left + 18, r.top, r.right - 2, r.bottom };
+        HFONT f = Font(13, active ? FW_BOLD : FW_NORMAL);
+        RECT tr = { r.left + 26, r.top, r.right - 4, r.bottom };
         Center(dc, tr, label, f, active ? RGB(255, 255, 255) : RGB(200, 205, 215));
         DeleteObject(f);
     }
@@ -483,9 +511,9 @@ namespace {
             }
 
             // カラー設定タイトル
-            RECT rColTitle = { rSub.left + 14, rColorBtn[0].top - 18, rSub.right - 14, rColorBtn[0].top };
-            HFONT fct = Font(11, FW_BOLD);
-            Text(dc, rColTitle, L"下敷き・罫線の配色", fct, RGB(160, 165, 175));
+            RECT rColTitle = { rSub.left + 16, rColorBtn[0].top - 20, rSub.right - 16, rColorBtn[0].top };
+            HFONT fct = Font(13, FW_BOLD);
+            Text(dc, rColTitle, L"下敷き・罫線の配色", fct, RGB(170, 175, 185));
             DeleteObject(fct);
 
             DrawColorThemeBtn(dc, rColorBtn[0], L"朱赤", RGB(225, 80, 80), g_gridColor == GridColorTheme::RedLine, g_hoverSub == 30);
@@ -499,25 +527,25 @@ namespace {
         DrawPanelTitle(dc, rRight, L"硯 (すずり) / 墨池");
 
         // 硯情報ヘッダー（銘・墨残量）
-        HFONT fMeta = Font(12, FW_NORMAL);
-        RECT rMeta1 = { rRight.left + 16, rRight.top + 32, rRight.right - 16, rRight.top + 48 };
+        HFONT fMeta = Font(14, FW_NORMAL);
+        RECT rMeta1 = { rRight.left + 20, rInkStoneLarge.top - 26, rRight.right - 20, rInkStoneLarge.top - 4 };
         wchar_t buf[64];
         wsprintfW(buf, L"天然石・四五平長方硯　墨残量: %d%%", (int)(g_ink * 100.0));
-        Text(dc, rMeta1, buf, fMeta, RGB(180, 185, 195));
+        Text(dc, rMeta1, buf, fMeta, RGB(185, 190, 200));
         DeleteObject(fMeta);
 
         // 1. 硯の外枠（硯身・石肌・角丸）
         bool hover = (g_hoverInkStone != 0);
         COLORREF stoneBorder = hover ? RGB(70, 120, 190) : RGB(48, 52, 64);
-        Box(dc, rInkStoneLarge, RGB(26, 28, 34), stoneBorder, 2, 10);
+        Box(dc, rInkStoneLarge, RGB(26, 28, 34), stoneBorder, 2, 12);
 
         // 外縁の内側立体彫り込み線
-        RECT innerRim = { rInkStoneLarge.left + 8, rInkStoneLarge.top + 8, rInkStoneLarge.right - 8, rInkStoneLarge.bottom - 8 };
-        Box(dc, innerRim, RGB(16, 17, 21), RGB(38, 41, 50), 1, 8);
+        RECT innerRim = { rInkStoneLarge.left + 10, rInkStoneLarge.top + 10, rInkStoneLarge.right - 10, rInkStoneLarge.bottom - 10 };
+        Box(dc, innerRim, RGB(16, 17, 21), RGB(38, 41, 50), 1, 10);
 
         // 2. 墨池（ぼくち / 海）: 硯の上部窪み
-        RECT rPool = { innerRim.left + 10, innerRim.top + 10, innerRim.right - 10, innerRim.top + (int)(RH(innerRim) * 0.36) };
-        Box(dc, rPool, RGB(10, 11, 14), RGB(30, 33, 40), 1, 6);
+        RECT rPool = { innerRim.left + 12, innerRim.top + 12, innerRim.right - 12, innerRim.top + (int)(RH(innerRim) * 0.36) };
+        Box(dc, rPool, RGB(10, 11, 14), RGB(30, 33, 40), 1, 8);
 
         // 墨池内の墨汁（現在の墨量 g_ink に連動した満水・液面表現）
         double inkFrac = Clamp(g_ink / INK_MAX, 0.0, 1.0);
@@ -532,8 +560,8 @@ namespace {
             // 液面の水面ハイライト反射光
             HPEN hp = CreatePen(PS_SOLID, 2, RGB(75, 95, 125));
             HPEN ohp = (HPEN)SelectObject(dc, hp);
-            MoveToEx(dc, rLiquid.left + 8, rLiquid.top + 1, nullptr);
-            LineTo(dc, rLiquid.right - 8, rLiquid.top + 1);
+            MoveToEx(dc, rLiquid.left + 12, rLiquid.top + 1, nullptr);
+            LineTo(dc, rLiquid.right - 12, rLiquid.top + 1);
             SelectObject(dc, ohp);
             DeleteObject(hp);
 
@@ -541,41 +569,41 @@ namespace {
             HBRUSH glb = CreateSolidBrush(RGB(130, 155, 190));
             HBRUSH ogb = (HBRUSH)SelectObject(dc, glb);
             HPEN gpen = (HPEN)SelectObject(dc, GetStockObject(NULL_PEN));
-            RoundRect(dc, rLiquid.left + 12, rLiquid.top + 3, rLiquid.left + 36, rLiquid.top + 7, 3, 3);
+            RoundRect(dc, rLiquid.left + 16, rLiquid.top + 4, rLiquid.left + 48, rLiquid.top + 9, 4, 4);
             SelectObject(dc, gpen);
             SelectObject(dc, ogb);
             DeleteObject(glb);
         }
 
         // 墨池の刻印
-        HFONT fPool = Font(11, FW_BOLD);
-        RECT rPoolText = { rPool.left, rPool.top + 6, rPool.right, rPool.top + 22 };
+        HFONT fPool = Font(16, FW_BOLD);
+        RECT rPoolText = { rPool.left, rPool.top + 8, rPool.right, rPool.top + 30 };
         Center(dc, rPoolText, L"墨 池 (海)", fPool, inkFrac > 0.4 ? RGB(90, 105, 130) : RGB(140, 145, 155));
         DeleteObject(fPool);
 
         // 3. 墨堂（ぼくどう / 陸）: 硯の中央〜下部
-        RECT rLand = { innerRim.left + 10, innerRim.top + (int)(RH(innerRim) * 0.38), innerRim.right - 10, innerRim.bottom - 10 };
-        Box(dc, rLand, RGB(24, 26, 32), RGB(34, 37, 46), 1, 6);
+        RECT rLand = { innerRim.left + 12, innerRim.top + (int)(RH(innerRim) * 0.38), innerRim.right - 12, innerRim.bottom - 12 };
+        Box(dc, rLand, RGB(24, 26, 32), RGB(34, 37, 46), 1, 8);
 
         // 墨堂の微細な研磨テクスチャ線
         HPEN tp = CreatePen(PS_SOLID, 1, RGB(30, 33, 40));
         HPEN otp = (HPEN)SelectObject(dc, tp);
-        for (int y = rLand.top + 10; y < rLand.bottom - 10; y += 14) {
-            MoveToEx(dc, rLand.left + 12, y, nullptr);
-            LineTo(dc, rLand.right - 12, y);
+        for (int y = rLand.top + 12; y < rLand.bottom - 12; y += 16) {
+            MoveToEx(dc, rLand.left + 16, y, nullptr);
+            LineTo(dc, rLand.right - 16, y);
         }
         SelectObject(dc, otp);
         DeleteObject(tp);
 
         // 墨堂の刻印
-        HFONT fKanji = Font(13, FW_BOLD);
-        RECT rLandText = { rLand.left, rLand.top + 12, rLand.right, rLand.top + 30 };
+        HFONT fKanji = Font(18, FW_BOLD);
+        RECT rLandText = { rLand.left, rLand.top + 14, rLand.right, rLand.top + 36 };
         Center(dc, rLandText, L"墨 堂 (陸)", fKanji, RGB(70, 75, 88));
         DeleteObject(fKanji);
 
         // 4. 硯下部の墨補充クイックボタン
-        Box(dc, rInkRefillBtn, hover ? RGB(45, 68, 100) : RGB(34, 37, 46), hover ? RGB(70, 120, 190) : RGB(52, 57, 70), 1, 6);
-        HFONT fBtn = Font(13, FW_BOLD);
+        Box(dc, rInkRefillBtn, hover ? RGB(45, 68, 100) : RGB(34, 37, 46), hover ? RGB(70, 120, 190) : RGB(52, 57, 70), 1, 8);
+        HFONT fBtn = Font(15, FW_BOLD);
         Center(dc, rInkRefillBtn, L"💧 硯をクリックして墨を補充", fBtn, hover ? RGB(255, 255, 255) : RGB(210, 215, 225));
         DeleteObject(fBtn);
     }
@@ -743,13 +771,24 @@ namespace {
     void DrawStatus(HDC dc, int w, int h) {
         Fill(dc, rStatus, RGB(18, 19, 23)); 
         HFONT f = Font(12); RECT t = { 12, h - 22, w - 12, h - 4 };
-        wchar_t buf[128]; 
-        wsprintfW(buf, L"状態: 準備完了 | ツール: %s | 筆: %s | 下敷き: %s | 墨量: %d%%", 
-            g_tool == Tool::BrushTool ? L"筆" : (g_tool == Tool::EraserTool ? L"消しゴム" : L"手のひら"), 
-            BrushName(g_brush), 
-            GridPatternName(g_gridPattern),
-            (int)(g_ink * 100.0));
-        Text(dc, t, buf, f, RGB(150, 155, 165)); 
+        wchar_t buf[192]; 
+        int brushInkPct = (int)(g_brushInk * 100.0);
+        if (g_brushInk <= 0.0) {
+            wsprintfW(buf, L"状態: ★硯に筆を浸けてください | ツール: %s | 筆: %s | 下敷き: %s | 筆の墨量: 0%% | 硯残量: %d%%",
+                g_tool == Tool::BrushTool ? L"筆" : (g_tool == Tool::EraserTool ? L"消しゴム" : L"手のひら"),
+                BrushName(g_brush),
+                GridPatternName(g_gridPattern),
+                (int)(g_ink * 100.0));
+            Text(dc, t, buf, f, RGB(255, 160, 60));  // 橙色で警告表示
+        } else {
+            wsprintfW(buf, L"状態: 準備完了 | ツール: %s | 筆: %s | 下敷き: %s | 筆の墨量: %d%% | 硯残量: %d%%",
+                g_tool == Tool::BrushTool ? L"筆" : (g_tool == Tool::EraserTool ? L"消しゴム" : L"手のひら"),
+                BrushName(g_brush),
+                GridPatternName(g_gridPattern),
+                brushInkPct,
+                (int)(g_ink * 100.0));
+            Text(dc, t, buf, f, RGB(150, 155, 165));
+        }
         DeleteObject(f);
     }
 
@@ -1385,10 +1424,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				InvalidateRect(hWnd, NULL, FALSE);
 			}
 		}
-		// Large InkStone Clicks (Ink Refill)
+		// Large InkStone Clicks (Ink Dip + Refill)
 		else if (PtIn(rInkStoneLarge, pt) || PtIn(rInkRefillBtn, pt))
 		{
+			// 硯に筆を浸ける → 筆の墨量を満タンに補充
+			g_brushInk = 1.0;
 			g_ink = INK_MAX;
+			g_strokeStarted = false;
 			InvalidateRect(hWnd, &rRight, FALSE);
 			InvalidateRect(hWnd, &rStatus, FALSE);
 		}
@@ -1454,28 +1496,47 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			if (PtIn(rPaper, pt))
 			{
-				POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
-				double dx = (double)(paperPt.x - s_ptMouseOld.x);
-				double dy = (double)(paperPt.y - s_ptMouseOld.y);
-				double dist = std::hypot(dx, dy);
-
-				if (dist > 0.1)
+				// 墨が0なら描けない（硯に浸けてから書く必要あり）
+				if (g_brushInk <= 0.0)
 				{
-					double baseWidth = 36.0;
-					if (g_brush == Brush::Small) baseWidth = 16.0;
-					else if (g_brush == Brush::Large) baseWidth = 56.0;
-
-					double pressureFactor = 0.5;
-					double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
-					double haraiFactor = std::pow(pressureFactor, haraiPower);
-					double rawWidth = baseWidth * haraiFactor;
-					int penWidth = (int)std::round(rawWidth);
-					if (penWidth < 1) penWidth = 1;
-
-					g_gpuInk.DrawSegment(s_ptMouseOld, paperPt, (double)penWidth, 255);
+					s_ptMouseOld = { pt.x - rPaper.left, pt.y - rPaper.top };
 				}
-				s_ptMouseOld = paperPt;
-				InvalidateRect(hWnd, NULL, FALSE);
+				else
+				{
+					POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
+					double dx = (double)(paperPt.x - s_ptMouseOld.x);
+					double dy = (double)(paperPt.y - s_ptMouseOld.y);
+					double dist = std::hypot(dx, dy);
+
+					if (dist > 0.1)
+					{
+						double baseWidth = 36.0;
+						if (g_brush == Brush::Small) baseWidth = 16.0;
+						else if (g_brush == Brush::Large) baseWidth = 56.0;
+
+						double pressureFactor = 0.5;
+						double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+						double haraiFactor = std::pow(pressureFactor, haraiPower);
+						double rawWidth = baseWidth * haraiFactor;
+						int penWidth = (int)std::round(rawWidth);
+						if (penWidth < 1) penWidth = 1;
+
+						// 墨量に応じたアルファ値（かすれ表現）
+						double inkAlpha = Clamp(g_brushInk, 0.0, 1.0);
+						int alpha = (int)(inkAlpha * inkAlpha * 255); // 二乗でリアルなかすれ感
+						if (alpha < 20) alpha = 20; // 完全消去の手前で止める
+
+						g_gpuInk.DrawSegment(s_ptMouseOld, paperPt, (double)penWidth, alpha);
+
+						// 筆の墨量を消耗（大筆は早く減る）
+						double consumeRate = (g_brush == Brush::Small) ? 0.00018 :
+										 (g_brush == Brush::Large) ? 0.00055 : 0.00032;
+						g_brushInk -= dist * consumeRate;
+						if (g_brushInk < 0.0) g_brushInk = 0.0;
+					}
+					s_ptMouseOld = paperPt;
+					InvalidateRect(hWnd, NULL, FALSE);
+				}
 			}
 		}
 		break;
@@ -1573,7 +1634,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				if (!s_strokeActive || prsOld == 0 || !g_gpuInk.IsInStroke())
 				{
 					s_strokeActive = true;
-					ptOld = ptNew;
 					oldPaperPt = paperPt;
 				}
 
@@ -1584,7 +1644,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				if (dist > 50.0)
 				{
 					oldPaperPt = paperPt;
-					ptOld = ptNew;
 					dist = 0.0;
 				}
 
@@ -1621,7 +1680,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					s_smoothedWidth = s_smoothedWidth * (1.0 - alpha) + rawWidth * alpha;
 				}
 
-				g_gpuInk.DrawSegment(oldPaperPt, paperPt, s_smoothedWidth, 255);
+					// 墨が0なら描かない（硯に浸ける必要あり）
+					if (g_brushInk <= 0.0) goto skip_draw;
+
+					{
+						// 墨量に応じたアルファ値（かすれ表現）
+						double inkAlpha = Clamp(g_brushInk, 0.0, 1.0);
+						int alpha = (int)(inkAlpha * inkAlpha * 255);
+						if (alpha < 20) alpha = 20;
+
+						g_gpuInk.DrawSegment(oldPaperPt, paperPt, s_smoothedWidth, alpha);
+
+						// 筆の墨量を消耗（筆サイズ・ストローク幅に応じて）
+						double consumeRate = (g_brush == Brush::Small) ? 0.00015 :
+										 (g_brush == Brush::Large) ? 0.00050 : 0.00028;
+						g_brushInk -= dist * consumeRate;
+						if (g_brushInk < 0.0) g_brushInk = 0.0;
+						// 墨残量（硯）も少しずつ減らす
+						g_ink -= dist * consumeRate * 0.05;
+						if (g_ink < 0.0) g_ink = 0.0;
+					}
+					skip_draw:;
 			}
 			else
 			{
