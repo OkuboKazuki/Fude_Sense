@@ -47,6 +47,7 @@ public:
 	// ストローク操作
 	void BeginStroke(POINT pt, UINT pressure);
 	void AddPoint(POINT pt, UINT pressure);
+	void DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha = 255);
 	void DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha = 255);
 	void EndStroke(); // 跳ね払い（flick tail）処理なし
 	bool IsInStroke() const { return m_inStroke; }
@@ -70,7 +71,7 @@ private:
 	bool Initialize_NoLock(int width, int height);
 	void EnsureInitialized();
 
-	void StampBrush(int cx, int cy, int radius, unsigned char alpha);
+	void StampBrush(double cx, double cy, double radius, unsigned char alpha);
 	void StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeconds = 0.0);
 
 	bool PropagateInk_NoLock();

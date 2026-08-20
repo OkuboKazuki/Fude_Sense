@@ -552,9 +552,9 @@ void GpuInk::EndStroke()
 	m_inStroke = false;
 }
 
-void GpuInk::StampBrush(int cx, int cy, int radius, unsigned char alpha)
+void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha)
 {
-	if (radius <= 0) radius = 1;
+	if (radius <= 0.0) radius = 0.5;
 	if (m_ink.empty() || m_pixelBuffer.empty()) return;
 
 	uint32_t* pixels = m_pixelBuffer.data();
@@ -568,15 +568,18 @@ void GpuInk::StampBrush(int cx, int cy, int radius, unsigned char alpha)
 	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
 	double angRad = azimuthRad + 1.57079632679; // 毛束の接地広がり方向
 
-	double rad = static_cast<double>(radius);
+	double rad = radius;
 	double semiMajor = rad * (1.0 + tiltFactor * 1.5);
 	double semiMinor = std::max(0.5, rad * (1.0 - tiltFactor * 0.4));
 
 	int ext = static_cast<int>(std::ceil(semiMajor));
-	int left = std::max(0, cx - ext);
-	int right = std::min(m_width - 1, cx + ext);
-	int top = std::max(0, cy - ext);
-	int bottom = std::min(m_height - 1, cy + ext);
+	int icx = static_cast<int>(std::lround(cx));
+	int icy = static_cast<int>(std::lround(cy));
+
+	int left = std::max(0, icx - ext);
+	int right = std::min(m_width - 1, icx + ext);
+	int top = std::max(0, icy - ext);
+	int bottom = std::min(m_height - 1, icy + ext);
 
 	double cosA = std::cos(angRad);
 	double sinA = std::sin(angRad);
@@ -585,10 +588,10 @@ void GpuInk::StampBrush(int cx, int cy, int radius, unsigned char alpha)
 
 	for (int y = top; y <= bottom; ++y)
 	{
-		double dy = static_cast<double>(y - cy);
+		double dy = static_cast<double>(y) - cy;
 		for (int x = left; x <= right; ++x)
 		{
-			double dx = static_cast<double>(x - cx);
+			double dx = static_cast<double>(x) - cx;
 
 			double localX = dx * cosA + dy * sinA;
 			double localY = -dx * sinA + dy * cosA;
@@ -624,7 +627,7 @@ void GpuInk::StampBrush(int cx, int cy, int radius, unsigned char alpha)
 	}
 }
 
-void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
+void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	EnsureInitialized();
@@ -634,39 +637,44 @@ void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
 	int dy = b.y - a.y;
 	double dist = std::hypot(static_cast<double>(dx), static_cast<double>(dy));
 
-	double radius = strokeWidth / 2.0;
-	if (radius < 0.5) radius = 0.5;
-	int stampRadius = std::max(1, static_cast<int>(std::lround(radius)));
+	double startRadius = startWidth / 2.0;
+	if (startRadius < 0.5) startRadius = 0.5;
+
+	double endRadius = endWidth / 2.0;
+	if (endRadius < 0.5) endRadius = 0.5;
 
 	double dirX = static_cast<double>(dx);
 	double dirY = static_cast<double>(dy);
 	double dirLen = std::sqrt(dirX * dirX + dirY * dirY);
-	double ux = m_lastDirX;
-	double uy = m_lastDirY;
 
 	if (dirLen >= 1.0)
 	{
-		ux = dirX / dirLen;
-		uy = dirY / dirLen;
-		m_lastDirX = ux;
-		m_lastDirY = uy;
+		m_lastDirX = dirX / dirLen;
+		m_lastDirY = dirY / dirLen;
 	}
 
-	double step = std::max(1.0, static_cast<double>(stampRadius) * 0.3);
+	double minRadius = std::min(startRadius, endRadius);
+	double maxRadius = std::max(startRadius, endRadius);
+	// 打刻刻み幅: 細い部分や払いの減衰時は特にスタンプを密にして段差（ガタガタ）を排除
+	double step = std::max(0.5, std::min(maxRadius * 0.25, minRadius * 0.4 + 0.3));
 	int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
 
 	for (int i = 0; i <= steps; ++i)
 	{
 		double t = (steps == 0) ? 0.0 : static_cast<double>(i) / static_cast<double>(steps);
-		POINT p;
-		p.x = static_cast<LONG>(a.x + (b.x - a.x) * t + 0.5);
-		p.y = static_cast<LONG>(a.y + (b.y - a.y) * t + 0.5);
+		double px = static_cast<double>(a.x) + static_cast<double>(b.x - a.x) * t;
+		double py = static_cast<double>(a.y) + static_cast<double>(b.y - a.y) * t;
 
-		// 固定インク値 255 でスタンプ
-		StampBrush(p.x, p.y, stampRadius, 255);
+		double currentRadius = startRadius * (1.0 - t) + endRadius * t;
+		StampBrush(px, py, currentRadius, inkAlpha);
 	}
 
 	m_lastPt = b;
+}
+
+void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
+{
+	DrawSegmentLinear(a, b, strokeWidth, strokeWidth, inkAlpha);
 }
 
 void GpuInk::AddPoint(POINT pt, UINT pressure)

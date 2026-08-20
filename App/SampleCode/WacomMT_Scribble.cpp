@@ -1125,9 +1125,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 				double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + tiltFactor * 0.6);
 
-				if (dist == 0.0 || !g_gpuInk.IsInStroke())
+				double startWidth = s_smoothedWidth;
+				if (dist == 0.0 || !g_gpuInk.IsInStroke() || !s_strokeActive)
 				{
 					s_smoothedWidth = rawWidth;
+					startWidth = rawWidth;
 				}
 				else
 				{
@@ -1140,7 +1142,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					s_smoothedWidth = s_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
 				}
 
-				g_gpuInk.DrawSegment(oldPaperPt, paperPt, s_smoothedWidth, 255);
+				g_gpuInk.DrawSegmentLinear(oldPaperPt, paperPt, startWidth, s_smoothedWidth, 255);
 			}
 			else
 			{
