@@ -56,7 +56,8 @@ public:
 	void UpdatePenZ(int z, int altitude, int azimuth, bool hovering);
 
 	// 描画 (ウィンドウの WM_PAINT ハンドラ)
-	void Render(HDC hdc, int destX = 0, int destY = 0);
+	// dispW/dispH を指定するとその解像度にスケーリングして描画（ズーム対応）
+	void Render(HDC hdc, int destX = 0, int destY = 0, int dispW = -1, int dispH = -1);
 
 	// クリア
 	void Clear();
