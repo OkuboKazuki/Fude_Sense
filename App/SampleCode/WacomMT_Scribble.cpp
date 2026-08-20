@@ -155,7 +155,7 @@ namespace {
     Tool g_tool = Tool::BrushTool;
     int g_grid = 1;
     double g_ink = INK_MAX;
-    double g_brushHardness = 1.0; // 筆の硬さ (0.5: 非常に柔らかい ~ 2.0: 非常に硬い)
+    double g_brushHardness = 0.5; // 筆の硬さ (0.1: 超極軟 ~ 2.0: 非常に硬い)
     bool g_isDraggingHardness = false; // スライドバードラッグ中
 
     LeftTab g_leftTab = LeftTab::Brush;
@@ -254,7 +254,7 @@ namespace {
         rSubSmall  = { rSub.left + 16, topH + 48, rSub.right - 16, topH + 132 };
         rSubMedium = { rSub.left + 16, topH + 144, rSub.right - 16, topH + 228 };
         rSubLarge  = { rSub.left + 16, topH + 240, rSub.right - 16, topH + 324 };
-        rHardnessTrack = { rSub.left + 16, topH + 348, rSub.right - 16, topH + 356 };
+        rHardnessTrack = { rSub.left + 32, topH + 400, rSub.right - 32, topH + 408 };
 
         // Subtool Panel Items (下敷き用: 360px幅、大型タイル2列配置)
         int tileW = (subW - 44) / 2; // 約 158px
@@ -493,6 +493,46 @@ namespace {
             DrawSubCard(dc, rSubSmall, L"小筆", L"かな・名入れ・細線", 2, g_brush == Brush::Small, g_hoverSub == 1);
             DrawSubCard(dc, rSubMedium, L"中筆", L"標準的な楷書・行書", 5, g_brush == Brush::Medium, g_hoverSub == 2);
             DrawSubCard(dc, rSubLarge, L"大筆", L"作品・力強い大字", 9, g_brush == Brush::Large, g_hoverSub == 3);
+
+            // 筆の硬さカードパネル (Y: rSub.top + 344 ～ rSub.top + 434)
+            RECT rCard = { rSub.left + 16, rSub.top + 344, rSub.right - 16, rSub.top + 434 };
+            Box(dc, rCard, RGB(34, 37, 44), RGB(52, 57, 70), 1, 6);
+
+            // ラベル・数値表示
+            HFONT fTitle = Font(13, FW_BOLD);
+            RECT rTitle = { rCard.left + 16, rCard.top + 10, rCard.left + 150, rCard.top + 30 };
+            Text(dc, rTitle, L"筆の硬さ（感度補正）", fTitle, RGB(220, 225, 235));
+
+            wchar_t valBuf[64];
+            const wchar_t* hardState = (g_brushHardness < 0.3) ? L"超極軟" : ((g_brushHardness < 0.7) ? L"柔らかめ" : ((g_brushHardness > 1.2) ? L"硬め" : L"標準"));
+            swprintf_s(valBuf, 64, L"%.2f (%s)", g_brushHardness, hardState);
+            RECT rVal = { rCard.right - 130, rCard.top + 10, rCard.right - 16, rCard.top + 30 };
+            Text(dc, rVal, valBuf, fTitle, RGB(100, 160, 230), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            DeleteObject(fTitle);
+
+            // トラック描画
+            Fill(dc, rHardnessTrack, RGB(20, 22, 26));
+
+            double normHardness = (g_brushHardness - 0.1) / (2.0 - 0.1);
+            normHardness = Clamp(normHardness, 0.0, 1.0);
+            int thumbX = rHardnessTrack.left + (int)(RW(rHardnessTrack) * normHardness);
+
+            RECT rLevel = rHardnessTrack;
+            rLevel.right = thumbX;
+            Fill(dc, rLevel, RGB(65, 120, 190));
+
+            // つまみ（スライダーハンドル）
+            RECT thumb = { thumbX - 5, rHardnessTrack.top - 4, thumbX + 5, rHardnessTrack.bottom + 4 };
+            Box(dc, thumb, g_isDraggingHardness ? RGB(180, 210, 255) : RGB(140, 180, 230), RGB(220, 235, 255), 1, 3);
+
+            // スライダー下部ガイドテキスト
+            HFONT fSub = Font(11, FW_NORMAL);
+            RECT rMinLab = { rHardnessTrack.left, rHardnessTrack.bottom + 4, rHardnessTrack.left + 80, rHardnessTrack.bottom + 20 };
+            Text(dc, rMinLab, L"0.1 (極軟)", fSub, RGB(140, 145, 155));
+
+            RECT rMaxLab = { rHardnessTrack.right - 80, rHardnessTrack.bottom + 4, rHardnessTrack.right, rHardnessTrack.bottom + 20 };
+            Text(dc, rMaxLab, L"2.0 (極硬)", fSub, RGB(140, 145, 155), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            DeleteObject(fSub);
         } else {
             DrawPanelTitle(dc, rSub, L"下敷き・升目設定");
 
@@ -1345,7 +1385,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 
 		// 筆の硬さスライダー操作
-		if (g_screen == Screen::Studio && g_leftTab == LeftTab::Brush)
+		if (g_screen == Screen::Studio && g_leftTab == LeftTab::Brush && RW(rHardnessTrack) > 0)
 		{
 			RECT hitBox = rHardnessTrack;
 			hitBox.top -= 6; hitBox.bottom += 6;
@@ -1354,9 +1394,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_isDraggingHardness = true;
 				SetCapture(hWnd);
 
-				double norm = (double)(pt.x - rHardnessTrack.left) / (double)RW(rHardnessTrack);
+				double trackW = (double)RW(rHardnessTrack);
+				double norm = (trackW > 0.0) ? (double)(pt.x - rHardnessTrack.left) / trackW : 0.2;
 				norm = Clamp(norm, 0.0, 1.0);
-				g_brushHardness = 0.5 + norm * (2.0 - 0.5);
+				g_brushHardness = 0.1 + norm * (2.0 - 0.1);
+				if (std::isnan(g_brushHardness) || std::isinf(g_brushHardness)) g_brushHardness = 1.0;
 				InvalidateRect(hWnd, NULL, FALSE);
 				break;
 			}
@@ -1458,9 +1500,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		if (g_isDraggingHardness)
 		{
-			double norm = (double)(pt.x - rHardnessTrack.left) / (double)RW(rHardnessTrack);
+			double trackW = (double)RW(rHardnessTrack);
+			double norm = (trackW > 0.0) ? (double)(pt.x - rHardnessTrack.left) / trackW : 0.2;
 			norm = Clamp(norm, 0.0, 1.0);
-			g_brushHardness = 0.5 + norm * (2.0 - 0.5);
+			g_brushHardness = 0.1 + norm * (2.0 - 0.1);
+			if (std::isnan(g_brushHardness) || std::isinf(g_brushHardness)) g_brushHardness = 1.0;
 			InvalidateRect(hWnd, NULL, FALSE);
 			break;
 		}
@@ -1588,7 +1632,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 
 		PACKET pkt = { 0 };
-		if (gpWTPacket(hCtx, static_cast<int>(wParam), &pkt))
+		if (gpWTPacket && gpWTPacket(hCtx, static_cast<int>(wParam), &pkt))
 		{
 			static POINT ptOld = { 0 };
 			static POINT ptNew = { 0 };
@@ -1681,7 +1725,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				if (pressureFactor < 0.0) pressureFactor = 0.0;
 
 				// 筆の硬さ（ガンマ補正）を筆圧に適用
+				if (std::isnan(g_brushHardness) || g_brushHardness < 0.1) g_brushHardness = 1.0;
 				pressureFactor = std::pow(pressureFactor, g_brushHardness);
+				if (std::isnan(pressureFactor) || std::isinf(pressureFactor)) pressureFactor = 0.5;
 
 				double altitudeDegrees = (double)ortNew.orAltitude / 10.0;
 				double azimuthRad = ((double)ortNew.orAzimuth / 10.0) * (3.14159265358979323846 / 180.0);
@@ -1691,7 +1737,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				double moveAngle = (dist > 1e-5) ? std::atan2(dy, dx) : 0.0;
 
 				double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
-				double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+				double haraiPower = 1.3 + 0.4 * (std::min)(dist, 10.0);
 				double haraiFactor = std::pow(pressureFactor, haraiPower);
 				double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
 				double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
@@ -1899,7 +1945,7 @@ void CloseTabletContexts(void)
 {
 	for (auto& pair : g_contextMap)
 	{
-		if (pair.first != nullptr)
+		if (pair.first != nullptr && gpWTClose)
 		{
 			gpWTClose(pair.first);
 		}

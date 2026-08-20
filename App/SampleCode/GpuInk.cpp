@@ -636,6 +636,11 @@ void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWi
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	EnsureInitialized();
+
+	if (std::isnan(startWidth) || startWidth < 0.5) startWidth = 1.0;
+	if (std::isnan(endWidth) || endWidth < 0.5) endWidth = 1.0;
+	if (startWidth > 500.0) startWidth = 500.0;
+	if (endWidth > 500.0) endWidth = 500.0;
 	m_inStroke = true;
 
 	int dx = b.x - a.x;
