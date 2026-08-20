@@ -601,9 +601,14 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 
 			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
 
-			// 固定インク値: 255 (MAX_INK_PER_PIXEL)
+			// 段階的インク加算 (Bの方法: 移動時の過剰滲み・ガタガタ防止と長押し滲みの両立)
 			int prev = m_ink[idx];
-			int updated = MAX_INK_PER_PIXEL;
+			double distRatio = std::sqrt(normDistSq);
+			double falloff = 1.0 - distRatio;
+			int inkAdd = static_cast<int>(static_cast<double>(alpha) * 0.5 * (0.4 + 0.6 * falloff));
+			if (inkAdd < 1) inkAdd = 1;
+
+			int updated = std::min(MAX_INK_PER_PIXEL, prev + inkAdd);
 
 			if (updated != prev)
 			{
