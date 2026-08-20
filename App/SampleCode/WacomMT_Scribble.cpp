@@ -116,18 +116,17 @@ static ATOM g_monitorWndClassAtom = 0;
 namespace {
     constexpr double INK_MAX = 1.0;
 
-    Screen g_screen = Screen::Select;
+    Screen g_screen = Screen::Studio;
     Brush g_brush = Brush::Medium;
-    Mode g_mode = Mode::Medium;
+    Mode g_mode = Mode::All;
     Tool g_tool = Tool::BrushTool;
     int g_grid = 1;
     double g_ink = INK_MAX;
 
     RECT rTop{}, rTools{}, rSub{}, rCanvasArea{}, rRight{}, rStatus{};
     RECT rPaper{}, rToolBrush{}, rToolEraser{}, rToolHand{};
-    RECT rSubSmall{}, rSubMedium{}, rSubLarge{}, rNewPaper{}, rGrid{}, rBack{};
+    RECT rSubSmall{}, rSubMedium{}, rSubLarge{}, rNewPaper{}, rGrid{};
     RECT rNavigator{}, rProperty{}, rLayers{}, rInkStone{};
-    RECT rSelPanel{}, rSelSmall{}, rSelMedium{}, rSelLarge{}, rSelAll{};
 
     template<class T> T Clamp(T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
     int RW(const RECT& r) { return r.right - r.left; }
@@ -148,7 +147,7 @@ namespace {
         case Mode::Large: return L"大筆練習";
         case Mode::All: return L"全筆モード";
         }
-        return L"中筆練習";
+        return L"全筆モード";
     }
 
     HFONT Font(int size, int weight = FW_NORMAL, const wchar_t* face = L"Yu Gothic UI") {
@@ -189,9 +188,8 @@ namespace {
         rSubSmall = { rSub.left + 10, topH + 48, rSub.right - 10, topH + 90 };
         rSubMedium = { rSub.left + 10, topH + 96, rSub.right - 10, topH + 138 };
         rSubLarge = { rSub.left + 10, topH + 144, rSub.right - 10, topH + 186 };
-        rNewPaper = { rSub.left + 10, h - statusH - 154, rSub.right - 10, h - statusH - 112 };
-        rGrid = { rSub.left + 10, h - statusH - 104, rSub.right - 10, h - statusH - 62 };
-        rBack = { rSub.left + 10, h - statusH - 54, rSub.right - 10, h - statusH - 12 };
+        rNewPaper = { rSub.left + 10, h - statusH - 104, rSub.right - 10, h - statusH - 62 };
+        rGrid = { rSub.left + 10, h - statusH - 54, rSub.right - 10, h - statusH - 12 };
         rNavigator = { rRight.left + 8, topH + 8, rRight.right - 8, topH + 190 };
         rProperty = { rRight.left + 8, topH + 198, rRight.right - 8, topH + 430 };
         rLayers = { rRight.left + 8, topH + 438, rRight.right - 8, h - statusH - 8 };
@@ -201,18 +199,6 @@ namespace {
         int px = rCanvasArea.left + (RW(rCanvasArea) - paper) / 2;
         int py = rCanvasArea.top + (RH(rCanvasArea) - paper) / 2;
         rPaper = { px, py, px + paper, py + paper };
-
-        int pw = Clamp(w - 140, 620, 920), ph = Clamp(h - 100, 560, 720);
-        pw = std::min(pw, w - 30); ph = std::min(ph, h - 30);
-        int pl = (w - pw) / 2, pt = (h - ph) / 2;
-        rSelPanel = { pl, pt, pl + pw, pt + ph };
-        int left = pl + 55, right = pl + pw - 55, gap = 16;
-        int bw = (right - left - gap) / 2, bh = 104, y = pt + 238;
-        rSelSmall = { left, y, left + bw, y + bh };
-        rSelMedium = { left + bw + gap, y, right, y + bh };
-        y += bh + gap;
-        rSelLarge = { left, y, left + bw, y + bh };
-        rSelAll = { left + bw + gap, y, right, y + bh };
     }
 
     void DrawPanelTitle(HDC dc, RECT r, const wchar_t* s) {
@@ -247,33 +233,6 @@ namespace {
         RECT b = { r.left + 10, r.top + 21, r.right - 8, r.bottom - 2 };
         Text(dc, a, name, f1, RGB(238, 240, 243)); Text(dc, b, detail, f2, RGB(170, 174, 180));
         DeleteObject(f1); DeleteObject(f2);
-    }
-    void DrawCross(HDC dc, int x, int y, int n) {
-        MoveToEx(dc, x - n, y, nullptr); LineTo(dc, x + n, y);
-        MoveToEx(dc, x, y - n, nullptr); LineTo(dc, x, y + n);
-    }
-    void DrawPaperBackground(HDC dc) {
-        HBRUSH b = CreateSolidBrush(RGB(249, 248, 243)); HPEN p = CreatePen(PS_SOLID, 1, RGB(184, 184, 181));
-        HBRUSH ob = (HBRUSH)SelectObject(dc, b); HPEN op = (HPEN)SelectObject(dc, p);
-        Rectangle(dc, rPaper.left, rPaper.top, rPaper.right, rPaper.bottom);
-        SelectObject(dc, op); SelectObject(dc, ob); DeleteObject(p); DeleteObject(b);
-    }
-    void DrawPaperGrid(HDC dc) {
-        if (!g_grid) return;
-        HPEN gp = CreatePen(PS_DOT, 1, RGB(216, 123, 123)); HPEN og = (HPEN)SelectObject(dc, gp);
-        int w = RW(rPaper), h = RH(rPaper), mx = rPaper.left + w / 2;
-        MoveToEx(dc, mx, rPaper.top, nullptr); LineTo(dc, mx, rPaper.bottom);
-        if (g_grid == 1) {
-            int my = rPaper.top + h / 2; MoveToEx(dc, rPaper.left, my, nullptr); LineTo(dc, rPaper.right, my);
-            DrawCross(dc, rPaper.left + w / 4, rPaper.top + h / 4, 12); DrawCross(dc, rPaper.left + 3 * w / 4, rPaper.top + h / 4, 12);
-            DrawCross(dc, rPaper.left + w / 4, rPaper.top + 3 * h / 4, 12); DrawCross(dc, rPaper.left + 3 * w / 4, rPaper.top + 3 * h / 4, 12);
-        }
-        else {
-            int y1 = rPaper.top + h / 3, y2 = rPaper.top + 2 * h / 3;
-            MoveToEx(dc, rPaper.left, y1, nullptr); LineTo(dc, rPaper.right, y1);
-            MoveToEx(dc, rPaper.left, y2, nullptr); LineTo(dc, rPaper.right, y2);
-        }
-        SelectObject(dc, og); DeleteObject(gp);
     }
     void DrawNavigator(HDC dc) {
         Fill(dc, rNavigator, RGB(50, 52, 57)); DrawPanelTitle(dc, rNavigator, L"ナビゲーター");
@@ -318,7 +277,40 @@ namespace {
         Box(dc, rNewPaper, RGB(55, 58, 63), RGB(78, 81, 87), 1, 4); HFONT f = Font(14, FW_BOLD); Center(dc, rNewPaper, L"新しい半紙", f, RGB(225, 227, 230));
         const wchar_t* gtext = g_grid == 0 ? L"格子: なし" : (g_grid == 1 ? L"格子: 4等分" : L"格子: 6等分");
         Box(dc, rGrid, RGB(55, 58, 63), RGB(78, 81, 87), 1, 4); Center(dc, rGrid, gtext, f, RGB(225, 227, 230));
-        Box(dc, rBack, RGB(55, 58, 63), RGB(78, 81, 87), 1, 4); Center(dc, rBack, L"筆選択へ戻る", f, RGB(225, 227, 230)); DeleteObject(f);
+        DeleteObject(f);
+    }
+    void DrawPaperBackground(HDC dc) {
+        HBRUSH pb = CreateSolidBrush(RGB(246, 245, 240));
+        HPEN pp = CreatePen(PS_SOLID, 1, RGB(180, 178, 170));
+        HBRUSH ob = (HBRUSH)SelectObject(dc, pb);
+        HPEN op = (HPEN)SelectObject(dc, pp);
+        Rectangle(dc, rPaper.left, rPaper.top, rPaper.right, rPaper.bottom);
+        SelectObject(dc, op);
+        SelectObject(dc, ob);
+        DeleteObject(pp);
+        DeleteObject(pb);
+    }
+    void DrawCross(HDC dc, int x, int y, int s) {
+        MoveToEx(dc, x - s, y, nullptr); LineTo(dc, x + s, y);
+        MoveToEx(dc, x, y - s, nullptr); LineTo(dc, x, y + s);
+    }
+    void DrawPaperGrid(HDC dc) {
+        if (g_grid == 0) return;
+        HPEN gp = CreatePen(PS_SOLID, 1, RGB(220, 130, 130));
+        HPEN op = (HPEN)SelectObject(dc, gp);
+        int w = RW(rPaper), h = RH(rPaper), mx = rPaper.left + w / 2;
+        MoveToEx(dc, mx, rPaper.top, nullptr); LineTo(dc, mx, rPaper.bottom);
+        if (g_grid == 1) {
+            int my = rPaper.top + h / 2; MoveToEx(dc, rPaper.left, my, nullptr); LineTo(dc, rPaper.right, my);
+            DrawCross(dc, rPaper.left + w / 4, rPaper.top + h / 4, 12); DrawCross(dc, rPaper.left + 3 * w / 4, rPaper.top + h / 4, 12);
+            DrawCross(dc, rPaper.left + w / 4, rPaper.top + 3 * h / 4, 12); DrawCross(dc, rPaper.left + 3 * w / 4, rPaper.top + 3 * h / 4, 12);
+        }
+        else if (g_grid == 2) {
+            int y1 = rPaper.top + h / 3, y2 = rPaper.top + 2 * h / 3;
+            MoveToEx(dc, rPaper.left, y1, nullptr); LineTo(dc, rPaper.right, y1);
+            MoveToEx(dc, rPaper.left, y2, nullptr); LineTo(dc, rPaper.right, y2);
+        }
+        SelectObject(dc, op); DeleteObject(gp);
     }
     void DrawRight(HDC dc) {
         Fill(dc, rRight, RGB(42, 44, 48)); DrawNavigator(dc); DrawProperties(dc); DrawLayers(dc);
@@ -331,32 +323,6 @@ namespace {
     void DrawStudioChrome(HDC dc, int w, int h) {
         Fill(dc, rCanvasArea, RGB(26, 28, 31)); DrawTop(dc, w); DrawTools(dc); DrawSub(dc);
         DrawPaperBackground(dc); DrawRight(dc); DrawStatus(dc, w, h);
-    }
-    void DrawSelectButton(HDC dc, RECT r, const wchar_t* title, const wchar_t* desc, COLORREF color) {
-        Box(dc, r, color, RGB(93, 98, 106), 1, 6); HFONT f1 = Font(22, FW_BOLD), f2 = Font(13);
-        RECT a = { r.left + 10,r.top + 8,r.right - 10,r.top + 44 }, b = { r.left + 10,r.top + 44,r.right - 10,r.bottom - 8 }; Center(dc, a, title, f1, RGB(245, 247, 249)); Center(dc, b, desc, f2, RGB(203, 207, 212)); DeleteObject(f1); DeleteObject(f2);
-    }
-    void DrawSelection(HDC dc, int w, int h) {
-        RECT all = { 0,0,w,h }; Fill(dc, all, RGB(29, 31, 34));
-        Box(dc, rSelPanel, RGB(47, 49, 54), RGB(70, 73, 79), 1, 8);
-        HFONT title = Font(35, FW_BOLD), sub = Font(16); RECT a = { rSelPanel.left + 20,rSelPanel.top + 26,rSelPanel.right - 20,rSelPanel.top + 78 }; Center(dc, a, L"SHUJI STUDIO", title, RGB(237, 239, 242));
-        RECT b = { rSelPanel.left + 20,rSelPanel.top + 78,rSelPanel.right - 20,rSelPanel.top + 114 }; Center(dc, b, L"使用する習字筆を選択してください", sub, RGB(183, 187, 193));
-        RECT preview = { rSelPanel.left + 55,rSelPanel.top + 132,rSelPanel.right - 55,rSelPanel.top + 210 }; Fill(dc, preview, RGB(37, 39, 43));
-        HPEN hp = CreatePen(PS_SOLID, 10, RGB(126, 83, 48)); HPEN oh = (HPEN)SelectObject(dc, hp); int cy = (preview.top + preview.bottom) / 2; MoveToEx(dc, preview.left + 85, cy, nullptr); LineTo(dc, preview.right - 140, cy); SelectObject(dc, oh); DeleteObject(hp);
-        POINT tip[3] = { {preview.right - 165,cy - 22},{preview.right - 65,cy},{preview.right - 165,cy + 22} }; HBRUSH tb = CreateSolidBrush(RGB(12, 12, 13)); HBRUSH ot = (HBRUSH)SelectObject(dc, tb); HPEN on = (HPEN)SelectObject(dc, GetStockObject(NULL_BRUSH)); Polygon(dc, tip, 3); SelectObject(dc, on); SelectObject(dc, ot); DeleteObject(tb);
-        DrawSelectButton(dc, rSelSmall, L"小筆", L"かな・名前・細線", RGB(55, 66, 78)); DrawSelectButton(dc, rSelMedium, L"中筆", L"半紙・基本漢字", RGB(58, 70, 84));
-        DrawSelectButton(dc, rSelLarge, L"大筆", L"大字・力強い線", RGB(60, 72, 87)); DrawSelectButton(dc, rSelAll, L"全部使う", L"練習中に3種類を切替", RGB(66, 69, 84));
-        DeleteObject(title); DeleteObject(sub);
-    }
-
-    void Start(Mode m) {
-        g_mode = m; g_brush = m == Mode::Small ? Brush::Small : (m == Mode::Large ? Brush::Large : Brush::Medium);
-        g_tool = Tool::BrushTool; g_screen = Screen::Studio;
-        InvalidateRect(g_mainWnd, NULL, FALSE);
-    }
-    void Back() {
-        g_screen = Screen::Select;
-        InvalidateRect(g_mainWnd, NULL, FALSE);
     }
     bool PtIn(const RECT& r, POINT p) { return PtInRect(&r, p) != FALSE; }
 }
@@ -885,20 +851,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			HBITMAP memBmp = CreateCompatibleBitmap(hdc, w, h);
 			HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
 
-			if (g_screen == Screen::Select)
-			{
-				DrawSelection(memDC, w, h);
-			}
-			else
-			{
-				DrawStudioChrome(memDC, w, h);
+			DrawStudioChrome(memDC, w, h);
 
-				// GPU 墨汁を paper 領域に合成描画
-				g_gpuInk.Render(memDC, rPaper.left, rPaper.top);
+			// GPU 墨汁を paper 領域に合成描画
+			g_gpuInk.Render(memDC, rPaper.left, rPaper.top);
 
-				// 赤い補助線（格子）を墨汁の上に薄く描画して確実に表示させる
-				DrawPaperGrid(memDC);
-			}
+			// 赤い補助線（格子）を墨汁の上に薄く描画して確実に表示させる
+			DrawPaperGrid(memDC);
 
 			// メモリDCから画面へ一括転送 (フリッカーフリー)
 			BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
@@ -916,42 +875,58 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 
-		if (g_screen == Screen::Select)
+		if (PtIn(rNewPaper, pt))
 		{
-			if (PtIn(rSelSmall, pt)) Start(Mode::Small);
-			else if (PtIn(rSelMedium, pt)) Start(Mode::Medium);
-			else if (PtIn(rSelLarge, pt)) Start(Mode::Large);
-			else if (PtIn(rSelAll, pt)) Start(Mode::All);
+			ClearScreen();
 		}
-		else
+		else if (PtIn(rGrid, pt))
 		{
-			if (PtIn(rBack, pt)) Back();
-			else if (PtIn(rNewPaper, pt)) ClearScreen();
-			else if (PtIn(rGrid, pt))
-			{
-				g_grid = (g_grid + 1) % 3;
-				InvalidateRect(hWnd, NULL, FALSE);
-			}
-			else if (PtIn(rToolBrush, pt)) g_tool = Tool::BrushTool;
-			else if (PtIn(rToolEraser, pt)) g_tool = Tool::EraserTool;
-			else if (PtIn(rToolHand, pt)) g_tool = Tool::HandTool;
-			else if (PtIn(rSubSmall, pt)) g_brush = Brush::Small;
-			else if (PtIn(rSubMedium, pt)) g_brush = Brush::Medium;
-			else if (PtIn(rSubLarge, pt)) g_brush = Brush::Large;
-			else if (PtIn(rPaper, pt))
-			{
-				SetCapture(hWnd);
-				POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
-				s_ptMouseOld = paperPt;
-				InvalidateRect(hWnd, NULL, FALSE);
-			}
+			g_grid = (g_grid + 1) % 3;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rToolBrush, pt))
+		{
+			g_tool = Tool::BrushTool;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rToolEraser, pt))
+		{
+			g_tool = Tool::EraserTool;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rToolHand, pt))
+		{
+			g_tool = Tool::HandTool;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rSubSmall, pt))
+		{
+			g_brush = Brush::Small;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rSubMedium, pt))
+		{
+			g_brush = Brush::Medium;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rSubLarge, pt))
+		{
+			g_brush = Brush::Large;
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+		else if (PtIn(rPaper, pt))
+		{
+			SetCapture(hWnd);
+			POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
+			s_ptMouseOld = paperPt;
+			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		break;
 	}
 
 	case WM_MOUSEMOVE:
 	{
-		if ((wParam & MK_LBUTTON) && g_screen == Screen::Studio)
+		if (wParam & MK_LBUTTON)
 		{
 			POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 			if (PtIn(rPaper, pt))
@@ -985,12 +960,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_LBUTTONUP:
 	{
-		if (g_screen == Screen::Studio)
-		{
-			g_gpuInk.EndStroke();
-			ReleaseCapture();
-			InvalidateRect(hWnd, NULL, FALSE);
-		}
+		g_gpuInk.EndStroke();
+		ReleaseCapture();
+		InvalidateRect(hWnd, NULL, FALSE);
 		break;
 	}
 
