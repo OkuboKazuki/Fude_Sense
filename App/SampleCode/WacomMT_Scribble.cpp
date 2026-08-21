@@ -1558,24 +1558,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (PtIn(rPaper, pt))
 			{
 				POINT paperPt = { pt.x - rPaper.left, pt.y - rPaper.top };
-				double dx = (double)(paperPt.x - s_ptMouseOld.x);
-				double dy = (double)(paperPt.y - s_ptMouseOld.y);
-				double dist = std::hypot(dx, dy);
-
-				if (dist > 0.1)
+				// ペン (Wintab) での描画中は WM_MOUSEMOVE による直線描画（弦現象）を行わない
+				if (!g_gpuInk.IsInStroke())
 				{
-					double baseWidth = 36.0;
-					if (g_brush == Brush::Small) baseWidth = 16.0;
-					else if (g_brush == Brush::Large) baseWidth = 56.0;
+					double dx = (double)(paperPt.x - s_ptMouseOld.x);
+					double dy = (double)(paperPt.y - s_ptMouseOld.y);
+					double dist = std::hypot(dx, dy);
 
-					double pressureFactor = 0.5;
-					double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
-					double haraiFactor = std::pow(pressureFactor, haraiPower);
-					double rawWidth = baseWidth * haraiFactor;
-					int penWidth = (int)std::round(rawWidth);
-					if (penWidth < 1) penWidth = 1;
+					if (dist > 0.1 && dist < 150.0)
+					{
+						double baseWidth = 36.0;
+						if (g_brush == Brush::Small) baseWidth = 16.0;
+						else if (g_brush == Brush::Large) baseWidth = 56.0;
 
-					g_gpuInk.DrawSegment(s_ptMouseOld, paperPt, (double)penWidth, 255);
+						double pressureFactor = 0.5;
+						double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+						double haraiFactor = std::pow(pressureFactor, haraiPower);
+						double rawWidth = baseWidth * haraiFactor;
+						int penWidth = (int)std::round(rawWidth);
+						if (penWidth < 1) penWidth = 1;
+
+						g_gpuInk.DrawSegment(s_ptMouseOld, paperPt, (double)penWidth, 255);
+					}
 				}
 				s_ptMouseOld = paperPt;
 				InvalidateRect(hWnd, NULL, FALSE);
@@ -1714,11 +1718,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				double dy = (double)(paperPt.y - oldPaperPt.y);
 				double dist = std::hypot(dx, dy);
 
-				if (dist > 50.0)
+				if (dist > 500.0)
 				{
 					oldPaperPt = paperPt;
 					dist = 0.0;
 				}
+
+				s_ptMouseOld = paperPt;
 
 				double pressureFactor = (double)prsNew / (maxPrs > 0 ? maxPrs : 1.0);
 				if (pressureFactor > 1.0) pressureFactor = 1.0;
