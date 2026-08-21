@@ -245,10 +245,13 @@ void GpuInk::BeginStroke(POINT pt, UINT pressure)
 	m_lastPt = pt;
 	m_lastPressure = pressure;
 	m_smoothedWidth = 0.0;
+	m_lastSpeed = 0.0;
 	m_recentMaxSpeed = 0.0;
 	m_recentMaxDist = 0.0;
 	m_lastAcceleration = 0.0;
 	m_recentMaxAccel = 0.0;
+	m_lastDirX = 1.0;
+	m_lastDirY = 0.0;
 
 	m_lastTime = std::chrono::steady_clock::now();
 
@@ -424,7 +427,13 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 	// 止め
 	double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
 	// はらい、はね
-	double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
+	double doublePrs = static_cast<double>(pb);
+	double prsDrop = (m_lastPressure > 0) ? (static_cast<double>(m_lastPressure) - doublePrs) : 0.0;
+	double dropFactor = (prsDrop > 0.0) ? (std::min)(prsDrop / 500.0, 1.0) : 0.0;
+	double lowPrsFactor = 1.0 - pressureFactor;
+	if (lowPrsFactor < 0.0) lowPrsFactor = 0.0;
+
+	double haraiPower = 1.3 + 0.4 * (std::min)(dist, 10.0) * dropFactor * lowPrsFactor;
 	double haraiFactor = std::pow(pressureFactor, haraiPower);
 	// 角度
 	double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
@@ -556,6 +565,11 @@ void GpuInk::EndStroke()
 	m_lastEndAccel = m_lastAcceleration;
 	m_lastIsFlick = isFlick;
 
+	m_lastSpeed = 0.0;
+	m_smoothedWidth = 0.0;
+	m_lastAcceleration = 0.0;
+	m_pressureFactor = 0.0;
+
 	// 跳ね払い（flick tail）スタンプは行わず、シンプルにストローク終了
 	m_inStroke = false;
 }
@@ -623,7 +637,14 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 			double localX = dx * cosA + dy * sinA;
 			double localY = -dx * sinA + dy * cosA;
 
-			double normDistSq = (localX * localX) / (semiMajor * semiMajor) + (localY * localY) / (semiMinor * semiMinor);
+			// 雫型（Teardrop）への形状補正: ペン先側(localX > 0)を細く、傾き方向(localX < 0)を太く補正
+			double u = localX / semiMajor;
+			double widthScale = 1.0 - 0.55 * tiltFactor * u;
+			if (widthScale < 0.05) widthScale = 0.05;
+
+			double effectiveSemiMinor = semiMinor * widthScale;
+
+			double normDistSq = (localX * localX) / (semiMajor * semiMajor) + (localY * localY) / (effectiveSemiMinor * effectiveSemiMinor);
 			if (normDistSq > 1.0) continue;
 
 			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);

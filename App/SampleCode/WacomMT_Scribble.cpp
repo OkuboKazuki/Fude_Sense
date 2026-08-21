@@ -1744,8 +1744,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 				double moveAngle = (dist > 1e-5) ? std::atan2(dy, dx) : 0.0;
 
+				double doublePrs = static_cast<double>(prsRaw);
+				double prsDrop = (s_smoothedPressure > 0.0) ? (s_smoothedPressure - doublePrs) : 0.0;
+				double dropFactor = (prsDrop > 0.0) ? (std::min)(prsDrop / 200.0, 1.0) : 0.0;
+				double lowPrsFactor = 1.0 - pressureFactor;
+				if (lowPrsFactor < 0.0) lowPrsFactor = 0.0;
+
 				double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
-				double haraiPower = 1.3 + 0.4 * (std::min)(dist, 10.0);
+				double haraiPower = 1.3 + 0.4 * (std::min)(dist, 10.0) * dropFactor * lowPrsFactor;
 				double haraiFactor = std::pow(pressureFactor, haraiPower);
 				double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
 				double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
@@ -1778,6 +1784,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			else
 			{
 				s_strokeActive = false;
+				s_smoothedWidth = 0.0;
+				s_smoothedPressure = 0.0;
+				prsOld = 0;
+				prsNew = 0;
 				if (g_gpuInk.IsInStroke())
 				{
 					g_gpuInk.EndStroke();
