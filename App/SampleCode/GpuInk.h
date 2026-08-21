@@ -45,11 +45,9 @@ public:
 	void Resize(int width, int height);
 
 	// ストローク操作
-	void BeginStroke(POINT pt, UINT pressure);
-	void AddPoint(POINT pt, UINT pressure);
 	void DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha = 255);
 	void DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha = 255);
-	void EndStroke(); // 跳ね払い（flick tail）処理なし
+	void EndStroke();
 	bool IsInStroke() const { return m_inStroke; }
 
 	KinematicsInfo GetKinematicsInfo();
@@ -74,7 +72,6 @@ private:
 	void EnsureInitialized();
 
 	void StampBrush(double cx, double cy, double radius, unsigned char alpha);
-	void StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeconds = 0.0);
 
 	bool PropagateInk_NoLock();
 	void PropagationThreadLoop();
@@ -111,7 +108,6 @@ private:
 
 	bool m_inStroke = false;
 	POINT m_lastPt = { 0, 0 };
-	UINT m_lastPressure = 0;
 
 	double m_lastSpeed = 0.0;
 	double m_recentMaxSpeed = 0.0;
@@ -130,9 +126,6 @@ private:
 	bool m_isHovering = true;
 	double m_pressureFactor = 0.0;
 
-	std::chrono::steady_clock::time_point m_lastTime;
-
-	double m_smoothedWidth = 0.0;
 	double m_lastDirX = 1.0;
 	double m_lastDirY = 0.0;
 

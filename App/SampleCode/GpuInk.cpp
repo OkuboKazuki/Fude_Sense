@@ -19,12 +19,7 @@
 static constexpr int PROPAGATION_THRESHOLD = 350;
 static constexpr int PROPAGATION_AMOUNT = 40;
 static constexpr int MAX_INK_PER_PIXEL = 450;
-static constexpr double PRESSURE_TO_PIXELS = 24.0;
 static constexpr double MAX_SPEED_PX_PER_SEC = 2000.0;
-static constexpr double ELLIPSE_MIN_ELONGATION = 1.0;
-static constexpr double ELLIPSE_MAX_ELONGATION = 1.5;
-
-static inline int clampInk(int v) { return v < 0 ? 0 : (v > MAX_INK_PER_PIXEL ? MAX_INK_PER_PIXEL : v); }
 
 static inline uint32_t CalculateInkPixel(int inkAmount)
 {
@@ -306,24 +301,6 @@ void GpuInk::Clear()
 	}
 }
 
-void GpuInk::BeginStroke(POINT pt, UINT pressure)
-{
-	std::lock_guard<std::mutex> lock(m_mutex);
-	EnsureInitialized();
-	m_inStroke = true;
-	m_lastPt = pt;
-	m_lastPressure = pressure;
-	m_smoothedWidth = 0.0;
-	m_recentMaxSpeed = 0.0;
-	m_recentMaxDist = 0.0;
-	m_lastAcceleration = 0.0;
-	m_recentMaxAccel = 0.0;
-
-	m_lastTime = std::chrono::steady_clock::now();
-
-	StampInterpolated(pt, pressure, pt, pressure, 0.0);
-}
-
 // 物理インク拡散シミュレーション (GPU/バッファ)
 bool GpuInk::PropagateInk_NoLock()
 {
@@ -463,114 +440,7 @@ bool GpuInk::PropagateInk_NoLock()
 	return true;
 }
 
-void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeconds)
-{
-	int dx = b.x - a.x;
-	int dy = b.y - a.y;
-	double dist = std::hypot(static_cast<double>(dx), static_cast<double>(dy));
 
-	extern int g_maxPressure;
-	double maxPrs = (g_maxPressure > 0) ? static_cast<double>(g_maxPressure) : 1024.0;
-
-	// ① 実効上限を 1.3 倍に広げて 100% 張り付き（カンスト）を防止
-	double rawFactor = static_cast<double>(pb) / (maxPrs * 1.3);
-	if (rawFactor > 1.0) rawFactor = 1.0;
-	if (rawFactor < 0.0) rawFactor = 0.0;
-
-	// ② ガンマ補正（1.5乗）で弱い力〜強い力の微妙な加減を引き延ばす
-	double pressureFactor = std::pow(rawFactor, 1.5);
-
-	// 傾き・角度計算 (ScribbleDemo 方式)
-	double altitudeDegrees = (m_penAltitude > 0) ? (static_cast<double>(m_penAltitude) / 10.0) : 90.0;
-	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
-	double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
-	if (tiltFactor < 0.0) tiltFactor = 0.0;
-	if (tiltFactor > 1.0) tiltFactor = 1.0;
-
-	double moveAngle = (dist > 1e-5) ? std::atan2(static_cast<double>(dy), static_cast<double>(dx)) : 0.0;
-
-	// 「止め・はね・角度」による太さ補正 (ScribbleDemo 方式)
-	// 止め
-	double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
-	// はらい、はね
-	double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
-	double haraiFactor = std::pow(pressureFactor, haraiPower);
-	// 角度
-	double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
-	double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
-
-	// 最終的な太さ算出
-	double baseMaxWidth = 36.0;
-	double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + tiltFactor * 0.6);
-
-	// ローパスフィルタ (平滑化)
-	if (m_lastPressure == 0 || dist > 40.0 || m_smoothedWidth <= 0.0)
-	{
-		m_smoothedWidth = rawWidth;
-	}
-	else
-	{
-		const double alpha = 0.3;
-		m_smoothedWidth = m_smoothedWidth * (1.0 - alpha) + rawWidth * alpha;
-	}
-
-	double targetRadius = m_smoothedWidth / 2.0;
-	if (targetRadius < 0.5) targetRadius = 0.5;
-
-	int stampRadius = std::max(1, static_cast<int>(std::lround(targetRadius)));
-
-	// 方向ベクトル
-	double dirX = static_cast<double>(dx);
-	double dirY = static_cast<double>(dy);
-	double dirLen = std::sqrt(dirX * dirX + dirY * dirY);
-	double ux = m_lastDirX;
-	double uy = m_lastDirY;
-
-	if (dirLen >= 1.0)
-	{
-		ux = dirX / dirLen;
-		uy = dirY / dirLen;
-		m_lastDirX = ux;
-		m_lastDirY = uy;
-	}
-
-	m_recentMaxDist = std::max(m_recentMaxDist, dist);
-
-	double speed = 0.0;
-	if (dtSeconds > 0.002)
-	{
-		speed = dist / dtSeconds;
-		speed = std::min(MAX_SPEED_PX_PER_SEC, speed);
-		if (m_lastSpeed > 0.0)
-		{
-			double accel = (speed - m_lastSpeed) / dtSeconds;
-			m_lastAcceleration = accel;
-			m_recentMaxAccel = std::max(m_recentMaxAccel, accel);
-		}
-		m_lastSpeed = speed;
-		m_recentMaxSpeed = std::max(m_recentMaxSpeed, speed);
-	}
-
-	double speedNorm = std::min(1.0, speed / MAX_SPEED_PX_PER_SEC);
-	double elongation = ELLIPSE_MIN_ELONGATION + (ELLIPSE_MAX_ELONGATION - ELLIPSE_MIN_ELONGATION) * speedNorm;
-
-	// スタンプ打刻（補間）
-	double step = std::max(1.0, static_cast<double>(stampRadius) * 0.3);
-	int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
-
-	for (int i = 0; i <= steps; ++i)
-	{
-		double t = (steps == 0) ? 0.0 : static_cast<double>(i) / static_cast<double>(steps);
-		POINT p;
-		p.x = static_cast<LONG>(a.x + (b.x - a.x) * t + 0.5);
-		p.y = static_cast<LONG>(a.y + (b.y - a.y) * t + 0.5);
-
-		double stepPres = pressureFactor;
-		uint8_t alpha = static_cast<uint8_t>(std::min(255u, static_cast<unsigned int>(30 + stepPres * 225.0)));
-
-		StampBrush(p.x, p.y, stampRadius, alpha);
-	}
-}
 
 KinematicsInfo GpuInk::GetKinematicsInfo()
 {
@@ -783,25 +653,7 @@ void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
 	DrawSegmentLinear(a, b, strokeWidth, strokeWidth, inkAlpha);
 }
 
-void GpuInk::AddPoint(POINT pt, UINT pressure)
-{
-	std::lock_guard<std::mutex> lock(m_mutex);
-	EnsureInitialized();
 
-	auto now = std::chrono::steady_clock::now();
-	double dtSec = 0.0;
-	if (m_lastTime.time_since_epoch().count() != 0)
-	{
-		auto dur = now - m_lastTime;
-		dtSec = std::chrono::duration_cast<std::chrono::duration<double>>(dur).count();
-	}
-
-	StampInterpolated(m_lastPt, m_lastPressure, pt, pressure, dtSec);
-
-	m_lastPt = pt;
-	m_lastPressure = pressure;
-	m_lastTime = now;
-}
 
 void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 {

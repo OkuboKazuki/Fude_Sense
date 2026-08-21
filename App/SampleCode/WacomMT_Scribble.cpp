@@ -21,7 +21,6 @@
 #include <memory>
 #include <crtdbg.h>
 
-#include "WacomMultiTouch.h"
 #include "WintabUtils.h"
 #include "GpuInk.h"
 
@@ -33,28 +32,9 @@
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
 
-using WacomMTHitRectPtr = std::unique_ptr<WacomMTHitRect>;
-
-enum class EDataType
-{
-	ENoData,
-	EFingerData,
-	EBlobData,
-	ERawData
-};
-
-// Colors for touch points
-#define NO_CONFIDENCE_COLOR	RGB(255,128,0)		// orange
-#define CONFIDENCE_COLOR		RGB(0, 0, 255)		// blue
-#define POSITION_ONLY_COLOR	RGB(0, 255, 0)		// green
-#define NUM_HPENS		10
-
 void Cleanup(void);
 
-enum class Screen { Select, Studio };
 enum class Brush { Small, Medium, Large };
-enum class Mode { Small, Medium, Large, All };
-enum class Tool { BrushTool, EraserTool, HandTool };
 
 // Global Variables
 HINSTANCE hInst = NULL;
@@ -66,10 +46,6 @@ HWND g_hWndAbout = NULL;
 int g_maxPressure = 1024;
 
 RECT g_clientRect = { 0, 0, 0, 0 };
-bool g_ShowTouchSize = true;
-bool g_ShowTouchID = false;
-std::map<int, WacomMTCapability> g_caps;
-std::vector<int> g_devices;
 
 typedef struct 
 {
@@ -88,25 +64,6 @@ bool g_openSystemContext = true;
 bool OpenTabletContexts(HWND hWnd);
 void CloseTabletContexts(void);
 
-std::map<int, HPEN> g_hPenMap;
-std::map<int, HPEN> g_fingerHPenMap;
-
-HBRUSH g_noConfidenceBrush = NULL;
-HBRUSH g_confidenceBrush = NULL;
-HBRUSH g_positionOnlyBrush = NULL;
-HPEN g_noConfidencePen = NULL;
-HPEN g_confidencePen = NULL;
-std::map<int, WacomMTHitRectPtr> g_lastWTHitRect;
-
-bool g_useConfidenceBits = true;
-bool g_ObserverMode = false;
-
-EDataType g_DataType = EDataType::EFingerData;
-bool g_UseHWND = true;
-bool g_UseWinHitRect = true;
-
-CRITICAL_SECTION g_graphicsCriticalSection;
-
 static GpuInk g_gpuInk;
 
 HWND g_hInkWnd = NULL;
@@ -118,11 +75,7 @@ static ATOM g_monitorWndClassAtom = 0;
 namespace {
     constexpr double INK_MAX = 1.0;
 
-    // 筆の墨量（0.0〜1.0）：硯に浸けると満タン、書くほど消耗する
-    bool g_strokeStarted = false; // 現在のストロークの開始フラグ
-
     enum class TbButton { None, NavToggle, Brush, Paper, Save, Otehon, InkRefill, ClearAll };
-
     enum class LeftTab { Brush, Paper, Save, Otehon };
 
     // 半紙の種類（実寸の縦横比に対応）
@@ -149,11 +102,7 @@ namespace {
         InkGray         // 薄墨点線
     };
 
-    Screen g_screen = Screen::Studio;
     Brush g_brush = Brush::Medium;
-    Mode g_mode = Mode::All;
-    Tool g_tool = Tool::BrushTool;
-    int g_grid = 1;
     double g_ink = INK_MAX;
     double g_brushHardness = 0.5; // 筆の硬さ (0.1: 超極軟 ~ 2.0: 非常に硬い)
     bool g_isDraggingHardness = false; // スライドバードラッグ中
@@ -167,7 +116,6 @@ namespace {
     bool g_showOtehon = false;
     int g_selectedOtehon = 0; // 0: 永, 1: 夢, 2: 和, 3: 心, 4: 道, 5: 光, 6: 美, 7: 桜
     const wchar_t* g_otehonChars[] = { L"永", L"夢", L"和", L"心", L"道", L"光", L"美", L"桜" };
-    const wchar_t* g_otehonNames[] = { L"永 (基本八法)", L"夢 (草書・行書)", L"和 (楷書・調和)", L"心 (筆勢・抑揚)", L"道 (しんにょう)", L"光 (払い・跳ね)", L"美 (左右対称)", L"桜 (春・かな交じり)" };
     double g_otehonOpacity = 0.35; // 0.1 ～ 1.0
     bool g_isDraggingOtehon = false;
 
@@ -177,18 +125,12 @@ namespace {
 
     GridPattern g_gridPattern = GridPattern::Grid4;
     GridColorTheme g_gridColor = GridColorTheme::RedLine;
-
     PaperType g_paperType = PaperType::Hanshi;
-    double g_paperZoom = 1.0;      // 1.0〜4.0
-    int g_paperPanX   = 0;         // 表示オフセットX(px)
-    int g_paperPanY   = 0;         // 表示オフセットY(px)
-    bool g_isPanning  = false;     // 手のひらツールでパン中
-    POINT g_panStart  = {0, 0};    // パン開始点
 
     TbButton g_hoverTb = TbButton::None;
     int g_hoverSub = 0;
 
-    RECT rTop{}, rTaskbar{}, rSub{}, rCanvasArea{}, rRight{}, rStatus{};
+    RECT rSub{}, rCanvasArea{}, rRight{}, rStatus{};
     RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbSave{}, rTbOtehon{};
     RECT rPaper{};        // 実際の表示座標（アスペクト比を維持して中央配置）
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
@@ -214,15 +156,6 @@ namespace {
         case Brush::Large: return L"大筆";
         }
         return L"中筆";
-    }
-    const wchar_t* ModeName() {
-        switch (g_mode) {
-        case Mode::Small: return L"小筆練習";
-        case Mode::Medium: return L"中筆練習";
-        case Mode::Large: return L"大筆練習";
-        case Mode::All: return L"全筆モード";
-        }
-        return L"全筆モード";
     }
 
     HFONT Font(int size, int weight = FW_NORMAL, const wchar_t* face = L"Yu Gothic UI") {
@@ -257,7 +190,6 @@ namespace {
         rRight = { w - rightW, 0, w, h - statusH };
         rCanvasArea = { 0, 0, rRight.left, h - statusH };
         rStatus = { 0, h - statusH, w, h };
-        rTaskbar = { 0, 0, 0, 0 }; // 固定サイドバーは撤廃
 
         // 1. フローティングメニュー & メニュー開閉ボタン
         if (!g_subPanelOpen) {
@@ -1467,14 +1399,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	if (!g_mainWnd) return FALSE;
 
 	SetMenu(g_mainWnd, NULL);
-
 	g_hdc = GetDC(g_mainWnd);
-
-	g_noConfidenceBrush = CreateSolidBrush(NO_CONFIDENCE_COLOR);
-	g_confidenceBrush = CreateSolidBrush(CONFIDENCE_COLOR);
-	g_positionOnlyBrush = CreateSolidBrush(POSITION_ONLY_COLOR);
-	g_noConfidencePen = CreatePen(PS_SOLID, 3, NO_CONFIDENCE_COLOR);
-	g_confidencePen = CreatePen(PS_SOLID, 3, CONFIDENCE_COLOR);
 
 	ShowWindow(g_mainWnd, SW_SHOWMAXIMIZED);
 	UpdateWindow(g_mainWnd);
@@ -1493,7 +1418,6 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	MSG msg;
 	HACCEL hAccelTable;
 
-	InitializeCriticalSection(&g_graphicsCriticalSection);
 	MyRegisterClass(hInstance);
 
 	if (!InitInstance(hInstance, nCmdShow))
@@ -1511,14 +1435,6 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 			DispatchMessage(&msg);
 		}
 	}
-
-	if (g_noConfidenceBrush) DeleteObject(g_noConfidenceBrush);
-	if (g_confidenceBrush) DeleteObject(g_confidenceBrush);
-	if (g_positionOnlyBrush) DeleteObject(g_positionOnlyBrush);
-	if (g_noConfidencePen) DeleteObject(g_noConfidencePen);
-	if (g_confidencePen) DeleteObject(g_confidencePen);
-
-	DeleteCriticalSection(&g_graphicsCriticalSection);
 
 	return static_cast<int>(msg.wParam);
 }
@@ -1547,11 +1463,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_gpuInk.Initialize(hWnd, pw, ph);
 		}
 
-		for (int idx = 0; idx < NUM_HPENS; idx++)
-		{
-			g_hPenMap[idx] = CreatePen(PS_SOLID, 2, RGB(rand() % 255, rand() % 255, rand() % 255));
-		}
-
 		if (!OpenTabletContexts(hWnd))
 		{
 			ShowError("Could Not Open Wintab Tablet Contexts.");
@@ -1561,10 +1472,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_CLOSE:
 	{
-		for (int idx = 0; idx < NUM_HPENS; idx++)
-		{
-			DeleteObject(g_hPenMap[idx]);
-		}
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 
@@ -1715,7 +1622,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (PtIn(rTbBrush, pt))
 			{
 				g_leftTab = LeftTab::Brush;
-				g_tool = Tool::BrushTool;
 				InvalidateRect(hWnd, &rSub, FALSE);
 				return 0;
 			}
@@ -1763,7 +1669,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					if (PtIn(rSubSmall, pt))
 					{
 						g_brush = Brush::Small;
-						g_tool = Tool::BrushTool;
 						InvalidateRect(hWnd, &rSub, FALSE);
 						InvalidateRect(hWnd, &rStatus, FALSE);
 						return 0;
@@ -1771,7 +1676,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					else if (PtIn(rSubMedium, pt))
 					{
 						g_brush = Brush::Medium;
-						g_tool = Tool::BrushTool;
 						InvalidateRect(hWnd, &rSub, FALSE);
 						InvalidateRect(hWnd, &rStatus, FALSE);
 						return 0;
@@ -1779,7 +1683,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					else if (PtIn(rSubLarge, pt))
 					{
 						g_brush = Brush::Large;
-						g_tool = Tool::BrushTool;
 						InvalidateRect(hWnd, &rSub, FALSE);
 						InvalidateRect(hWnd, &rStatus, FALSE);
 						return 0;
@@ -1875,7 +1778,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (PtIn(rInkStoneLarge, pt) || PtIn(rInkRefillBtn, pt))
 		{
 			g_ink = INK_MAX;
-			g_strokeStarted = false;
 			InvalidateRect(hWnd, &rRight, FALSE);
 			InvalidateRect(hWnd, &rStatus, FALSE);
 			return 0;
