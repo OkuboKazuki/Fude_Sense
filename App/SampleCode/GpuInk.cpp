@@ -8,6 +8,10 @@
 #include <chrono>
 #include <climits>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -416,7 +420,7 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 
 	// 傾き・角度計算 (ScribbleDemo 方式)
 	double altitudeDegrees = (m_penAltitude > 0) ? (static_cast<double>(m_penAltitude) / 10.0) : 90.0;
-	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
+	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (M_PI / 180.0);
 	double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
 	if (tiltFactor < 0.0) tiltFactor = 0.0;
 	if (tiltFactor > 1.0) tiltFactor = 1.0;
@@ -436,7 +440,7 @@ void GpuInk::StampInterpolated(POINT a, UINT pa, POINT b, UINT pb, double dtSeco
 	double haraiPower = 1.3 + 0.4 * (std::min)(dist, 10.0) * dropFactor * lowPrsFactor;
 	double haraiFactor = std::pow(pressureFactor, haraiPower);
 	// 角度
-	double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
+	double angleDiff = std::sin(azimuthRad - (moveAngle + M_PI / 2.0));
 	double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
 
 	// 最終的な太さ算出
@@ -587,8 +591,8 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	if (tiltFactor < 0.0) tiltFactor = 0.0;
 	if (tiltFactor > 1.0) tiltFactor = 1.0;
 
-	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
-	double angRad = azimuthRad + 1.57079632679; // 毛束の接地広がり方向
+	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (M_PI / 180.0);
+	double angRad = azimuthRad + M_PI / 2.0; // 毛束の接地広がり方向
 
 	double rad = radius;
 	double semiMajor = rad * (1.0 + tiltFactor * 1.5);

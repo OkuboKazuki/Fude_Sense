@@ -19,6 +19,9 @@
 #include <sstream>
 #include <memory>
 #include <crtdbg.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 #include "WacomMultiTouch.h"
 #include "WintabUtils.h"
@@ -1738,7 +1741,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_gpuInk.SetPressureFactor(pressureFactor);
 
 				double altitudeDegrees = (double)ortNew.orAltitude / 10.0;
-				double azimuthRad = ((double)ortNew.orAzimuth / 10.0) * (3.14159265358979323846 / 180.0);
+				double azimuthRad = ((double)ortNew.orAzimuth / 10.0) * M_PI / 180.0;
 				double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
 				if (tiltFactor < 0.0) tiltFactor = 0.0;
 
@@ -1753,7 +1756,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
 				double haraiPower = 1.3 + 0.4 * (std::min)(dist, 10.0) * dropFactor * lowPrsFactor;
 				double haraiFactor = std::pow(pressureFactor, haraiPower);
-				double angleDiff = std::sin(azimuthRad - (moveAngle + 1.57079632679));
+				double angleDiff = std::sin(azimuthRad - (moveAngle + M_PI / 2.0));
 				double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
 
 				double baseMaxWidth = 36.0;
