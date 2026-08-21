@@ -195,7 +195,76 @@ bool GpuInk::Initialize(int width, int height)
 
 void GpuInk::Resize(int width, int height)
 {
-	Initialize(width, height);
+	if (width <= 0 || height <= 0) return;
+	if (width == m_width && height == m_height) return;
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+	if (width == m_width && height == m_height) return;
+
+	if (!m_pDCRenderTarget || !m_pInkBitmap || m_width <= 0 || m_height <= 0)
+	{
+		Initialize_NoLock(width, height);
+		return;
+	}
+
+	int oldW = m_width;
+	int oldH = m_height;
+	std::vector<int> oldInk = std::move(m_ink);
+	std::vector<uint32_t> oldPixels = std::move(m_pixelBuffer);
+
+	if (m_pInkBitmap) { m_pInkBitmap->Release(); m_pInkBitmap = nullptr; }
+	if (m_pDCRenderTarget) { m_pDCRenderTarget->Release(); m_pDCRenderTarget = nullptr; }
+
+	m_width = width;
+	m_height = height;
+	size_t newPixels = static_cast<size_t>(width) * static_cast<size_t>(height);
+	m_ink.assign(newPixels, 0);
+	m_deltaInk.assign(newPixels, 0);
+	m_pixelBuffer.assign(newPixels, 0xFFFFFFFF);
+
+	if (!oldInk.empty() && oldW > 0 && oldH > 0)
+	{
+		for (int ny = 0; ny < height; ++ny)
+		{
+			int oy = (ny * oldH) / height;
+			if (oy >= oldH) oy = oldH - 1;
+			for (int nx = 0; nx < width; ++nx)
+			{
+				int ox = (nx * oldW) / width;
+				if (ox >= oldW) ox = oldW - 1;
+
+				size_t oldIdx = static_cast<size_t>(oy) * oldW + ox;
+				size_t newIdx = static_cast<size_t>(ny) * width + nx;
+				m_ink[newIdx] = oldInk[oldIdx];
+				m_pixelBuffer[newIdx] = oldPixels[oldIdx];
+			}
+		}
+	}
+
+	D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
+		D2D1_RENDER_TARGET_TYPE_DEFAULT,
+		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+		0, 0, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_FEATURE_LEVEL_DEFAULT
+	);
+	m_pD2DFactory->CreateDCRenderTarget(&props, &m_pDCRenderTarget);
+
+	D2D1_BITMAP_PROPERTIES bitmapProps = D2D1::BitmapProperties(
+		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
+	);
+	if (m_pDCRenderTarget)
+	{
+		m_pDCRenderTarget->CreateBitmap(
+			D2D1::SizeU(m_width, m_height),
+			m_pixelBuffer.data(),
+			m_width * sizeof(uint32_t),
+			&bitmapProps,
+			&m_pInkBitmap
+		);
+	}
+
+	ResetDirtyRect_NoLock();
+	m_uploadMinX = 0; m_uploadMinY = 0;
+	m_uploadMaxX = m_width - 1; m_uploadMaxY = m_height - 1;
 }
 
 void GpuInk::EnsureInitialized()
