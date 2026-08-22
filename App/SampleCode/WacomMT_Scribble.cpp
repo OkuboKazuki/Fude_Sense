@@ -23,18 +23,19 @@
 
 #include "WintabUtils.h"
 #include "GpuInk.h"
-
-#define PACKETDATA	(PK_X | PK_Y | PK_Z | PK_BUTTONS | PK_NORMAL_PRESSURE | PK_TANGENT_PRESSURE | PK_TIME | PK_ORIENTATION)
-#define PACKETMODE	PK_BUTTONS
-#include "pktdef.h"
+#include "AppEnums.h"
+#include "RenderUtils.h"
+#include "AppState.h"
+#include "WintabManager.h"
+#include "ImageExporter.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
 
+bool OpenTabletContexts(HWND hWnd);
+void CloseTabletContexts(void);
 void Cleanup(void);
-
-enum class Brush { Small, Medium, Large };
 
 // Global Variables
 HINSTANCE hInst = NULL;
@@ -43,27 +44,11 @@ std::wstring szWindowClass = L"WACOMMT_SCRIBBLE";
 HWND g_mainWnd = NULL;
 HDC g_hdc = NULL;
 HWND g_hWndAbout = NULL;
-int g_maxPressure = 1024;
 
 RECT g_clientRect = { 0, 0, 0, 0 };
 
-typedef struct 
-{
-	int maxPressure;
-	COLORREF penColor;
-	char name[32];
-	LONG tabletXExt;
-	LONG tabletYExt;
-	bool displayTablet;
-	int maxZ;
-} TabletInfo;
-
-std::map<HCTX, TabletInfo> g_contextMap;
-bool g_openSystemContext = true;
-
-bool OpenTabletContexts(HWND hWnd);
-void CloseTabletContexts(void);
-
+static AppState g_appState;
+static WintabManager g_wintab;
 static GpuInk g_gpuInk;
 
 HWND g_hInkWnd = NULL;
@@ -71,355 +56,87 @@ HWND g_hMonitorWnd = NULL;
 static ATOM g_inkWndClassAtom = 0;
 static ATOM g_monitorWndClassAtom = 0;
 
-// UI System State
+// UI System State - AppStateへの参照バインディング
 namespace {
-    constexpr double INK_MAX = 1.0;
+    using namespace RenderUtils;
+    constexpr double INK_MAX = INK_MAX_VALUE;
 
-    enum class TbButton { None, NavToggle, Brush, Paper, Save, Otehon, InkRefill, ClearAll };
-    enum class LeftTab { Brush, Paper, Save, Otehon };
+    // Model層の参照
+    Brush& g_brush = g_appState.brush.type;
+    double& g_ink = g_appState.ink.stoneAmount;
+    double& g_brushHardness = g_appState.brush.hardness;
+    bool& g_isDraggingHardness = g_appState.brush.isDraggingHardness;
 
-    // 半紙の種類（実寸の縦横比に対応）
-    enum class PaperType {
-        Hanshi,    // 半紙   242x333  W:H=1:1.376
-        Jofuku,    // 条幅   350x680  W:H=1:1.943
-        Shikishi,  // 色紙   242x272  W:H=1:1.124
-        Tanzaku    // 短冊   60x180   W:H=1:3.0
-    };
-    enum class GridPattern {
-        None,           // なし
-        Cross1,         // 1字 (十字補助)
-        Div2,           // 2文字 (上下2段)
-        Grid4,          // 4文字 (2x2 田の字)
-        Grid6,          // 6文字 (2x3)
-        Grid8,          // 8文字 (2x4)
-        Lines3,         // 3行 縦罫線
-        Lines4,         // 4行 縦罫線
-        StarGrid        // 米字格 (対角線入り)
-    };
-    enum class GridColorTheme {
-        RedLine,        // 定番朱赤線
-        WhiteLine,      // 高級毛氈白線
-        InkGray         // 薄墨点線
-    };
-
-    Brush g_brush = Brush::Medium;
-    double g_ink = INK_MAX;
-    double g_brushHardness = 0.5; // 筆の硬さ (0.1: 超極軟 ~ 2.0: 非常に硬い)
-    bool g_isDraggingHardness = false; // スライドバードラッグ中
-
-    LeftTab g_leftTab = LeftTab::Brush;
-    bool g_subPanelOpen = true; // 詳細パネルの開閉状態
-    bool g_showClearConfirm = false; // 全消し確認画面の表示フラグ
-    int  g_hoverClearModal = 0;      // 1: すべて消す, 2: キャンセル
+    LeftTab& g_leftTab = g_appState.ui.leftTab;
+    bool& g_subPanelOpen = g_appState.ui.isSubPanelOpen;
+    bool& g_showClearConfirm = g_appState.ui.showClearConfirm;
+    int&  g_hoverClearModal = g_appState.ui.hoverClearModal;
 
     // お手本設定
-    bool g_showOtehon = false;
-    int g_selectedOtehon = 0; // 0: 永, 1: 夢, 2: 和, 3: 心, 4: 道, 5: 光, 6: 美, 7: 桜
+    bool& g_showOtehon = g_appState.otehon.isVisible;
+    int& g_selectedOtehon = g_appState.otehon.selectedIndex;
     const wchar_t* g_otehonChars[] = { L"永", L"夢", L"和", L"心", L"道", L"光", L"美", L"桜" };
-    double g_otehonOpacity = 0.35; // 0.1 ～ 1.0
-    bool g_isDraggingOtehon = false;
+    double& g_otehonOpacity = g_appState.otehon.opacity;
+    bool& g_isDraggingOtehon = g_appState.otehon.isDraggingOpacity;
 
     // 保存状態フィードバック
-    std::wstring g_saveFeedback = L"";
-    DWORD g_saveFeedbackTime = 0;
+    std::wstring& g_saveFeedback = g_appState.ui.saveFeedback;
+    DWORD& g_saveFeedbackTime = g_appState.ui.saveFeedbackTime;
 
-    GridPattern g_gridPattern = GridPattern::Grid4;
-    GridColorTheme g_gridColor = GridColorTheme::RedLine;
-    PaperType g_paperType = PaperType::Hanshi;
+    GridPattern& g_gridPattern = g_appState.paper.gridPattern;
+    GridColorTheme& g_gridColor = g_appState.paper.gridColor;
+    PaperType& g_paperType = g_appState.paper.type;
 
-    TbButton g_hoverTb = TbButton::None;
-    int g_hoverSub = 0;
+    TbButton& g_hoverTb = g_appState.ui.hoverTb;
+    int& g_hoverSub = g_appState.ui.hoverSub;
 
-    RECT rSub{}, rCanvasArea{}, rRight{}, rStatus{};
-    RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbSave{}, rTbOtehon{};
-    RECT rPaper{};        // 実際の表示座標（アスペクト比を維持して中央配置）
-    RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
-    RECT rGridTile[9]{};
-    RECT rColorBtn[3]{};
-    RECT rPaperTile[4]{}; // 半紙種類タイル (半紙, 条幅, 色紙, 短冊)
-    RECT rOtehonTile[8]{};
-    RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
-    RECT rSaveBtnPng{}, rSaveBtnClip{};
-    RECT rInkStoneLarge{}, rInkRefillBtn{}, rClearAllBtn{};
-    RECT rHardnessTrack{};
-    RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
-    int g_hoverInkStone = 0;
+    RECT& rSub = g_appState.ui.rSub;
+    RECT& rCanvasArea = g_appState.ui.rCanvasArea;
+    RECT& rRight = g_appState.ui.rRight;
+    RECT& rStatus = g_appState.ui.rStatus;
+    RECT& rTbNavToggle = g_appState.ui.rTbNavToggle;
+    RECT& rTbBrush = g_appState.ui.rTbBrush;
+    RECT& rTbPaper = g_appState.ui.rTbPaper;
+    RECT& rTbSave = g_appState.ui.rTbSave;
+    RECT& rTbOtehon = g_appState.ui.rTbOtehon;
+    RECT& rPaper = g_appState.ui.rPaper;
+    RECT& rSubSmall = g_appState.ui.rSubSmall;
+    RECT& rSubMedium = g_appState.ui.rSubMedium;
+    RECT& rSubLarge = g_appState.ui.rSubLarge;
+    auto& rGridTile = g_appState.ui.rGridTile;
+    auto& rColorBtn = g_appState.ui.rColorBtn;
+    auto& rPaperTile = g_appState.ui.rPaperTile;
+    auto& rOtehonTile = g_appState.ui.rOtehonTile;
+    RECT& rOtehonToggleBtn = g_appState.ui.rOtehonToggleBtn;
+    RECT& rOtehonOpacityTrack = g_appState.ui.rOtehonOpacityTrack;
+    RECT& rSaveBtnPng = g_appState.ui.rSaveBtnPng;
+    RECT& rSaveBtnClip = g_appState.ui.rSaveBtnClip;
+    RECT& rInkStoneLarge = g_appState.ui.rInkStoneLarge;
+    RECT& rInkRefillBtn = g_appState.ui.rInkRefillBtn;
+    RECT& rClearAllBtn = g_appState.ui.rClearAllBtn;
+    RECT& rHardnessTrack = g_appState.ui.rHardnessTrack;
+    RECT& rClearModalBox = g_appState.ui.rClearModalBox;
+    RECT& rModalClearBtn = g_appState.ui.rModalClearBtn;
+    RECT& rModalCancelBtn = g_appState.ui.rModalCancelBtn;
+    int& g_hoverInkStone = g_appState.ui.hoverInkStone;
 
-    template<class T> T Clamp(T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
-    int RW(const RECT& r) { return r.right - r.left; }
-    int RH(const RECT& r) { return r.bottom - r.top; }
-
-    const wchar_t* BrushName(Brush b) {
-        switch (b) {
-        case Brush::Small: return L"小筆";
-        case Brush::Medium: return L"中筆";
-        case Brush::Large: return L"大筆";
-        }
-        return L"中筆";
+    inline HFONT Font(int size, int weight = FW_NORMAL, const wchar_t* face = L"Yu Gothic UI") {
+        return CreateCustomFont(size, weight, face);
+    }
+    inline void Text(HDC dc, RECT r, const wchar_t* s, HFONT f, COLORREF c, UINT align = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
+        DrawTextCustom(dc, r, s, f, c, align);
     }
 
-    HFONT Font(int size, int weight = FW_NORMAL, const wchar_t* face = L"Yu Gothic UI") {
-        return CreateFontW(size, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, face);
-    }
-    void Fill(HDC dc, const RECT& r, COLORREF color) {
-        HBRUSH b = CreateSolidBrush(color); if (!b) return; FillRect(dc, &r, b); DeleteObject(b);
-    }
-    void Box(HDC dc, const RECT& r, COLORREF fill, COLORREF border, int bw = 1, int round = 6) {
-        HBRUSH b = CreateSolidBrush(fill); HPEN p = CreatePen(PS_SOLID, bw, border);
-        if (!b || !p) { if (b) DeleteObject(b); if (p) DeleteObject(p); return; }
-        HBRUSH ob = (HBRUSH)SelectObject(dc, b); HPEN op = (HPEN)SelectObject(dc, p);
-        RoundRect(dc, r.left, r.top, r.right, r.bottom, round, round);
-        SelectObject(dc, op); SelectObject(dc, ob); DeleteObject(p); DeleteObject(b);
-    }
-    void Text(HDC dc, RECT r, const wchar_t* s, HFONT f, COLORREF c, UINT align = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
-        HFONT old = f ? (HFONT)SelectObject(dc, f) : nullptr;
-        SetBkMode(dc, TRANSPARENT); SetTextColor(dc, c);
-        DrawTextW(dc, s, -1, &r, align | DT_NOPREFIX);
-        if (f && old) SelectObject(dc, old);
-    }
-    void Center(HDC dc, RECT r, const wchar_t* s, HFONT f, COLORREF c) {
-        Text(dc, r, s, f, c, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    inline void Layout(int w, int h) {
+        g_appState.Layout(w, h);
     }
 
-    void Layout(int w, int h) {
-        const int statusH = 26;
-        const int rightW = 280;
-
-        rRight = { w - rightW, 0, w, h - statusH };
-        rCanvasArea = { 0, 0, rRight.left, h - statusH };
-        rStatus = { 0, h - statusH, w, h };
-
-        // 1. フローティングメニュー & メニュー開閉ボタン
-        if (!g_subPanelOpen) {
-            // 閉じている状態: 画面左上にコンパクトな「<<<」ボタンのみ表示
-            rTbNavToggle = { 16, 16, 76, 56 };
-            rSub = { 0, 0, 0, 0 };
-            rTbBrush = rTbPaper = rTbSave = rTbOtehon = { 0, 0, 0, 0 };
-        } else {
-            // 開いている状態: フローティングパネル
-            int menuW = 390;
-            int menuH = std::min(h - statusH - 32, 590);
-            if (menuH < 420) menuH = 420;
-            rSub = { 16, 16, 16 + menuW, 16 + menuH };
-
-            // ヘッダーバー (閉じるボタン「>>>」 + 横並びタブ「筆」「紙」「保存」「お手本」)
-            rTbNavToggle = { rSub.left + 10, rSub.top + 10, rSub.left + 62, rSub.top + 48 };
-
-            int tabStartX = rTbNavToggle.right + 8;
-            int tabAvailW = rSub.right - 10 - tabStartX;
-            int tabW = (tabAvailW - 3 * 6) / 4;
-            int tabH = 38;
-            int tabY = rSub.top + 10;
-
-            rTbBrush  = { tabStartX + 0 * (tabW + 6), tabY, tabStartX + 0 * (tabW + 6) + tabW, tabY + tabH };
-            rTbPaper  = { tabStartX + 1 * (tabW + 6), tabY, tabStartX + 1 * (tabW + 6) + tabW, tabY + tabH };
-            rTbSave   = { tabStartX + 2 * (tabW + 6), tabY, tabStartX + 2 * (tabW + 6) + tabW, tabY + tabH };
-            rTbOtehon = { tabStartX + 3 * (tabW + 6), tabY, tabStartX + 3 * (tabW + 6) + tabW, tabY + tabH };
-
-            int topOff = rSub.top + 64;
-
-            // 筆タブ
-            int cardH = 68;
-            rSubSmall  = { rSub.left + 14, topOff, rSub.right - 14, topOff + cardH };
-            rSubMedium = { rSub.left + 14, topOff + (cardH + 8), rSub.right - 14, topOff + (cardH + 8) + cardH };
-            rSubLarge  = { rSub.left + 14, topOff + (cardH + 8) * 2, rSub.right - 14, topOff + (cardH + 8) * 2 + cardH };
-            int cardBottom = topOff + (cardH + 8) * 2 + cardH;
-            rHardnessTrack = { rSub.left + 30, cardBottom + 58, rSub.right - 30, cardBottom + 66 };
-
-            // 紙タブ
-            int ptW = (menuW - 36) / 2;
-            int ptH = 46;
-            for (int i = 0; i < 4; ++i) {
-                int col = i % 2;
-                int row = i / 2;
-                rPaperTile[i] = { rSub.left + 14 + col * (ptW + 8), topOff + row * (ptH + 6), rSub.left + 14 + col * (ptW + 8) + ptW, topOff + row * (ptH + 6) + ptH };
-            }
-
-            int gridTop = topOff + 2 * (ptH + 6) + 30;
-            int tileW = (menuW - 36) / 2;
-            int tileH = 46;
-            for (int i = 0; i < 9; ++i) {
-                int col = i % 2;
-                int row = i / 2;
-                if (i == 8) {
-                    rGridTile[i] = { rSub.left + 14, gridTop + row * (tileH + 6), rSub.left + 14 + tileW * 2 + 8, gridTop + row * (tileH + 6) + tileH };
-                } else {
-                    rGridTile[i] = { rSub.left + 14 + col * (tileW + 8), gridTop + row * (tileH + 6), rSub.left + 14 + col * (tileW + 8) + tileW, gridTop + row * (tileH + 6) + tileH };
-                }
-            }
-
-            int colorY = gridTop + 5 * (tileH + 6) + 24;
-            int colBtnW = (menuW - 40) / 3;
-            for (int i = 0; i < 3; ++i) {
-                rColorBtn[i] = { rSub.left + 14 + i * (colBtnW + 6), colorY, rSub.left + 14 + i * (colBtnW + 6) + colBtnW, colorY + 36 };
-            }
-
-            // 保存タブ
-            rSaveBtnPng  = { rSub.left + 16, topOff + 16, rSub.right - 16, topOff + 76 };
-            rSaveBtnClip = { rSub.left + 16, topOff + 90, rSub.right - 16, topOff + 150 };
-
-            // お手本タブ
-            rOtehonToggleBtn = { rSub.left + 16, topOff, rSub.right - 16, topOff + 48 };
-            int oTop = topOff + 78;
-            int oW = (menuW - 48) / 4;
-            int oH = 54;
-            for (int i = 0; i < 8; ++i) {
-                int col = i % 4;
-                int row = i / 4;
-                rOtehonTile[i] = { rSub.left + 16 + col * (oW + 8), oTop + row * (oH + 8), rSub.left + 16 + col * (oW + 8) + oW, oTop + row * (oH + 8) + oH };
-            }
-            rOtehonOpacityTrack = { rSub.left + 28, oTop + 2 * (oH + 8) + 40, rSub.right - 28, oTop + 2 * (oH + 8) + 48 };
-        }
-
-        // 2. キャンバス / 半紙（画面中央にアスペクト比を維持して配置）
-        double ratioW = 242.0, ratioH = 333.0; // デフォルト半紙 (242x333)
-        switch (g_paperType) {
-        case PaperType::Hanshi:   ratioW = 242.0; ratioH = 333.0; break;
-        case PaperType::Jofuku:   ratioW = 350.0; ratioH = 680.0; break;
-        case PaperType::Shikishi: ratioW = 242.0; ratioH = 272.0; break;
-        case PaperType::Tanzaku:  ratioW = 60.0;  ratioH = 180.0; break;
-        }
-
-        int maxPaperH = h - statusH - 48;
-        if (maxPaperH < 100) maxPaperH = 100;
-
-        // 画面中央 (w / 2) に半紙を配置する際の最大利用可能幅
-        // 右側の硯パネル (幅 rightW) と重ならないように安全マージンを考慮
-        int maxPaperW = (w / 2 - (rightW + 20)) * 2;
-        if (maxPaperW < 100) maxPaperW = w - rightW - 48;
-        if (maxPaperW < 100) maxPaperW = 100;
-
-        int paperH = maxPaperH;
-        int paperW = (int)(paperH * (ratioW / ratioH));
-        if (paperW > maxPaperW) {
-            paperW = maxPaperW;
-            paperH = (int)(paperW * (ratioH / ratioW));
-        }
-
-        // 水平・垂直ともに画面中央に配置
-        int canvasCenterX = w / 2;
-        if (canvasCenterX + paperW / 2 > rRight.left - 12) {
-            canvasCenterX = rRight.left / 2;
-        }
-        int canvasCenterY = (h - statusH) / 2;
-
-        rPaper.left = canvasCenterX - paperW / 2;
-        rPaper.right = rPaper.left + paperW;
-        rPaper.top = canvasCenterY - paperH / 2;
-        rPaper.bottom = rPaper.top + paperH;
-
-        // 3. 右側 硯・墨量・全消し
-        int rightW_actual = RW(rRight);
-        int stoneW = std::min(240, rightW_actual - 32);
-        int stoneH = (int)(stoneW * 1.48);
-        int stoneX = rRight.left + (rightW_actual - stoneW) / 2;
-        int stoneY = 60;
-
-        rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
-        rInkRefillBtn  = { stoneX, stoneY + stoneH + 14, stoneX + stoneW, stoneY + stoneH + 54 };
-        rClearAllBtn   = { stoneX, stoneY + stoneH + 68, stoneX + stoneW, stoneY + stoneH + 108 };
-
-        // 5. 全消し確認モーダルダイアログ
-        int modalW = 420;
-        int modalH = 200;
-        rClearModalBox = { w / 2 - modalW / 2, h / 2 - modalH / 2, w / 2 + modalW / 2, h / 2 + modalH / 2 };
-        int btnW = 140;
-        int btnH = 40;
-        int btnY = rClearModalBox.bottom - 56;
-        rModalCancelBtn = { rClearModalBox.left + 40, btnY, rClearModalBox.left + 40 + btnW, btnY + btnH };
-        rModalClearBtn  = { rClearModalBox.right - 40 - btnW, btnY, rClearModalBox.right - 40, btnY + btnH };
+    inline void DrawGridTileCard(HDC dc, RECT r, const wchar_t* title, const wchar_t* sub, bool active, bool hover) {
+        RenderUtils::DrawTileCard(dc, r, title, sub, active, hover);
     }
 
-    void DrawPanelTitle(HDC dc, const RECT& rPanel, const wchar_t* title) {
-        RECT rTitle = { rPanel.left + 16, 14, rPanel.right - 16, 38 };
-        HFONT f = Font(15, FW_BOLD);
-        Text(dc, rTitle, title, f, RGB(240, 244, 250));
-        DeleteObject(f);
-    }
-
-    void DrawSubCard(HDC dc, RECT r, const wchar_t* name, const wchar_t* detail, int strokeWidth, bool active, bool hover) {
-        COLORREF bg, border;
-        if (active) {
-            bg = RGB(36, 52, 78);
-            border = RGB(70, 115, 175);
-        } else if (hover) {
-            bg = RGB(40, 43, 52);
-            border = RGB(64, 70, 84);
-        } else {
-            bg = RGB(30, 32, 38);
-            border = RGB(44, 47, 56);
-        }
-
-        Box(dc, r, bg, border, 1, 8);
-
-        RECT tipBox = { r.left + 12, r.top + 10, r.left + 44, r.bottom - 10 };
-        int cy = (tipBox.top + tipBox.bottom) / 2;
-        HPEN sp = CreatePen(PS_SOLID, (int)(strokeWidth * 1.4 + 1), active ? RGB(100, 180, 255) : RGB(160, 165, 175));
-        HPEN osp = (HPEN)SelectObject(dc, sp);
-        MoveToEx(dc, tipBox.left + 4, cy, nullptr);
-        LineTo(dc, tipBox.right - 4, cy);
-        SelectObject(dc, osp);
-        DeleteObject(sp);
-
-        HFONT f1 = Font(16, FW_BOLD), f2 = Font(12);
-        RECT a = { r.left + 50, r.top + 8, r.right - 10, r.top + 32 };
-        RECT b = { r.left + 50, r.top + 34, r.right - 10, r.bottom - 8 };
-        Text(dc, a, name, f1, active ? RGB(255, 255, 255) : RGB(230, 233, 238));
-        Text(dc, b, detail, f2, active ? RGB(170, 205, 245) : RGB(150, 155, 165));
-        DeleteObject(f1);
-        DeleteObject(f2);
-    }
-
-    void DrawGridTileCard(HDC dc, RECT r, const wchar_t* title, const wchar_t* sub, bool active, bool hover) {
-        COLORREF bg, border, textMain, textSub;
-        if (active) {
-            bg = RGB(36, 56, 88);
-            border = RGB(70, 120, 195);
-            textMain = RGB(255, 255, 255);
-            textSub = RGB(160, 205, 255);
-        } else if (hover) {
-            bg = RGB(42, 45, 54);
-            border = RGB(68, 74, 88);
-            textMain = RGB(245, 248, 252);
-            textSub = RGB(175, 180, 192);
-        } else {
-            bg = RGB(28, 30, 36);
-            border = RGB(42, 45, 54);
-            textMain = RGB(190, 195, 205);
-            textSub = RGB(120, 125, 138);
-        }
-
-        Box(dc, r, bg, border, 1, 6);
-        HFONT f1 = Font(15, FW_BOLD), f2 = Font(11);
-        RECT r1 = { r.left + 4, r.top + 4, r.right - 4, r.top + 26 };
-        RECT r2 = { r.left + 4, r.top + 26, r.right - 4, r.bottom - 3 };
-        Center(dc, r1, title, f1, textMain);
-        Center(dc, r2, sub, f2, textSub);
-        DeleteObject(f1);
-        DeleteObject(f2);
-    }
-
-    void DrawColorThemeBtn(HDC dc, RECT r, const wchar_t* label, COLORREF dotColor, bool active, bool hover) {
-        COLORREF bg = active ? RGB(38, 54, 82) : (hover ? RGB(40, 44, 52) : RGB(28, 30, 36));
-        COLORREF border = active ? RGB(70, 120, 195) : (hover ? RGB(66, 72, 86) : RGB(42, 45, 54));
-        Box(dc, r, bg, border, 1, 6);
-
-        HBRUSH db = CreateSolidBrush(dotColor);
-        HBRUSH odb = (HBRUSH)SelectObject(dc, db);
-        HPEN dp = CreatePen(PS_SOLID, 1, active ? RGB(255, 255, 255) : RGB(100, 105, 115));
-        HPEN odp = (HPEN)SelectObject(dc, dp);
-        Ellipse(dc, r.left + 8, r.top + (RH(r) - 12) / 2, r.left + 20, r.top + (RH(r) + 12) / 2);
-        SelectObject(dc, odp);
-        SelectObject(dc, odb);
-        DeleteObject(dp);
-        DeleteObject(db);
-
-        HFONT f = Font(13, active ? FW_BOLD : FW_NORMAL);
-        RECT tr = { r.left + 22, r.top, r.right - 4, r.bottom };
-        Center(dc, tr, label, f, active ? RGB(255, 255, 255) : RGB(200, 205, 215));
-        DeleteObject(f);
+    inline void DrawColorThemeBtn(HDC dc, RECT r, const wchar_t* label, COLORREF dotColor, bool active, bool hover) {
+        RenderUtils::DrawColorThemeButton(dc, r, label, dotColor, active, hover);
     }
 
     void DrawSub(HDC dc) {
@@ -945,102 +662,9 @@ namespace {
         DrawStatus(dc, w, h);
         DrawFloatingMenu(dc);
     }
-    bool PtIn(const RECT& r, POINT p) { return PtInRect(&r, p) != FALSE; }
 
     void SaveCanvasImage(HWND hWnd, bool toClipboard) {
-        int pw = RW(rPaper);
-        int ph = RH(rPaper);
-        if (pw <= 0 || ph <= 0) return;
-
-        HDC screenDC = GetDC(hWnd);
-        HDC memDC = CreateCompatibleDC(screenDC);
-        HBITMAP memBmp = CreateCompatibleBitmap(screenDC, pw, ph);
-        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
-
-        // 背景
-        RECT rLocal = { 0, 0, pw, ph };
-        HBRUSH pb = CreateSolidBrush(RGB(248, 247, 242));
-        FillRect(memDC, &rLocal, pb);
-        DeleteObject(pb);
-
-        // お手本
-        if (g_showOtehon && g_selectedOtehon >= 0 && g_selectedOtehon < 8) {
-            const wchar_t* ch = g_otehonChars[g_selectedOtehon];
-            int size = (int)(std::min(pw, ph) * 0.72);
-            if (size > 0) {
-                HFONT fOtehon = CreateFontW(size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                    DEFAULT_PITCH | FF_DONTCARE, L"Yu Mincho");
-                int grayVal = (int)(248 - g_otehonOpacity * 105.0);
-                grayVal = Clamp(grayVal, 80, 245);
-                HFONT old = (HFONT)SelectObject(memDC, fOtehon);
-                SetBkMode(memDC, TRANSPARENT);
-                SetTextColor(memDC, RGB(grayVal, (int)(grayVal * 0.98), (int)(grayVal * 0.95)));
-                DrawTextW(memDC, ch, 1, &rLocal, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-                SelectObject(memDC, old);
-                DeleteObject(fOtehon);
-            }
-        }
-
-        // 墨汁
-        g_gpuInk.Render(memDC, 0, 0, pw, ph);
-
-        if (toClipboard) {
-            if (OpenClipboard(hWnd)) {
-                EmptyClipboard();
-                SetClipboardData(CF_BITMAP, memBmp);
-                CloseClipboard();
-                g_saveFeedback = L"✓ クリップボードにコピーしました";
-                g_saveFeedbackTime = GetTickCount();
-            }
-        } else {
-            // BMP ファイルとしてデスクトップに保存
-            wchar_t deskPath[MAX_PATH];
-            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, deskPath))) {
-                SYSTEMTIME st;
-                GetLocalTime(&st);
-                wchar_t filePath[MAX_PATH];
-                swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
-                    deskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-
-                BITMAP bmp;
-                GetObject(memBmp, sizeof(BITMAP), &bmp);
-
-                BITMAPFILEHEADER bfh = { 0 };
-                BITMAPINFOHEADER bih = { 0 };
-
-                bih.biSize = sizeof(BITMAPINFOHEADER);
-                bih.biWidth = pw;
-                bih.biHeight = ph;
-                bih.biPlanes = 1;
-                bih.biBitCount = 24;
-                bih.biCompression = BI_RGB;
-
-                DWORD dwSize = ((pw * bih.biBitCount + 31) / 32) * 4 * ph;
-                bfh.bfType = 0x4D42; // "BM"
-                bfh.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dwSize;
-                bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-
-                std::vector<BYTE> buf(dwSize);
-                GetDIBits(memDC, memBmp, 0, ph, buf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
-
-                HANDLE hFile = CreateFileW(filePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-                if (hFile != INVALID_HANDLE_VALUE) {
-                    DWORD written = 0;
-                    WriteFile(hFile, &bfh, sizeof(bfh), &written, NULL);
-                    WriteFile(hFile, &bih, sizeof(bih), &written, NULL);
-                    WriteFile(hFile, buf.data(), dwSize, &written, NULL);
-                    CloseHandle(hFile);
-                    g_saveFeedback = L"✓ デスクトップに保存しました";
-                    g_saveFeedbackTime = GetTickCount();
-                }
-            }
-        }
-
-        SelectObject(memDC, oldBmp);
-        DeleteObject(memBmp);
-        DeleteDC(memDC);
-        ReleaseDC(hWnd, screenDC);
+        ImageExporter::ExportCanvas(hWnd, g_gpuInk, g_appState, toClipboard);
     }
 }
 
@@ -1973,9 +1597,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WT_PACKET:
 	{
 		HCTX hCtx = (HCTX)lParam;
-		if (g_contextMap.count(hCtx) == 0 && !g_contextMap.empty())
+		if (!g_wintab.HasContext(hCtx))
 		{
-			hCtx = g_contextMap.begin()->first;
+			hCtx = g_wintab.GetPrimaryContext();
 		}
 
 		PACKET pkt = { 0 };
@@ -2001,9 +1625,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				static_cast<int>(ortNew.orAzimuth),
 				prsRaw == 0);
 
-			double maxPrs = (g_contextMap.count(hCtx) > 0 && g_contextMap[hCtx].maxPressure > 0)
-				? (double)g_contextMap[hCtx].maxPressure
-				: (g_maxPressure > 0 ? (double)g_maxPressure : 1024.0);
+			double maxPrs = g_wintab.GetMaxPressure(hCtx);
 
 			UINT minPrsThreshold = static_cast<UINT>(maxPrs * 0.01);
 			if (prsRaw <= minPrsThreshold)
@@ -2034,13 +1656,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 
 			POINT clientPt = { ptNew.x, ptNew.y };
-			if (g_openSystemContext)
+			if (g_wintab.IsSystemContext())
 			{
 				ScreenToClient(hWnd, &clientPt);
 			}
 
 			POINT oldClientPt = { ptOld.x, ptOld.y };
-			if (g_openSystemContext)
+			if (g_wintab.IsSystemContext())
 			{
 				ScreenToClient(hWnd, &oldClientPt);
 			}
@@ -2205,109 +1827,16 @@ void ClearScreen()
 
 bool OpenTabletContexts(HWND hWnd)
 {
-	if (!LoadWintab())
-	{
-		ShowError("Wintab not available");
-		return false;
-	}
-
-	if (!gpWTInfoA(0, 0, NULL))
-	{
-		ShowError("WinTab Services Not Available.");
-		return false;
-	}
-
-	int ctxIndex = 0;
-	int gnOpenContexts = 0;
-	int gnAttachedDevices = 0;
-
-	CloseTabletContexts();
-
-	gpWTInfoA(WTI_INTERFACE, IFC_NDEVICES, &gnAttachedDevices);
-
-	do
-	{
-		int foundCtx = 0;
-		LOGCONTEXTA lcMine = { 0 };
-		AXIS tabletX = { 0 };
-		AXIS tabletY = { 0 };
-		AXIS Pressure = { 0 };
-		AXIS axisZ = { 0 };
-
-		if (g_openSystemContext)
-		{
-			foundCtx = gpWTInfoA(WTI_DEFSYSCTX, 0, &lcMine);
-		}
-		else
-		{
-			foundCtx = gpWTInfoA(WTI_DDCTXS + ctxIndex, 0, &lcMine);
-		}
-
-		if (foundCtx > 0)
-		{
-			UINT result = 0;
-			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_HARDWARE, &result);
-			bool displayTablet = (result & HWC_INTEGRATED) != 0;
-
-			lcMine.lcPktData = PACKETDATA;
-			lcMine.lcOptions |= CXO_MESSAGES | CXO_SYSTEM;
-			lcMine.lcPktMode = PACKETMODE;
-			lcMine.lcMoveMask = PACKETDATA;
-			lcMine.lcBtnUpMask = lcMine.lcBtnDnMask;
-
-			if (gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_X, &tabletX) != sizeof(AXIS))
-			{
-				ctxIndex++;
-				if (g_openSystemContext) break;
-				continue;
-			}
-			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_Y, &tabletY);
-			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_NPRESSURE, &Pressure);
-			gpWTInfoA(WTI_DEVICES + ctxIndex, DVC_Z, &axisZ);
-
-			g_maxPressure = Pressure.axMax;
-
-			lcMine.lcOutExtY = -lcMine.lcOutExtY;
-
-			HCTX hCtx = gpWTOpenA(hWnd, (LPLOGCONTEXT)&lcMine, TRUE);
-			if (hCtx)
-			{
-				TabletInfo info = { Pressure.axMax, RGB(0,0,0) };
-				sprintf_s(info.name, sizeof(info.name), "Tablet %i", ctxIndex);
-				info.tabletXExt = tabletX.axMax;
-				info.tabletYExt = tabletY.axMax;
-				info.displayTablet = displayTablet;
-				info.maxZ = axisZ.axMax;
-				g_contextMap[hCtx] = info;
-				gnOpenContexts++;
-			}
-		}
-		else
-		{
-			break;
-		}
-
-		if (g_openSystemContext) break;
-		ctxIndex++;
-	} while (true);
-
-	return gnOpenContexts > 0;
+	return g_wintab.OpenContexts(hWnd);
 }
 
 void CloseTabletContexts(void)
 {
-	for (auto& pair : g_contextMap)
-	{
-		if (pair.first != nullptr && gpWTClose)
-		{
-			gpWTClose(pair.first);
-		}
-	}
-	g_contextMap.clear();
+	g_wintab.CloseContexts();
 }
 
 void Cleanup(void)
 {
-	UnloadWintab();
+	g_wintab.Cleanup();
 	g_gpuInk.Clear();
 }

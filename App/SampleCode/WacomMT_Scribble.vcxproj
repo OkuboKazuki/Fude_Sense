@@ -87,23 +87,32 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AppEnums.h" />
+    <ClInclude Include="AppState.h" />
     <ClInclude Include="GpuInk.h" />
+    <ClInclude Include="ImageExporter.h" />
+    <ClInclude Include="RenderUtils.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="WacomMT_Scribble.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouch.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouchTypes.h" />
+    <ClInclude Include="WintabManager.h" />
     <ClInclude Include="WintabUtils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AppState.cpp" />
     <ClCompile Include="GpuInk.cpp" />
+    <ClCompile Include="ImageExporter.cpp" />
+    <ClCompile Include="RenderUtils.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="WacomMT_Scribble.cpp" />
     <ClCompile Include="Wacom_Feel_SDK\src\cpp\WacomMultiTouch.cpp" />
+    <ClCompile Include="WintabManager.cpp" />
     <ClCompile Include="WintabUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
