@@ -89,10 +89,16 @@
   <ItemGroup>
     <ClInclude Include="AppEnums.h" />
     <ClInclude Include="AppState.h" />
+    <ClInclude Include="CanvasView.h" />
+    <ClInclude Include="FloatingMenuView.h" />
     <ClInclude Include="GpuInk.h" />
     <ClInclude Include="ImageExporter.h" />
+    <ClInclude Include="InkStoneView.h" />
+    <ClInclude Include="MainView.h" />
+    <ClInclude Include="ModalView.h" />
     <ClInclude Include="RenderUtils.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="StatusBarView.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="WacomMT_Scribble.h" />
@@ -103,9 +109,15 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppState.cpp" />
+    <ClCompile Include="CanvasView.cpp" />
+    <ClCompile Include="FloatingMenuView.cpp" />
     <ClCompile Include="GpuInk.cpp" />
     <ClCompile Include="ImageExporter.cpp" />
+    <ClCompile Include="InkStoneView.cpp" />
+    <ClCompile Include="MainView.cpp" />
+    <ClCompile Include="ModalView.cpp" />
     <ClCompile Include="RenderUtils.cpp" />
+    <ClCompile Include="StatusBarView.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
