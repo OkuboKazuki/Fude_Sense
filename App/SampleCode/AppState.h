@@ -78,6 +78,10 @@ struct InkModel {
         stoneAmount = (std::max)(0.0, stoneAmount - amount * 0.5);
     }
 
+    void ConsumeInk(double amount) {
+        Consume(amount);
+    }
+
     // 筆先が使えるインク濃度係数 (0.0 ~ 1.0)
     double GetInkFactor() const {
         return (std::min)(stoneAmount, brushAmount);

@@ -87,6 +87,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AppController.h" />
     <ClInclude Include="AppEnums.h" />
     <ClInclude Include="AppState.h" />
     <ClInclude Include="CanvasView.h" />
@@ -96,18 +97,22 @@
     <ClInclude Include="InkStoneView.h" />
     <ClInclude Include="MainView.h" />
     <ClInclude Include="ModalView.h" />
+    <ClInclude Include="PenInputEvent.h" />
     <ClInclude Include="RenderUtils.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="StatusBarView.h" />
+    <ClInclude Include="StrokeController.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="WacomMT_Scribble.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouch.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouchTypes.h" />
+    <ClInclude Include="WintabAdapter.h" />
     <ClInclude Include="WintabManager.h" />
     <ClInclude Include="WintabUtils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AppController.cpp" />
     <ClCompile Include="AppState.cpp" />
     <ClCompile Include="CanvasView.cpp" />
     <ClCompile Include="FloatingMenuView.cpp" />
@@ -122,8 +127,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="StrokeController.cpp" />
     <ClCompile Include="WacomMT_Scribble.cpp" />
     <ClCompile Include="Wacom_Feel_SDK\src\cpp\WacomMultiTouch.cpp" />
+    <ClCompile Include="WintabAdapter.cpp" />
     <ClCompile Include="WintabManager.cpp" />
     <ClCompile Include="WintabUtils.cpp" />
   </ItemGroup>
