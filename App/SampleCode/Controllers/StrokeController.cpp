@@ -49,9 +49,18 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         POINT paperPt = { clientPt.x - rPaper.left, clientPt.y - rPaper.top };
         POINT oldPaperPt = { m_ptOld.x - rPaper.left, m_ptOld.y - rPaper.top };
 
+        if (!m_strokeActive || !gpuInk.IsInStroke()) {
+            oldPaperPt = paperPt;
+        }
+
         double dx = static_cast<double>(paperPt.x - oldPaperPt.x);
         double dy = static_cast<double>(paperPt.y - oldPaperPt.y);
         double dist = std::sqrt(dx * dx + dy * dy);
+
+        if (dist > 300.0) {
+            oldPaperPt = paperPt;
+            dist = 0.0;
+        }
 
         // 筆の硬さ（感度補正）を筆圧に適用
         double hardness = state.brush.hardness;

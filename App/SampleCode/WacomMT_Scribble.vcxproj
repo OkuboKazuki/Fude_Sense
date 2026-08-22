@@ -51,7 +51,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>./Wacom_Feel_SDK/inc;./Wintab_SDK</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./Models;./InkEngine;./Views;./Controllers;./Inputs;./Services;./Wacom_Feel_SDK/inc;./Wintab_SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -72,7 +72,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>./Wacom_Feel_SDK/inc;./Wintab_SDK</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./Models;./InkEngine;./Views;./Controllers;./Inputs;./Services;./Wacom_Feel_SDK/inc;./Wintab_SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -87,52 +87,54 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="AppController.h" />
-    <ClInclude Include="AppEnums.h" />
-    <ClInclude Include="AppState.h" />
-    <ClInclude Include="CanvasView.h" />
-    <ClInclude Include="FloatingMenuView.h" />
-    <ClInclude Include="GpuInk.h" />
-    <ClInclude Include="ImageExporter.h" />
-    <ClInclude Include="InkStoneView.h" />
-    <ClInclude Include="MainView.h" />
-    <ClInclude Include="ModalView.h" />
-    <ClInclude Include="PenInputEvent.h" />
-    <ClInclude Include="RenderUtils.h" />
+    <ClInclude Include="Controllers\AppController.h" />
+    <ClInclude Include="Controllers\StrokeController.h" />
+    <ClInclude Include="InkEngine\GpuInk.h" />
+    <ClInclude Include="InkEngine\InkModel.h" />
+    <ClInclude Include="Inputs\MouseAdapter.h" />
+    <ClInclude Include="Inputs\PenInputEvent.h" />
+    <ClInclude Include="Inputs\WintabAdapter.h" />
+    <ClInclude Include="Models\AppEnums.h" />
+    <ClInclude Include="Models\AppState.h" />
     <ClInclude Include="Resource.h" />
-    <ClInclude Include="StatusBarView.h" />
-    <ClInclude Include="StrokeController.h" />
+    <ClInclude Include="Services\ImageExporter.h" />
+    <ClInclude Include="Services\WintabManager.h" />
+    <ClInclude Include="Services\WintabUtils.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="Views\CanvasView.h" />
+    <ClInclude Include="Views\FloatingMenuView.h" />
+    <ClInclude Include="Views\InkStoneView.h" />
+    <ClInclude Include="Views\MainView.h" />
+    <ClInclude Include="Views\ModalView.h" />
+    <ClInclude Include="Views\RenderUtils.h" />
+    <ClInclude Include="Views\StatusBarView.h" />
     <ClInclude Include="WacomMT_Scribble.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouch.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouchTypes.h" />
-    <ClInclude Include="WintabAdapter.h" />
-    <ClInclude Include="WintabManager.h" />
-    <ClInclude Include="WintabUtils.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AppController.cpp" />
-    <ClCompile Include="AppState.cpp" />
-    <ClCompile Include="CanvasView.cpp" />
-    <ClCompile Include="FloatingMenuView.cpp" />
-    <ClCompile Include="GpuInk.cpp" />
-    <ClCompile Include="ImageExporter.cpp" />
-    <ClCompile Include="InkStoneView.cpp" />
-    <ClCompile Include="MainView.cpp" />
-    <ClCompile Include="ModalView.cpp" />
-    <ClCompile Include="RenderUtils.cpp" />
-    <ClCompile Include="StatusBarView.cpp" />
+    <ClCompile Include="Controllers\AppController.cpp" />
+    <ClCompile Include="Controllers\StrokeController.cpp" />
+    <ClCompile Include="InkEngine\GpuInk.cpp" />
+    <ClCompile Include="Inputs\WintabAdapter.cpp" />
+    <ClCompile Include="Models\AppState.cpp" />
+    <ClCompile Include="Services\ImageExporter.cpp" />
+    <ClCompile Include="Services\WintabManager.cpp" />
+    <ClCompile Include="Services\WintabUtils.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="StrokeController.cpp" />
+    <ClCompile Include="Views\CanvasView.cpp" />
+    <ClCompile Include="Views\FloatingMenuView.cpp" />
+    <ClCompile Include="Views\InkStoneView.cpp" />
+    <ClCompile Include="Views\MainView.cpp" />
+    <ClCompile Include="Views\ModalView.cpp" />
+    <ClCompile Include="Views\RenderUtils.cpp" />
+    <ClCompile Include="Views\StatusBarView.cpp" />
     <ClCompile Include="WacomMT_Scribble.cpp" />
     <ClCompile Include="Wacom_Feel_SDK\src\cpp\WacomMultiTouch.cpp" />
-    <ClCompile Include="WintabAdapter.cpp" />
-    <ClCompile Include="WintabManager.cpp" />
-    <ClCompile Include="WintabUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WacomMT_Scribble.rc" />
