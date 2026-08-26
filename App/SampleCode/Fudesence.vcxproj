@@ -13,7 +13,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{FC3ACBD7-E78A-482D-A4F3-C94CBFE897AE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>WacomMT_Scribble</RootNamespace>
+    <RootNamespace>Fudesence</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -137,7 +137,7 @@
     <ClCompile Include="Wacom_Feel_SDK\src\cpp\WacomMultiTouch.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="WacomMT_Scribble.rc" />
+    <ResourceCompile Include="Fudesence.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

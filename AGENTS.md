@@ -55,7 +55,7 @@ App/SampleCode/
 │   ├── ImageExporter.h / .cpp       # 画像エクスポート (BMP保存、クリップボード)
 │   └── WintabUtils.h / .cpp         # Wintab ユーティリティ
 │
-├── Resource.h / WacomMT_Scribble.rc # Win32リソース
+├── Resource.h / Fudesence.rc        # Win32リソース
 └── WacomMT_Scribble.cpp             # メインエントリ / イベントディスパッチ
 ```
 
@@ -64,16 +64,16 @@ App/SampleCode/
 ## 3. ビルド & 実行方法
 
 ### ソリューション / プロジェクト
-- ソリューションファイル: `App/SampleCode/WacomMT_Scribble.sln`
-- プロジェクトファイル: `App/SampleCode/WacomMT_Scribble.vcxproj`
+- ソリューションファイル: `App/SampleCode/Fudesence.sln`
+- プロジェクトファイル: `App/SampleCode/Fudesence.vcxproj`
 
 ### MSBuild コマンドライン
 ```powershell
 # Debug ビルド (Win32)
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\WacomMT_Scribble.sln /p:Configuration=Debug /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\Fudesence.sln /p:Configuration=Debug /p:Platform=Win32
 
 # Release ビルド (Win32)
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\WacomMT_Scribble.sln /p:Configuration=Release /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\Fudesence.sln /p:Configuration=Release /p:Platform=Win32
 ```
 
 ---

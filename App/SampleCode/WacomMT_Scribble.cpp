@@ -45,7 +45,7 @@ void Cleanup(void);
 // Global Variables
 HINSTANCE hInst = NULL;
 std::wstring szTitle = L"SHUJI STUDIO - 習字制作ワークスペース";
-std::wstring szWindowClass = L"WACOMMT_SCRIBBLE";
+std::wstring szWindowClass = L"FUDESENCE";
 HWND g_mainWnd = NULL;
 HDC g_hdc = NULL;
 HWND g_hWndAbout = NULL;
@@ -389,7 +389,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
 	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_WACOMMT_SCRIBBLE));
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_FUDESENCE));
 	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wcex.hbrBackground = NULL;
 	wcex.lpszMenuName = NULL; // 古いメニューバーを非表示にしキャンバス領域を最大化
@@ -444,7 +444,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		return FALSE;
 	}
 
-	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_WACOMMT_SCRIBBLE));
+	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_FUDESENCE));
 
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
