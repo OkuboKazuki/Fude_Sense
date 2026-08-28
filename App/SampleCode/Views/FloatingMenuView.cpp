@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "FloatingMenuView.h"
+#include "AnalysisView.h"
 #include "RenderUtils.h"
 #include <cwchar>
 
@@ -91,23 +92,51 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         DrawColorThemeButton(dc, ui.rColorBtn[1], L"白線", RGB(235, 238, 245), state.paper.gridColor == GridColorTheme::WhiteLine, ui.hoverSub == 31);
         DrawColorThemeButton(dc, ui.rColorBtn[2], L"薄墨", RGB(140, 145, 155), state.paper.gridColor == GridColorTheme::InkGray, ui.hoverSub == 32);
     }
+    else if (ui.leftTab == LeftTab::Analysis) {
+        AnalysisView::Draw(dc, state);
+    }
     else if (ui.leftTab == LeftTab::Save) {
         bool hovPng = (ui.hoverSub == 60);
         Box(dc, ui.rSaveBtnPng, hovPng ? RGB(45, 75, 120) : RGB(34, 48, 72), hovPng ? RGB(80, 140, 220) : RGB(55, 95, 160), 1, 8);
-        HFONT fBtn1 = CreateCustomFont(16, FW_BOLD);
-        Center(dc, ui.rSaveBtnPng, L"🖼️ 画像（作品）を保存", fBtn1, RGB(255, 255, 255));
+        HFONT fBtn1 = CreateCustomFont(15, FW_BOLD);
+        Center(dc, ui.rSaveBtnPng, L"🖼️ 作品画像を保存 (PNG)", fBtn1, RGB(255, 255, 255));
         DeleteObject(fBtn1);
 
         bool hovClip = (ui.hoverSub == 61);
         Box(dc, ui.rSaveBtnClip, hovClip ? RGB(42, 46, 56) : RGB(30, 33, 40), hovClip ? RGB(70, 75, 90) : RGB(48, 52, 64), 1, 8);
-        HFONT fBtn2 = CreateCustomFont(15, FW_NORMAL);
+        HFONT fBtn2 = CreateCustomFont(14, FW_NORMAL);
         Center(dc, ui.rSaveBtnClip, L"📋 クリップボードにコピー", fBtn2, RGB(220, 225, 235));
         DeleteObject(fBtn2);
 
+        // JSONアーカイブ保存ボタン
+        bool hovJson = (ui.hoverSub == 62);
+        Box(dc, ui.rSaveBtnJson, hovJson ? RGB(32, 75, 60) : RGB(25, 52, 44), hovJson ? RGB(60, 170, 130) : RGB(40, 110, 85), 1, 8);
+        HFONT fBtn3 = CreateCustomFont(15, FW_BOLD);
+        Center(dc, ui.rSaveBtnJson, L"💾 運筆アーカイブ保存 (JSON)", fBtn3, RGB(230, 255, 245));
+        DeleteObject(fBtn3);
+
+        // CSV時系列保存ボタン
+        bool hovCsv = (ui.hoverSub == 63);
+        Box(dc, ui.rSaveBtnCsv, hovCsv ? RGB(60, 52, 30) : RGB(42, 38, 24), hovCsv ? RGB(180, 140, 50) : RGB(120, 95, 35), 1, 8);
+        HFONT fBtn4 = CreateCustomFont(14, FW_NORMAL);
+        Center(dc, ui.rSaveBtnCsv, L"📊 運筆データ出力 (CSV / 研究用)", fBtn4, RGB(255, 245, 220));
+        DeleteObject(fBtn4);
+
+        // 記録状況インジケータ
+        RECT rInfoBox = { ui.rSub.left + 16, ui.rSaveBtnCsv.bottom + 14, ui.rSub.right - 16, ui.rSaveBtnCsv.bottom + 62 };
+        Box(dc, rInfoBox, RGB(24, 27, 34), RGB(40, 45, 56), 1, 6);
+        HFONT fRec = CreateCustomFont(11, FW_NORMAL);
+        wchar_t recBuf[128];
+        swprintf_s(recBuf, 128, L"記録中ストローク: %d 画 / 累積データ点: %d 点\n（筆圧・高度角・方位角・速度・正規化座標）",
+            static_cast<int>(state.trajectory.GetTotalStrokeCount()), static_cast<int>(state.trajectory.GetTotalPointCount()));
+        RECT rRecText = { rInfoBox.left + 8, rInfoBox.top + 6, rInfoBox.right - 8, rInfoBox.bottom - 6 };
+        DrawTextCustom(dc, rRecText, recBuf, fRec, RGB(160, 175, 195), DT_CENTER | DT_WORDBREAK);
+        DeleteObject(fRec);
+
         if (!ui.saveFeedback.empty() && (GetTickCount() - ui.saveFeedbackTime < 4000)) {
-            RECT rMsg = { ui.rSub.left + 16, ui.rSaveBtnClip.bottom + 24, ui.rSub.right - 16, ui.rSaveBtnClip.bottom + 64 };
+            RECT rMsg = { ui.rSub.left + 16, rInfoBox.bottom + 12, ui.rSub.right - 16, rInfoBox.bottom + 52 };
             Box(dc, rMsg, RGB(28, 56, 40), RGB(50, 130, 80), 1, 6);
-            HFONT fMsg = CreateCustomFont(14, FW_BOLD);
+            HFONT fMsg = CreateCustomFont(13, FW_BOLD);
             Center(dc, rMsg, ui.saveFeedback.c_str(), fMsg, RGB(180, 255, 200));
             DeleteObject(fMsg);
         }
@@ -188,15 +217,16 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
         COLORREF border = active ? RGB(75, 135, 225) : (hover ? RGB(65, 72, 90) : RGB(44, 48, 60));
         COLORREF text = active ? RGB(255, 255, 255) : (hover ? RGB(240, 244, 252) : RGB(170, 175, 185));
         Box(dc, r, bg, border, 1, 6);
-        HFONT f = CreateCustomFont(14, active ? FW_BOLD : FW_NORMAL);
+        HFONT f = CreateCustomFont(13, active ? FW_BOLD : FW_NORMAL);
         Center(dc, r, label, f, text);
         DeleteObject(f);
     };
 
-    DrawTab(ui.rTbBrush,  L"筆",   ui.leftTab == LeftTab::Brush,  ui.hoverTb == TbButton::Brush);
-    DrawTab(ui.rTbPaper,  L"紙",   ui.leftTab == LeftTab::Paper,  ui.hoverTb == TbButton::Paper);
-    DrawTab(ui.rTbSave,   L"保存", ui.leftTab == LeftTab::Save,   ui.hoverTb == TbButton::Save);
-    DrawTab(ui.rTbOtehon, L"お手本", ui.leftTab == LeftTab::Otehon, ui.hoverTb == TbButton::Otehon);
+    DrawTab(ui.rTbBrush,    L"筆",   ui.leftTab == LeftTab::Brush,    ui.hoverTb == TbButton::Brush);
+    DrawTab(ui.rTbPaper,    L"紙",   ui.leftTab == LeftTab::Paper,    ui.hoverTb == TbButton::Paper);
+    DrawTab(ui.rTbAnalysis, L"解析", ui.leftTab == LeftTab::Analysis, ui.hoverTb == TbButton::Analysis);
+    DrawTab(ui.rTbSave,     L"保存", ui.leftTab == LeftTab::Save,     ui.hoverTb == TbButton::Save);
+    DrawTab(ui.rTbOtehon,   L"手本", ui.leftTab == LeftTab::Otehon,   ui.hoverTb == TbButton::Otehon);
 
     DrawSub(dc, state);
 }

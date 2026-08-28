@@ -7,12 +7,16 @@
 StrokeController::StrokeController() {
 }
 
-void StrokeController::ResetStroke(GpuInk& gpuInk) {
+void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     m_strokeActive = false;
     m_smoothedPressure = 0.0;
     m_smoothedWidth = 0.0;
+    m_lastTime = 0;
     if (gpuInk.IsInStroke()) {
         gpuInk.EndStroke();
+    }
+    if (pState) {
+        pState->trajectory.OnStrokeEnd();
     }
 }
 
@@ -58,6 +62,17 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             oldPaperPt = paperPt;
             dist = 0.0;
         }
+
+        // 運筆速度の計算 (px/s)
+        DWORD curTime = (event.time != 0) ? event.time : GetTickCount();
+        double speed = 0.0;
+        if (m_lastTime != 0 && curTime > m_lastTime) {
+            double dtSec = static_cast<double>(curTime - m_lastTime) / 1000.0;
+            if (dtSec > 0.0001) {
+                speed = dist / dtSec;
+            }
+        }
+        m_lastTime = curTime;
 
         // 筆の硬さ（感度補正）を筆圧に適用
         double hardness = state.brush.hardness;
@@ -109,10 +124,13 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             m_smoothedWidth = m_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
         }
 
+        // 運筆データアーカイブへ記録
+        state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed);
+
         // 墨の描画（常に高品位な墨汁濃度255で描画）
         gpuInk.DrawSegmentLinear(oldPaperPt, paperPt, startWidth, m_smoothedWidth, 255);
     } else {
-        ResetStroke(gpuInk);
+        ResetStroke(gpuInk, &state);
     }
 
     m_ptOld = clientPt;

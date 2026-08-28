@@ -7,6 +7,7 @@ using namespace RenderUtils;
 
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
+    state.trajectory.Clear();
     state.ui.showClearConfirm = false;
     InvalidateRect(hWnd, NULL, FALSE);
 }
@@ -56,6 +57,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             return true;
         } else if (PtIn(ui.rTbPaper, pt)) {
             ui.leftTab = LeftTab::Paper;
+            InvalidateRect(hWnd, &ui.rSub, FALSE);
+            return true;
+        } else if (PtIn(ui.rTbAnalysis, pt)) {
+            ui.leftTab = LeftTab::Analysis;
             InvalidateRect(hWnd, &ui.rSub, FALSE);
             return true;
         } else if (PtIn(ui.rTbSave, pt)) {
@@ -140,6 +145,18 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 } else if (PtIn(ui.rSaveBtnClip, pt)) {
                     ImageExporter::ExportCanvas(hWnd, gpuInk, state, true);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
+                    return true;
+                } else if (PtIn(ui.rSaveBtnJson, pt)) {
+                    if (TrajectorySession::PromptSaveArchiveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
+                        state.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
+                    }
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
+                    return true;
+                } else if (PtIn(ui.rSaveBtnCsv, pt)) {
+                    if (TrajectorySession::PromptSaveArchiveCsv(hWnd, state.trajectory)) {
+                        state.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
+                    }
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
@@ -247,6 +264,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (ui.isSubPanelOpen) {
             if (PtIn(ui.rTbBrush, pt)) ui.hoverTb = TbButton::Brush;
             else if (PtIn(ui.rTbPaper, pt)) ui.hoverTb = TbButton::Paper;
+            else if (PtIn(ui.rTbAnalysis, pt)) ui.hoverTb = TbButton::Analysis;
             else if (PtIn(ui.rTbSave, pt)) ui.hoverTb = TbButton::Save;
             else if (PtIn(ui.rTbOtehon, pt)) ui.hoverTb = TbButton::Otehon;
 
@@ -262,6 +280,8 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
                 } else if (ui.leftTab == LeftTab::Save) {
                     if (PtIn(ui.rSaveBtnPng, pt)) ui.hoverSub = 60;
                     else if (PtIn(ui.rSaveBtnClip, pt)) ui.hoverSub = 61;
+                    else if (PtIn(ui.rSaveBtnJson, pt)) ui.hoverSub = 62;
+                    else if (PtIn(ui.rSaveBtnCsv, pt)) ui.hoverSub = 63;
                 } else if (ui.leftTab == LeftTab::Otehon) {
                     if (PtIn(ui.rOtehonToggleBtn, pt)) ui.hoverSub = 70;
                     for (int i = 0; i < 8; ++i) if (PtIn(ui.rOtehonTile[i], pt)) ui.hoverSub = 80 + i;

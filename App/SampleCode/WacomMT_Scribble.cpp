@@ -612,7 +612,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, false);
 				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
-				g_strokeCtrl.ResetStroke(g_gpuInk);
+				g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			}
 			ReleaseCapture();
 		}
@@ -660,7 +660,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		bool inRange = (lParam != 0);
 		if (!inRange)
 		{
-			g_strokeCtrl.ResetStroke(g_gpuInk);
+			g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
 		}
 		if (g_hMonitorWnd && IsWindow(g_hMonitorWnd)) InvalidateRect(g_hMonitorWnd, NULL, FALSE);
