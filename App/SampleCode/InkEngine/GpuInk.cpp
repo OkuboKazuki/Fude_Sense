@@ -21,6 +21,15 @@ static constexpr int PROPAGATION_AMOUNT = 40;
 static constexpr int MAX_INK_PER_PIXEL = 450;
 static constexpr double MAX_SPEED_PX_PER_SEC = 2000.0;
 
+// 紙の水分場（m_wetField）のパラメータ
+// にじみは墨の濃さではなく水分が駆動する。乾いた紙には墨が流れ込まないため、
+// 水分を持たない画素（かすれの隙間など）は塗り潰されずに残る。
+static constexpr int WET_MAX = 255;          // 画素あたりの最大水分量
+static constexpr int WET_THRESHOLD = 8;      // これ以下は「乾いた紙」として扱う
+static constexpr int WET_DRY_RATE = 1;       // 1 ティックあたりの乾燥量
+static constexpr int WET_SPREAD_LOSS = 16;   // 隣接画素へ水を運ぶ際の減衰量
+static constexpr double WET_MARGIN_PX = 2.0; // 墨の接地範囲より外側に水分を広げる幅
+
 static inline uint32_t CalculateInkPixel(int inkAmount)
 {
 	if (inkAmount <= 0) return 0xFFFFFFFF; // 白キャンバス（インクなし）
@@ -33,6 +42,7 @@ GpuInk::GpuInk()
 {
 	m_ink.clear();
 	m_deltaInk.clear();
+	m_wetField.clear();
 	m_pixelBuffer.clear();
 
 	// Direct2D ファクトリの生成
@@ -95,6 +105,8 @@ void GpuInk::ReleaseResources_NoLock()
 	m_ink.shrink_to_fit();
 	m_deltaInk.clear();
 	m_deltaInk.shrink_to_fit();
+	m_wetField.clear();
+	m_wetField.shrink_to_fit();
 	m_pixelBuffer.clear();
 	m_pixelBuffer.shrink_to_fit();
 	ResetDirtyRect_NoLock();
@@ -145,6 +157,7 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 	m_pixelBuffer.assign(pixels, 0xFFFFFFFF);
 	m_ink.assign(pixels, 0);
 	m_deltaInk.assign(pixels, 0);
+	m_wetField.assign(pixels, 0);
 
 	D2D1_BITMAP_PROPERTIES bitmapProps = D2D1::BitmapProperties(
 		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
@@ -205,6 +218,7 @@ void GpuInk::Resize(int width, int height)
 	int oldW = m_width;
 	int oldH = m_height;
 	std::vector<int> oldInk = std::move(m_ink);
+	std::vector<uint8_t> oldWet = std::move(m_wetField);
 	std::vector<uint32_t> oldPixels = std::move(m_pixelBuffer);
 
 	if (m_pInkBitmap) { m_pInkBitmap->Release(); m_pInkBitmap = nullptr; }
@@ -215,6 +229,7 @@ void GpuInk::Resize(int width, int height)
 	size_t newPixels = static_cast<size_t>(width) * static_cast<size_t>(height);
 	m_ink.assign(newPixels, 0);
 	m_deltaInk.assign(newPixels, 0);
+	m_wetField.assign(newPixels, 0);
 	m_pixelBuffer.assign(newPixels, 0xFFFFFFFF);
 
 	if (!oldInk.empty() && oldW > 0 && oldH > 0)
@@ -231,6 +246,7 @@ void GpuInk::Resize(int width, int height)
 				size_t oldIdx = static_cast<size_t>(oy) * oldW + ox;
 				size_t newIdx = static_cast<size_t>(ny) * width + nx;
 				m_ink[newIdx] = oldInk[oldIdx];
+				if (oldIdx < oldWet.size()) m_wetField[newIdx] = oldWet[oldIdx];
 				m_pixelBuffer[newIdx] = oldPixels[oldIdx];
 			}
 		}
@@ -291,6 +307,7 @@ void GpuInk::Clear()
 		if (!m_pixelBuffer.empty()) std::fill_n(m_pixelBuffer.data(), pixels, 0xFFFFFFFF);
 		if (!m_ink.empty()) std::fill_n(m_ink.data(), pixels, 0);
 		if (!m_deltaInk.empty()) std::fill_n(m_deltaInk.data(), pixels, 0);
+		if (!m_wetField.empty()) std::fill_n(m_wetField.data(), pixels, static_cast<uint8_t>(0));
 		ResetDirtyRect_NoLock();
 
 		if (m_pInkBitmap)
@@ -305,6 +322,7 @@ void GpuInk::Clear()
 bool GpuInk::PropagateInk_NoLock()
 {
 	if (m_width <= 0 || m_height <= 0 || m_ink.empty()) return false;
+	if (m_wetField.size() != m_ink.size()) return false;
 	if (m_activeMinX > m_activeMaxX || m_activeMinY > m_activeMaxY) return false;
 
 	int startX = std::max(0, m_activeMinX - 1);
@@ -333,6 +351,13 @@ bool GpuInk::PropagateInk_NoLock()
 			int curInk = m_ink[i];
 			if (curInk <= PROPAGATION_THRESHOLD) continue;
 
+			// にじみを駆動するのは墨の濃さではなく水分。
+			// 渇筆で置かれた墨は水分を持たないため、ここで止まりかすれが保存される。
+			// 水は墨に先んじて紙を濡らすので、送り出す側の水分から減衰分を引いた
+			// 量を「隣へ運べる水」とみなす。
+			int carriedWet = static_cast<int>(m_wetField[i]) - WET_SPREAD_LOSS;
+			if (carriedWet <= WET_THRESHOLD) continue;
+
 			const int offsets[4][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
 			size_t validNeighbors[4];
 			int validNX[4], validNY[4];
@@ -347,6 +372,12 @@ bool GpuInk::PropagateInk_NoLock()
 
 				if (curInk > m_ink[ni])
 				{
+					// 墨が進む先を水が濡らす（毛管流には濡れた経路が要る）
+					if (m_wetField[ni] < carriedWet)
+					{
+						m_wetField[ni] = static_cast<uint8_t>(carriedWet);
+					}
+
 					validNeighbors[count] = ni;
 					validNX[count] = nx;
 					validNY[count] = ny;
@@ -428,6 +459,21 @@ bool GpuInk::PropagateInk_NoLock()
 						if (y > m_uploadMaxY) m_uploadMaxY = y;
 					}
 				}
+			}
+		}
+	}
+
+	// 紙の乾燥。水分を失った画素はにじみの経路から外れ、以後は墨が動かなくなる
+	for (int y = startY; y <= endY; ++y)
+	{
+		size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(m_width);
+		for (int x = startX; x <= endX; ++x)
+		{
+			size_t i = rowOffset + x;
+			if (m_wetField[i] > 0)
+			{
+				int dried = static_cast<int>(m_wetField[i]) - WET_DRY_RATE;
+				m_wetField[i] = static_cast<uint8_t>(std::max(0, dried));
 			}
 		}
 	}
@@ -545,7 +591,15 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	cx += tiltDirX * offset;
 	cy += tiltDirY * offset;
 
-	int ext = static_cast<int>(std::ceil(semiMajor));
+	// 水分は墨の接地範囲よりわずかに外側まで広がる。
+	// にじみは水で濡れた紙にしか進めないため、墨の到達域を確保するための余白。
+	double wetSemiMajor = semiMajor + WET_MARGIN_PX;
+	double wetSemiMinor = semiMinor + WET_MARGIN_PX;
+
+	double drynessClamped = std::max(0.0, std::min(1.0, m_strokeDryness));
+	int wetDeposit = static_cast<int>(WET_MAX * (1.0 - drynessClamped));
+
+	int ext = static_cast<int>(std::ceil(wetSemiMajor));
 	int icx = static_cast<int>(std::lround(cx));
 	int icy = static_cast<int>(std::lround(cy));
 
@@ -569,10 +623,21 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 			double localX = dx * cosA + dy * sinA;
 			double localY = -dx * sinA + dy * cosA;
 
+			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
+
+			// 水分の付着（墨より一回り広い範囲）。乾いていく一方なので最大値を採る
+			double wetNormDistSq = (localX * localX) / (wetSemiMajor * wetSemiMajor)
+				+ (localY * localY) / (wetSemiMinor * wetSemiMinor);
+			if (wetNormDistSq <= 1.0 && idx < m_wetField.size())
+			{
+				if (m_wetField[idx] < wetDeposit)
+				{
+					m_wetField[idx] = static_cast<uint8_t>(wetDeposit);
+				}
+			}
+
 			double normDistSq = (localX * localX) / (semiMajor * semiMajor) + (localY * localY) / (semiMinor * semiMinor);
 			if (normDistSq > 1.0) continue;
-
-			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
 
 			// 段階的インク加算 (Bの方法: 移動時の過剰滲み・ガタガタ防止と長押し滲みの両立)
 			int prev = m_ink[idx];
@@ -620,6 +685,9 @@ void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 	if (startWidth > 500.0) startWidth = 500.0;
 	if (endWidth > 500.0) endWidth = 500.0;
 	m_inStroke = true;
+
+	// StampBrush が参照する乾き具合を更新（水分の付着量を決める）
+	m_strokeDryness = seg.dryness;
 
 	int dx = b.x - a.x;
 	int dy = b.y - a.y;

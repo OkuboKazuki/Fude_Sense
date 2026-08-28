@@ -115,6 +115,10 @@ private:
 	std::vector<int> m_deltaInk;
 	std::vector<uint32_t> m_pixelBuffer;
 
+	// 紙の水分場。にじみの駆動と、乾いた紙への墨の流入阻止に用いる
+	// (Win32/x86 構成のため 1 画素 1 バイトに抑える)
+	std::vector<uint8_t> m_wetField;
+
 	int m_activeMinX = INT_MAX;
 	int m_activeMinY = INT_MAX;
 	int m_activeMaxX = -1;
@@ -146,6 +150,7 @@ private:
 	double m_penAzimuthRad = 0.0;
 	bool m_isHovering = true;
 	double m_pressureFactor = 0.0;
+	double m_strokeDryness = 0.0; // 描画中セグメントの乾き具合 (StrokeSegment::dryness)
 
 	double m_lastDirX = 1.0;
 	double m_lastDirY = 0.0;
