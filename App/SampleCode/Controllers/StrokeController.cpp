@@ -110,7 +110,14 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 墨の描画（常に高品位な墨汁濃度255で描画）
-        gpuInk.DrawSegmentLinear(oldPaperPt, paperPt, startWidth, m_smoothedWidth, 255);
+        // 運筆方向 dirX/dirY と乾き具合 dryness は後続ステップで設定する
+        StrokeSegment seg;
+        seg.a = oldPaperPt;
+        seg.b = paperPt;
+        seg.startWidth = startWidth;
+        seg.endWidth = m_smoothedWidth;
+        seg.inkAlpha = 255;
+        gpuInk.DrawSegmentLinear(seg);
     } else {
         ResetStroke(gpuInk);
     }

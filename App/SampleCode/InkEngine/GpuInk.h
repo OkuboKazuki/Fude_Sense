@@ -32,6 +32,23 @@ struct KinematicsInfo
 	bool isHovering;
 };
 
+// 1 セグメント分の運筆パラメータ
+// 運筆方向・乾き具合など、今後の描画表現に必要な情報をまとめて受け渡す
+struct StrokeSegment
+{
+	POINT a = { 0, 0 };          // セグメント始点（半紙座標）
+	POINT b = { 0, 0 };          // セグメント終点（半紙座標）
+	double startWidth = 1.0;     // 始点の線幅 (px)
+	double endWidth = 1.0;       // 終点の線幅 (px)
+
+	// 運筆方向の単位ベクトル。(0, 0) の場合は a→b から自動算出する
+	double dirX = 0.0;
+	double dirY = 0.0;
+
+	double dryness = 0.0;        // 筆の乾き具合 (0.0: 潤沢 ~ 1.0: 渇筆)
+	uint8_t inkAlpha = 255;      // 墨汁濃度 (0 ~ 255)
+};
+
 // GPU ベースの墨汁インクシステム (Direct2D / Direct3D 11)
 class GpuInk
 {
@@ -45,6 +62,9 @@ public:
 	void Resize(int width, int height);
 
 	// ストローク操作
+	void DrawSegmentLinear(const StrokeSegment& seg);
+
+	// 旧シグネチャ（互換用ラッパー。内部で StrokeSegment を組み立てる）
 	void DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha = 255);
 	void DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha = 255);
 	void EndStroke();

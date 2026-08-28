@@ -605,11 +605,16 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	}
 }
 
-void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha)
+void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	EnsureInitialized();
 
+	POINT a = seg.a;
+	POINT b = seg.b;
+
+	double startWidth = seg.startWidth;
+	double endWidth = seg.endWidth;
 	if (std::isnan(startWidth) || startWidth < 0.5) startWidth = 1.0;
 	if (std::isnan(endWidth) || endWidth < 0.5) endWidth = 1.0;
 	if (startWidth > 500.0) startWidth = 500.0;
@@ -626,14 +631,24 @@ void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWi
 	double endRadius = endWidth / 2.0;
 	if (endRadius < 0.5) endRadius = 0.5;
 
-	double dirX = static_cast<double>(dx);
-	double dirY = static_cast<double>(dy);
-	double dirLen = std::sqrt(dirX * dirX + dirY * dirY);
-
-	if (dirLen >= 1.0)
+	// 運筆方向: 呼び出し側の指定を優先し、未指定 (0, 0) なら a→b から算出する
+	double dirLen = std::hypot(seg.dirX, seg.dirY);
+	if (dirLen >= 1e-6)
 	{
-		m_lastDirX = dirX / dirLen;
-		m_lastDirY = dirY / dirLen;
+		m_lastDirX = seg.dirX / dirLen;
+		m_lastDirY = seg.dirY / dirLen;
+	}
+	else
+	{
+		double dirX = static_cast<double>(dx);
+		double dirY = static_cast<double>(dy);
+		double segLen = std::sqrt(dirX * dirX + dirY * dirY);
+
+		if (segLen >= 1.0)
+		{
+			m_lastDirX = dirX / segLen;
+			m_lastDirY = dirY / segLen;
+		}
 	}
 
 	double minRadius = std::min(startRadius, endRadius);
@@ -649,10 +664,21 @@ void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWi
 		double py = static_cast<double>(a.y) + static_cast<double>(b.y - a.y) * t;
 
 		double currentRadius = startRadius * (1.0 - t) + endRadius * t;
-		StampBrush(px, py, currentRadius, inkAlpha);
+		StampBrush(px, py, currentRadius, seg.inkAlpha);
 	}
 
 	m_lastPt = b;
+}
+
+void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha)
+{
+	StrokeSegment seg;
+	seg.a = a;
+	seg.b = b;
+	seg.startWidth = startWidth;
+	seg.endWidth = endWidth;
+	seg.inkAlpha = inkAlpha;
+	DrawSegmentLinear(seg);
 }
 
 void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
