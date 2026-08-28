@@ -77,14 +77,23 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
         double moveAngle = m_lastMoveAngle;
 
-        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
-        double haraiPower = 2.7 + 0.5 * (std::min)(dist, 10.0);
-        double haraiFactor = std::pow(pressureFactor, haraiPower);
         double angleDiff = std::sin(event.azimuthRad - (moveAngle + 1.57079632679));
-        double angleFactor = 1.0 + 0.3 * std::abs(angleDiff);
+        double absAngleDiff = std::abs(angleDiff);
+
+        // 角度（腹方向/刃方向）に応じた払いの調整:
+        // 太くなる方向（腹側）で払った際にも綺麗に細く伸びるよう、角度に応じて払いの減衰指数を補正
+        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(dist, 10.0);
+        double haraiFactor = std::pow(pressureFactor, angleHaraiPower);
+
+        // 筆圧が抜ける（離筆に向かう）際は、ペンの腹の太さ影響が穂先の一点に自然収束する
+        double tipConvergence = std::pow(pressureFactor, 0.4);
+        double angleFactor = 1.0 + 0.3 * absAngleDiff * tipConvergence;
+        double effectiveTiltFactor = tiltFactor * tipConvergence;
+
+        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
 
         double baseMaxWidth = state.brush.GetBaseMaxWidth();
-        double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + tiltFactor * 0.6);
+        double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + effectiveTiltFactor * 0.6);
 
         double startWidth = m_smoothedWidth;
         if (!gpuInk.IsInStroke() || !m_strokeActive) {
@@ -92,8 +101,12 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             startWidth = rawWidth;
             m_strokeActive = true;
         } else {
-            const double alpha = 0.3;
-            m_smoothedWidth = m_smoothedWidth * (1.0 - alpha) + rawWidth * alpha;
+            // 線幅減少時（払い・跳ね）または高速移動時はアルファを大きくして即座に追従
+            double alphaWidth = 0.3;
+            if (rawWidth < m_smoothedWidth || dist > 3.0) {
+                alphaWidth = 0.8;
+            }
+            m_smoothedWidth = m_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
         }
 
         // 墨の描画（常に高品位な墨汁濃度255で描画）
