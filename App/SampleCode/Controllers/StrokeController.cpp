@@ -109,6 +109,12 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             m_smoothedWidth = m_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
         }
 
+        // 運筆に伴うインク・水分の物理消費
+        double stepDist = (dist > 0.0) ? dist : 1.0;
+        double widthRatio = m_smoothedWidth / 36.0;
+        double consumeAmount = stepDist * widthRatio * 0.00015;
+        state.ink.Consume(consumeAmount);
+
         // 墨の描画（常に高品位な墨汁濃度255で描画）
         // 運筆方向 dirX/dirY は後続ステップで設定する
         StrokeSegment seg;
