@@ -21,6 +21,14 @@ static constexpr int PROPAGATION_AMOUNT = 40;
 static constexpr int MAX_INK_PER_PIXEL = 450;
 static constexpr double MAX_SPEED_PX_PER_SEC = 2000.0;
 
+// スタンプ内の濃度プロファイル。
+// 中心側は平坦に飽和させ、外周 STAMP_RIM_RATIO の帯だけを急峻に落とす。
+// 内部に勾配を作ると全画素がにじみの送り出し側に回ってしまい
+// (平坦なら蒸発 -10/tick で済むところが流出 -40/tick になる)、
+// にじみが過剰になるため中心側は必ず平坦に保つこと。
+// 大きくすると筆跡の縁が柔らかくなる。
+static constexpr double STAMP_RIM_RATIO = 0.22;
+
 // 紙の水分場（m_wetField）のパラメータ
 // にじみは墨の濃さではなく水分が駆動する。乾いた紙には墨が流れ込まないため、
 // 水分を持たない画素（かすれの隙間など）は塗り潰されずに残る。
@@ -639,24 +647,30 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 			double normDistSq = (localX * localX) / (semiMajor * semiMajor) + (localY * localY) / (semiMinor * semiMinor);
 			if (normDistSq > 1.0) continue;
 
-			// 段階的インク加算 (Bの方法: 移動時の過剰滲み・ガタガタ防止と長押し滲みの両立)
+			// 墨の堆積は加算ではなく最大値で合成する。
+			//
+			// 1 画素は隣接するスタンプに 8 個前後重ねられるため、加算だと
+			// 重なり数のばらつきが周期的な濃淡（ビーズ化）になる。従来それが
+			// 見えなかったのは alpha=255 で MAX_INK_PER_PIXEL に飽和して
+			// 潰れていたからで、濃度を下げた瞬間に露出する。
+			// そこで 1 スタンプに飽和後の濃度を直接与え、最大値で合成する。
 			int prev = m_ink[idx];
 			double distRatio = std::sqrt(normDistSq);
-			double falloff = 1.0 - distRatio;
-			int inkAdd = static_cast<int>(static_cast<double>(alpha) * 0.5 * (0.4 + 0.6 * falloff));
-			if (inkAdd < 1) inkAdd = 1;
+			double coverage = (1.0 - distRatio) / STAMP_RIM_RATIO;
+			coverage = std::max(0.0, std::min(1.0, coverage));
+			int deposit = static_cast<int>(MAX_INK_PER_PIXEL * coverage
+				* (static_cast<double>(alpha) / 255.0));
+			deposit = std::max(1, std::min(MAX_INK_PER_PIXEL, deposit));
 
-			int updated = std::min(MAX_INK_PER_PIXEL, prev + inkAdd);
+			// にじみで薄まった画素は次のスタンプで再び濃度が戻るため、
+			// 長押しの溜まり（継続的な墨の供給）はそのまま成立する。
+			if (deposit <= prev) continue;
 
-			if (updated != prev)
-			{
-				stampChanged = true;
-				ExpandDirtyRect_NoLock(x, y);
-			}
-			m_ink[idx] = updated;
+			m_ink[idx] = deposit;
+			stampChanged = true;
+			ExpandDirtyRect_NoLock(x, y);
 
 			uint32_t pixelVal = CalculateInkPixel(m_ink[idx]);
-			if (pixels[idx] != pixelVal) stampChanged = true;
 			pixels[idx] = pixelVal;
 		}
 	}
