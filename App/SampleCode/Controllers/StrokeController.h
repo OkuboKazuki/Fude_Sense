@@ -23,5 +23,6 @@ private:
     POINT m_ptOld = { 0, 0 };
     double m_smoothedPressure = 0.0;
     double m_smoothedWidth = 0.0;
+    double m_lastMoveAngle = 0.0;
     bool m_strokeActive = false;
 };

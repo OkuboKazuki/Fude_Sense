@@ -456,19 +456,26 @@ KinematicsInfo GpuInk::GetKinematicsInfo()
 	info.lastEndAccel = m_lastEndAccel;
 	info.lastIsFlick = m_lastIsFlick;
 	info.currentZ = m_penZ;
-	info.currentAltitude = m_penAltitude;
-	info.currentAzimuth = m_penAzimuth;
+	info.currentAltitude = static_cast<int>(std::round(m_penAltitudeDegrees));
+	info.currentAzimuth = static_cast<int>(std::round(m_penAzimuthRad * (180.0 / 3.14159265358979323846)));
 	info.isHovering = m_isHovering;
 	return info;
 }
 
-void GpuInk::UpdatePenZ(int z, int altitude, int azimuth, bool hovering)
+void GpuInk::UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	m_penZ = z;
-	m_penAltitude = altitude;
-	m_penAzimuth = azimuth;
+	m_penAltitudeDegrees = (altitudeDegrees > 0.0) ? altitudeDegrees : 90.0;
+	m_penAzimuthRad = azimuthRad;
 	m_isHovering = hovering;
+}
+
+void GpuInk::UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees, bool hovering)
+{
+	double altDeg = (altitudeTenthDegrees > 0) ? (static_cast<double>(altitudeTenthDegrees) / 10.0) : 90.0;
+	double azRad = (static_cast<double>(azimuthTenthDegrees) / 10.0) * (3.14159265358979323846 / 180.0);
+	UpdatePen(z, altDeg, azRad, hovering);
 }
 
 void GpuInk::SetPressureFactor(double factor)
@@ -507,12 +514,12 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	uint32_t* pixels = m_pixelBuffer.data();
 
 	// ペンの傾き (altitude/azimuth) から毛束の接地形状（しなり・広がり）を推定
-	double altitudeDegrees = (m_penAltitude > 0) ? (static_cast<double>(m_penAltitude) / 10.0) : 90.0;
+	double altitudeDegrees = (m_penAltitudeDegrees > 0.0) ? m_penAltitudeDegrees : 90.0;
 	double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
 	if (tiltFactor < 0.0) tiltFactor = 0.0;
 	if (tiltFactor > 1.0) tiltFactor = 1.0;
 
-	double azimuthRad = (static_cast<double>(m_penAzimuth) / 10.0) * (3.14159265358979323846 / 180.0);
+	double azimuthRad = m_penAzimuthRad;
 	double angRad = azimuthRad + 1.57079632679; // 毛束の接地広がり方向
 
 	double rad = radius;

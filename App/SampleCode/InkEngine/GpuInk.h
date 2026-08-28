@@ -51,7 +51,8 @@ public:
 	bool IsInStroke() const { return m_inStroke; }
 
 	KinematicsInfo GetKinematicsInfo();
-	void UpdatePenZ(int z, int altitude, int azimuth, bool hovering);
+	void UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering);
+	void UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees, bool hovering);
 	void SetPressureFactor(double factor);
 
 	// 描画 (ウィンドウの WM_PAINT ハンドラ)
@@ -121,8 +122,8 @@ private:
 	bool m_lastIsFlick = false;
 
 	int m_penZ = 0;
-	int m_penAltitude = 0;
-	int m_penAzimuth = 0;
+	double m_penAltitudeDegrees = 90.0;
+	double m_penAzimuthRad = 0.0;
 	bool m_isHovering = true;
 	double m_pressureFactor = 0.0;
 

@@ -571,8 +571,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		if (!AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk))
 		{
-			// マウスによる半紙への運筆描画
-			if (RenderUtils::PtIn(g_appState.ui.rPaper, pt))
+			// ペン (Wintab) での描画中以外のみマウスによる運筆描画を許可
+			if (!g_gpuInk.IsInStroke() && RenderUtils::PtIn(g_appState.ui.rPaper, pt))
 			{
 				SetCapture(hWnd);
 				s_isMouseDrawing = true;
@@ -588,10 +588,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		AppController::OnMouseMove(hWnd, pt, wParam, g_appState);
 
-		if (s_isMouseDrawing && (wParam & MK_LBUTTON))
+		// ペン描画中はマウスイベントによる描画を完全に無視（等間隔のイボ・定期割り込みを防止）
+		if (!g_gpuInk.IsInStroke() && s_isMouseDrawing && (wParam & MK_LBUTTON))
 		{
-			PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, true);
-			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
+			if (RenderUtils::PtIn(g_appState.ui.rPaper, pt))
+			{
+				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, true);
+				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
+			}
 		}
 		break;
 	}
@@ -604,9 +608,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (s_isMouseDrawing)
 		{
 			s_isMouseDrawing = false;
-			PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, false);
-			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
-			g_strokeCtrl.ResetStroke(g_gpuInk);
+			if (!g_gpuInk.IsInStroke())
+			{
+				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, false);
+				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
+				g_strokeCtrl.ResetStroke(g_gpuInk);
+			}
 			ReleaseCapture();
 		}
 		InvalidateRect(hWnd, NULL, FALSE);
