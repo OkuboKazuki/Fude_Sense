@@ -155,6 +155,10 @@ private:
 	double m_lastDirX = 1.0;
 	double m_lastDirY = 0.0;
 
+	// かすれの毛束レーンを測る運筆座標系の原点（描画中セグメントの始点）
+	double m_segOriginX = 0.0;
+	double m_segOriginY = 0.0;
+
 	std::thread m_propagationThread;
 	std::atomic<bool> m_runPropagation{ false };
 };

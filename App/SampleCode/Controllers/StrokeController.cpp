@@ -116,12 +116,16 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         state.ink.Consume(consumeAmount);
 
         // 墨の描画（常に高品位な墨汁濃度255で描画）
-        // 運筆方向 dirX/dirY は後続ステップで設定する
+        // 運筆方向はセグメントの a→b ではなく平滑化済みの m_lastMoveAngle を渡す。
+        // かすれの筋はこの方向を軸に並ぶため、止めや微動でセグメント長が
+        // ほぼ 0 になっても向きが保たれる必要がある（a→b では向きが暴れる）。
         StrokeSegment seg;
         seg.a = oldPaperPt;
         seg.b = paperPt;
         seg.startWidth = startWidth;
         seg.endWidth = m_smoothedWidth;
+        seg.dirX = std::cos(m_lastMoveAngle);
+        seg.dirY = std::sin(m_lastMoveAngle);
         seg.dryness = state.ink.GetDryness();
         seg.inkAlpha = 255;
         gpuInk.DrawSegmentLinear(seg);

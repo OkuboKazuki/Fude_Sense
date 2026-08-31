@@ -38,6 +38,82 @@ static constexpr int WET_DRY_RATE = 1;       // 1 ティックあたりの乾燥
 static constexpr int WET_SPREAD_LOSS = 16;   // 隣接画素へ水を運ぶ際の減衰量
 static constexpr double WET_MARGIN_PX = 2.0; // 墨の接地範囲より外側に水分を広げる幅
 
+// かすれ（渇筆）のパラメータ
+//
+// かすれは「濃度を下げる」のではなく「墨を置かない画素を決める」ことで作る。
+// 置くと決めた画素には従来どおり飽和濃度を与え、置かない画素は墨も水分も
+// 受け取らない (m_ink = 0 のまま)。水を置かないので、後続のにじみでも
+// 白い隙間が塗り潰されることはない。判定は次の 1 本の式に集約される。
+//
+//   毛束マスク(u) + 紙目マスク(x, y) > dryness * KASURE_THRESHOLD_SCALE
+//
+// u は運筆方向に垂直な距離。毛束マスクを u だけの関数にするのが要で、
+// これにより同じ画素を覆う何枚ものスタンプが必ず同じ判定を返す。
+// スタンプ中心からの相対座標で測ると 1 画素が 8 枚前後のスタンプから
+// 別々の判定を受け、最大値合成で「全スタンプが隙間と認めた点」だけが
+// 生き残るため、筋ではなく孤立したドットになってしまう。
+static constexpr double KASURE_LANE_WIDTH_PX = 2.6;    // 毛束 1 本ぶんの幅 (px)
+static constexpr double KASURE_GRAIN_SCALE_PX = 2.2;   // 紙目の粒の大きさ (px)
+static constexpr double KASURE_BRISTLE_WEIGHT = 0.62;  // 毛束マスクの寄与
+static constexpr double KASURE_GRAIN_WEIGHT = 0.38;    // 紙目マスクの寄与 (合計 1.0)
+static constexpr double KASURE_THRESHOLD_SCALE = 0.85; // 乾き切っても残る墨の余地
+
+static inline double KasureHash(uint32_t h)
+{
+	h ^= h >> 15;
+	h *= 2246822519u;
+	h ^= h >> 13;
+	h *= 3266489917u;
+	h ^= h >> 16;
+	return static_cast<double>(h & 0xFFFFFFu) / static_cast<double>(0xFFFFFFu);
+}
+
+static inline double KasureFade(double t)
+{
+	return t * t * (3.0 - 2.0 * t);
+}
+
+// 毛束マスク: 運筆方向に垂直な距離 u だけで決まる 1 次元ノイズ (0.0 ～ 1.0)。
+// u 方向にしか変化しないため、値の等しい帯が運筆方向へ真っ直ぐ伸びて筋になる。
+static inline double BristleMask(double u)
+{
+	double t = u / KASURE_LANE_WIDTH_PX;
+	double base = std::floor(t);
+	int i = static_cast<int>(base);
+	double f = KasureFade(t - base);
+	double a = KasureHash(static_cast<uint32_t>(i) * 2654435761u);
+	double b = KasureHash(static_cast<uint32_t>(i + 1) * 2654435761u);
+	return a + (b - a) * f;
+}
+
+// 紙目マスク: 紙座標に固定された 2 次元ノイズ (0.0 ～ 1.0)。
+// 筆にもストロークにも依存しないので、重ね書きしても同じ場所が同じようにざらつく。
+static inline double PaperGrainMask(int x, int y)
+{
+	double gx = static_cast<double>(x) / KASURE_GRAIN_SCALE_PX;
+	double gy = static_cast<double>(y) / KASURE_GRAIN_SCALE_PX;
+	double bx = std::floor(gx);
+	double by = std::floor(gy);
+	int ix = static_cast<int>(bx);
+	int iy = static_cast<int>(by);
+	double fx = KasureFade(gx - bx);
+	double fy = KasureFade(gy - by);
+
+	auto corner = [](int cx, int cy) {
+		return KasureHash(static_cast<uint32_t>(cx) * 374761393u
+			+ static_cast<uint32_t>(cy) * 668265263u);
+	};
+
+	double n00 = corner(ix, iy);
+	double n10 = corner(ix + 1, iy);
+	double n01 = corner(ix, iy + 1);
+	double n11 = corner(ix + 1, iy + 1);
+
+	double nx0 = n00 + (n10 - n00) * fx;
+	double nx1 = n01 + (n11 - n01) * fx;
+	return nx0 + (nx1 - nx0) * fy;
+}
+
 static inline uint32_t CalculateInkPixel(int inkAmount)
 {
 	if (inkAmount <= 0) return 0xFFFFFFFF; // 白キャンバス（インクなし）
@@ -607,6 +683,15 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	double drynessClamped = std::max(0.0, std::min(1.0, m_strokeDryness));
 	int wetDeposit = static_cast<int>(WET_MAX * (1.0 - drynessClamped));
 
+	// かすれの判定基準。乾くほど基準が上がり、墨を置ける画素が減る。
+	// 潤沢な筆 (dryness = 0) では基準が 0 になり判定そのものを行わない。
+	double kasureBar = drynessClamped * KASURE_THRESHOLD_SCALE;
+	bool kasureActive = (kasureBar > 0.0);
+
+	// 運筆座標系の横軸。進行方向に垂直な単位ベクトル。
+	double lateralX = -m_lastDirY;
+	double lateralY = m_lastDirX;
+
 	int ext = static_cast<int>(std::ceil(wetSemiMajor));
 	int icx = static_cast<int>(std::lround(cx));
 	int icy = static_cast<int>(std::lround(cy));
@@ -633,15 +718,27 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 
 			size_t idx = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
 
-			// 水分の付着（墨より一回り広い範囲）。乾いていく一方なので最大値を採る
+			// 墨の楕円は水分の楕円に必ず含まれるので、外れた時点で以降は不要
 			double wetNormDistSq = (localX * localX) / (wetSemiMajor * wetSemiMajor)
 				+ (localY * localY) / (wetSemiMinor * wetSemiMinor);
-			if (wetNormDistSq <= 1.0 && idx < m_wetField.size())
+			if (wetNormDistSq > 1.0) continue;
+
+			// かすれ判定。毛が触れない画素は墨も水分も置かずに素通りする。
+			// 横方向の距離 u はスタンプ中心ではなくセグメント始点から測るため、
+			// 同じ画素を覆うすべてのスタンプが同一の u ＝ 同一の判定を返す。
+			if (kasureActive)
 			{
-				if (m_wetField[idx] < wetDeposit)
-				{
-					m_wetField[idx] = static_cast<uint8_t>(wetDeposit);
-				}
+				double u = (static_cast<double>(x) - m_segOriginX) * lateralX
+					+ (static_cast<double>(y) - m_segOriginY) * lateralY;
+				double density = KASURE_BRISTLE_WEIGHT * BristleMask(u)
+					+ KASURE_GRAIN_WEIGHT * PaperGrainMask(x, y);
+				if (density <= kasureBar) continue;
+			}
+
+			// 水分の付着（墨より一回り広い範囲）。乾いていく一方なので最大値を採る
+			if (idx < m_wetField.size() && m_wetField[idx] < wetDeposit)
+			{
+				m_wetField[idx] = static_cast<uint8_t>(wetDeposit);
 			}
 
 			double normDistSq = (localX * localX) / (semiMajor * semiMajor) + (localY * localY) / (semiMinor * semiMinor);
@@ -732,6 +829,12 @@ void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 			m_lastDirY = dirY / segLen;
 		}
 	}
+
+	// かすれの毛束レーンを固定する原点。セグメント始点は前セグメントの終点と
+	// 一致し、その終点は前セグメントの中心線上にあるため、原点を乗り換えても
+	// 横方向の距離 u は連続する＝筋がストローク全体で途切れない。
+	m_segOriginX = static_cast<double>(a.x);
+	m_segOriginY = static_cast<double>(a.y);
 
 	double minRadius = std::min(startRadius, endRadius);
 	double maxRadius = std::max(startRadius, endRadius);
