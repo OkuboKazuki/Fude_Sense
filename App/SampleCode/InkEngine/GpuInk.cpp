@@ -35,7 +35,11 @@ static constexpr double STAMP_RIM_RATIO = 0.22;
 static constexpr int WET_MAX = 255;          // 画素あたりの最大水分量
 static constexpr int WET_THRESHOLD = 8;      // これ以下は「乾いた紙」として扱う
 static constexpr int WET_DRY_RATE = 1;       // 1 ティックあたりの乾燥量
-static constexpr int WET_SPREAD_LOSS = 16;   // 隣接画素へ水を運ぶ際の減衰量
+// 隣接画素へ水を運ぶ際の減衰量。にじみの到達距離を決めるのはこの値である。
+// 水は 1 画素進むごとに本値だけ減り、WET_THRESHOLD を切ると止まる。潤沢な筆
+// (wet = WET_MAX) からの到達ホップ数は (WET_MAX - WET_THRESHOLD) / 本値 - 1 で、
+// 40 なら約 5px。墨は濡れた画素にしか進めないので、これがにじみ半径の上限になる。
+static constexpr int WET_SPREAD_LOSS = 40;
 static constexpr double WET_MARGIN_PX = 2.0; // 墨の接地範囲より外側に水分を広げる幅
 
 // かすれ（渇筆）のパラメータ
