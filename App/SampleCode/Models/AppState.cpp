@@ -145,8 +145,8 @@ void AppState::Layout(int w, int h) {
     ui.rClearAllBtn   = { stoneX, stoneY + stoneH + 68, stoneX + stoneW, stoneY + stoneH + 108 };
 
     // 4. 全消し確認モーダルダイアログ
-    int modalW = 420;
-    int modalH = 200;
+    int modalW = 660;
+    int modalH = 260;
     ui.rClearModalBox = { w / 2 - modalW / 2, h / 2 - modalH / 2, w / 2 + modalW / 2, h / 2 + modalH / 2 };
     int btnW = 140;
     int btnH = 40;

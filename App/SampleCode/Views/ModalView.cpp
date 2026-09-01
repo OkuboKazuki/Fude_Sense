@@ -17,16 +17,29 @@ void ModalView::DrawClearConfirm(HDC dc, int width, int height, const AppState& 
     // モーダルダイアログカード
     Box(dc, ui.rClearModalBox, RGB(28, 30, 36), RGB(64, 70, 84), 2, 10);
 
-    // タイトル
-    HFONT fTitle = CreateCustomFont(18, FW_BOLD);
-    RECT rT = { ui.rClearModalBox.left + 24, ui.rClearModalBox.top + 20, ui.rClearModalBox.right - 24, ui.rClearModalBox.top + 52 };
-    DrawTextCustom(dc, rT, L"すべての筆跡を消しますか？", fTitle, RGB(245, 248, 252));
+    // タイトル（中央揃え）
+    HFONT fTitle = CreateCustomFont(32, FW_BOLD);
+    RECT rT = { ui.rClearModalBox.left + 24, ui.rClearModalBox.top + 18, ui.rClearModalBox.right - 24, ui.rClearModalBox.top + 62 };
+    Center(dc, rT, L"すべての筆跡を消しますか？", fTitle, RGB(245, 248, 252));
     DeleteObject(fTitle);
 
-    // 説明文
-    HFONT fDesc = CreateCustomFont(13, FW_NORMAL);
-    RECT rD = { ui.rClearModalBox.left + 24, ui.rClearModalBox.top + 58, ui.rClearModalBox.right - 24, ui.rClearModalBox.top + 115 };
-    DrawTextW(dc, L"現在の作品に書かれている筆跡をすべて消します。\nこの操作は元に戻すことができません。", -1, &rD, DT_LEFT | DT_TOP | DT_NOPREFIX);
+    // 説明文（フォントを適用し、モーダル幅で折り返してボタン直前まで領域を確保）
+    HFONT fDesc = CreateCustomFont(30, FW_NORMAL);
+    const wchar_t* desc = L"現在の作品に書かれている筆跡をすべて消します。\nこの操作は元に戻すことができません。";
+    const UINT descFlags = DT_CENTER | DT_TOP | DT_WORDBREAK | DT_NOPREFIX;
+    RECT rD = { ui.rClearModalBox.left + 24, ui.rClearModalBox.top + 74,
+                ui.rClearModalBox.right - 24, ui.rModalCancelBtn.top - 12 };
+
+    // 折り返し後の実際の高さを測り、領域内で上下中央に寄せる
+    HFONT oldDesc = (HFONT)SelectObject(dc, fDesc);
+    RECT rCalc = rD;
+    DrawTextW(dc, desc, -1, &rCalc, descFlags | DT_CALCRECT);
+    SelectObject(dc, oldDesc);
+    int textH = rCalc.bottom - rCalc.top;
+    int areaH = rD.bottom - rD.top;
+    if (textH < areaH) rD.top += (areaH - textH) / 2;
+
+    DrawTextCustom(dc, rD, desc, fDesc, RGB(190, 196, 208), descFlags);
     DeleteObject(fDesc);
 
     // キャンセルボタン
