@@ -7,12 +7,16 @@
 StrokeController::StrokeController() {
 }
 
-void StrokeController::ResetStroke(GpuInk& gpuInk) {
+void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     m_strokeActive = false;
     m_smoothedPressure = 0.0;
     m_smoothedWidth = 0.0;
+    m_lastTime = 0;
     if (gpuInk.IsInStroke()) {
         gpuInk.EndStroke();
+    }
+    if (pState) {
+        pState->trajectory.OnStrokeEnd();
     }
 }
 
@@ -24,7 +28,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // 運筆を受け付けない。接地したままのペンのパケットで墨が落ちるのを防ぐ。
     if (state.ui.suppressPenUntilLift) {
         if (event.pressure > 0.0) {
-            ResetStroke(gpuInk);
+            ResetStroke(gpuInk, &state);
             m_ptOld = { event.x, event.y };
             InvalidateRect(hWnd, NULL, FALSE);
             return;
@@ -70,6 +74,17 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             oldPaperPt = paperPt;
             dist = 0.0;
         }
+
+        // 運筆速度の計算 (px/s)
+        DWORD curTime = (event.time != 0) ? event.time : GetTickCount();
+        double speed = 0.0;
+        if (m_lastTime != 0 && curTime > m_lastTime) {
+            double dtSec = static_cast<double>(curTime - m_lastTime) / 1000.0;
+            if (dtSec > 0.0001) {
+                speed = dist / dtSec;
+            }
+        }
+        m_lastTime = curTime;
 
         // 筆の硬さ（感度補正）を筆圧に適用
         double hardness = state.brush.hardness;
@@ -122,10 +137,15 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 運筆に伴うインク・水分の物理消費
+        // アーカイブ記録より先に行う。直後の seg.dryness はこの消費を織り込んだ
+        // 値を読むため、順序を入れ替えるとかすれが1セグメント分遅れる。
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
         double consumeAmount = stepDist * widthRatio * 0.00015;
         state.ink.Consume(consumeAmount);
+
+        // 運筆データアーカイブへ記録
+        state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed);
 
         // 墨の描画（常に高品位な墨汁濃度255で描画）
         // 運筆方向はセグメントの a→b ではなく平滑化済みの m_lastMoveAngle を渡す。
@@ -142,7 +162,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         seg.inkAlpha = 255;
         gpuInk.DrawSegmentLinear(seg);
     } else {
-        ResetStroke(gpuInk);
+        ResetStroke(gpuInk, &state);
     }
 
     m_ptOld = clientPt;

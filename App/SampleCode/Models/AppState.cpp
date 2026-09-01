@@ -15,25 +15,26 @@ void AppState::Layout(int w, int h) {
     if (!ui.isSubPanelOpen) {
         ui.rTbNavToggle = { 16, 16, 76, 56 };
         ui.rSub = { 0, 0, 0, 0 };
-        ui.rTbBrush = ui.rTbPaper = ui.rTbSave = ui.rTbOtehon = { 0, 0, 0, 0 };
+        ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = { 0, 0, 0, 0 };
     } else {
-        int menuW = 390;
-        int menuH = (std::min)(h - statusH - 32, 590);
-        if (menuH < 420) menuH = 420;
+        int menuW = 410;
+        int menuH = (std::min)(h - statusH - 32, 640);
+        if (menuH < 460) menuH = 460;
         ui.rSub = { 16, 16, 16 + menuW, 16 + menuH };
 
-        ui.rTbNavToggle = { ui.rSub.left + 10, ui.rSub.top + 10, ui.rSub.left + 62, ui.rSub.top + 48 };
+        ui.rTbNavToggle = { ui.rSub.left + 10, ui.rSub.top + 10, ui.rSub.left + 54, ui.rSub.top + 48 };
 
-        int tabStartX = ui.rTbNavToggle.right + 8;
+        int tabStartX = ui.rTbNavToggle.right + 6;
         int tabAvailW = ui.rSub.right - 10 - tabStartX;
-        int tabW = (tabAvailW - 3 * 6) / 4;
+        int tabW = (tabAvailW - 4 * 5) / 5;
         int tabH = 38;
         int tabY = ui.rSub.top + 10;
 
-        ui.rTbBrush  = { tabStartX + 0 * (tabW + 6), tabY, tabStartX + 0 * (tabW + 6) + tabW, tabY + tabH };
-        ui.rTbPaper  = { tabStartX + 1 * (tabW + 6), tabY, tabStartX + 1 * (tabW + 6) + tabW, tabY + tabH };
-        ui.rTbSave   = { tabStartX + 2 * (tabW + 6), tabY, tabStartX + 2 * (tabW + 6) + tabW, tabY + tabH };
-        ui.rTbOtehon = { tabStartX + 3 * (tabW + 6), tabY, tabStartX + 3 * (tabW + 6) + tabW, tabY + tabH };
+        ui.rTbBrush    = { tabStartX + 0 * (tabW + 5), tabY, tabStartX + 0 * (tabW + 5) + tabW, tabY + tabH };
+        ui.rTbPaper    = { tabStartX + 1 * (tabW + 5), tabY, tabStartX + 1 * (tabW + 5) + tabW, tabY + tabH };
+        ui.rTbAnalysis = { tabStartX + 2 * (tabW + 5), tabY, tabStartX + 2 * (tabW + 5) + tabW, tabY + tabH };
+        ui.rTbSave     = { tabStartX + 3 * (tabW + 5), tabY, tabStartX + 3 * (tabW + 5) + tabW, tabY + tabH };
+        ui.rTbOtehon   = { tabStartX + 4 * (tabW + 5), tabY, tabStartX + 4 * (tabW + 5) + tabW, tabY + tabH };
 
         int topOff = ui.rSub.top + 64;
 
@@ -73,9 +74,22 @@ void AppState::Layout(int w, int h) {
             ui.rColorBtn[i] = { ui.rSub.left + 14 + i * (colBtnW + 6), colorY, ui.rSub.left + 14 + i * (colBtnW + 6) + colBtnW, colorY + 36 };
         }
 
+        // 解析（グラフ）タブ
+        int availSubH = ui.rSub.bottom - topOff - 14;
+        int metricsH = 86;
+        int compassH = 160;
+        int graphH = (std::max)(150, availSubH - metricsH - compassH - 24);
+
+        ui.rAnalysisMetricsBox = { ui.rSub.left + 14, topOff, ui.rSub.right - 14, topOff + metricsH };
+        ui.rAnalysisCompassBox = { ui.rSub.left + 14, ui.rAnalysisMetricsBox.bottom + 10, ui.rSub.right - 14, ui.rAnalysisMetricsBox.bottom + 10 + compassH };
+        ui.rAnalysisGraphBox   = { ui.rSub.left + 14, ui.rAnalysisCompassBox.bottom + 10, ui.rSub.right - 14, ui.rAnalysisCompassBox.bottom + 10 + graphH };
+
         // 保存タブ
-        ui.rSaveBtnPng  = { ui.rSub.left + 16, topOff + 16, ui.rSub.right - 16, topOff + 76 };
-        ui.rSaveBtnClip = { ui.rSub.left + 16, topOff + 90, ui.rSub.right - 16, topOff + 150 };
+        int btnH = 58;
+        ui.rSaveBtnPng  = { ui.rSub.left + 16, topOff + 10, ui.rSub.right - 16, topOff + 10 + btnH };
+        ui.rSaveBtnClip = { ui.rSub.left + 16, ui.rSaveBtnPng.bottom + 10, ui.rSub.right - 16, ui.rSaveBtnPng.bottom + 10 + btnH };
+        ui.rSaveBtnJson = { ui.rSub.left + 16, ui.rSaveBtnClip.bottom + 16, ui.rSub.right - 16, ui.rSaveBtnClip.bottom + 16 + btnH };
+        ui.rSaveBtnCsv  = { ui.rSub.left + 16, ui.rSaveBtnJson.bottom + 10, ui.rSub.right - 16, ui.rSaveBtnJson.bottom + 10 + btnH };
 
         // お手本タブ
         ui.rOtehonToggleBtn = { ui.rSub.left + 16, topOff, ui.rSub.right - 16, topOff + 48 };

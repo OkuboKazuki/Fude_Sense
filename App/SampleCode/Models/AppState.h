@@ -63,6 +63,7 @@ struct OtehonModel {
 };
 
 #include "InkModel.h"
+#include "TrajectoryModel.h"
 
 // UI・レイアウト状態
 struct UIState {
@@ -89,7 +90,7 @@ struct UIState {
     RECT rCanvasArea{};
     RECT rRight{};
     RECT rStatus{};
-    RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbSave{}, rTbOtehon{};
+    RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
     RECT rPaper{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
     RECT rGridTile[9]{};
@@ -97,7 +98,8 @@ struct UIState {
     RECT rPaperTile[4]{};
     RECT rOtehonTile[8]{};
     RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
-    RECT rSaveBtnPng{}, rSaveBtnClip{};
+    RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
+    RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};
     RECT rInkStoneLarge{}, rInkRefillBtn{}, rClearAllBtn{};
     RECT rHardnessTrack{};
     RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
@@ -110,6 +112,7 @@ public:
     PaperModel paper;
     OtehonModel otehon;
     InkModel ink;
+    TrajectorySession trajectory;
     UIState ui;
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
@@ -120,3 +123,4 @@ public:
         ui.saveFeedbackTime = GetTickCount();
     }
 };
+

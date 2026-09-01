@@ -52,6 +52,7 @@ enum class TbButton {
     NavToggle,
     Brush,
     Paper,
+    Analysis,
     Save,
     Otehon,
     InkRefill,
@@ -62,6 +63,7 @@ enum class TbButton {
 enum class LeftTab {
     Brush,
     Paper,
+    Analysis,
     Save,
     Otehon
 };

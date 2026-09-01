@@ -17,10 +17,11 @@ public:
     void ProcessPenEvent(HWND hWnd, const PenInputEvent& event, AppState& state, GpuInk& gpuInk);
 
     // ストロークのリセット / ペンが離れたときの処理
-    void ResetStroke(GpuInk& gpuInk);
+    void ResetStroke(GpuInk& gpuInk, AppState* pState = nullptr);
 
 private:
     POINT m_ptOld = { 0, 0 };
+    DWORD m_lastTime = 0;
     double m_smoothedPressure = 0.0;
     double m_smoothedWidth = 0.0;
     double m_lastMoveAngle = 0.0;

@@ -573,7 +573,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			// UI を操作したクリックは運筆ではない。進行中のストロークがあれば
 			// ここで打ち切る（運筆ロック解除はペンが紙から離れたときに行う）。
-			g_strokeCtrl.ResetStroke(g_gpuInk);
+			g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 		}
 		else
 		{
@@ -621,7 +621,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, false);
 				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
-				g_strokeCtrl.ResetStroke(g_gpuInk);
+				g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			}
 			ReleaseCapture();
 		}
@@ -669,7 +669,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		bool inRange = (lParam != 0);
 		if (!inRange)
 		{
-			g_strokeCtrl.ResetStroke(g_gpuInk);
+			g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
 			// ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
 			g_appState.ui.suppressPenUntilLift = false;
