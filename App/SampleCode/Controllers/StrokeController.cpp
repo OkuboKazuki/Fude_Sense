@@ -20,6 +20,18 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // ペンのZ高度・傾き・方位角情報をGPU墨汁エンジンへ通知
     gpuInk.UpdatePen(event.z, event.altitudeDegrees, event.azimuthRad, event.pressure <= 0.0);
 
+    // UI操作（半紙に重なる全消しモーダル等）の直後は、ペンが紙から一度離れるまで
+    // 運筆を受け付けない。接地したままのペンのパケットで墨が落ちるのを防ぐ。
+    if (state.ui.suppressPenUntilLift) {
+        if (event.pressure > 0.0) {
+            ResetStroke(gpuInk);
+            m_ptOld = { event.x, event.y };
+            InvalidateRect(hWnd, NULL, FALSE);
+            return;
+        }
+        state.ui.suppressPenUntilLift = false;
+    }
+
     // 筆圧のスムージング（急激な変化を抑制して滑らかな筆運びにする）
     double rawPrs = event.pressure;
     if (rawPrs > 0.0) {

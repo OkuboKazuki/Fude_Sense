@@ -569,8 +569,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_LBUTTONDOWN:
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-		if (!AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk))
+		if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk))
 		{
+			// UI を操作したクリックは運筆ではない。進行中のストロークがあれば
+			// ここで打ち切る（運筆ロック解除はペンが紙から離れたときに行う）。
+			g_strokeCtrl.ResetStroke(g_gpuInk);
+		}
+		else
+		{
+			// 半紙上での新しい押下なので運筆ロックを解除（マウス操作時の解除経路）
+			g_appState.ui.suppressPenUntilLift = false;
+
 			// ペン (Wintab) での描画中以外のみマウスによる運筆描画を許可
 			if (!g_gpuInk.IsInStroke() && RenderUtils::PtIn(g_appState.ui.rPaper, pt))
 			{
@@ -662,6 +671,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			g_strokeCtrl.ResetStroke(g_gpuInk);
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
+			// ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
+			g_appState.ui.suppressPenUntilLift = false;
 		}
 		if (g_hMonitorWnd && IsWindow(g_hMonitorWnd)) InvalidateRect(g_hMonitorWnd, NULL, FALSE);
 		break;

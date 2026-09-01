@@ -389,6 +389,11 @@ void GpuInk::EnsureInitialized()
 void GpuInk::Clear()
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
+
+	// 運筆の途中で全消しされた場合でも、前のストロークの続きとして
+	// 描画が再開されないようストローク状態を終了させる。
+	m_inStroke = false;
+
 	if (m_width > 0 && m_height > 0)
 	{
 		size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);

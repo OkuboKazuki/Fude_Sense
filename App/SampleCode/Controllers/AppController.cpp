@@ -8,6 +8,9 @@ using namespace RenderUtils;
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.ui.showClearConfirm = false;
+    // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
+    // ペンが紙から離れるまで運筆入力をロックする。
+    state.ui.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -30,6 +33,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
 
     // 1. 全消し確認モーダル表示中のクリック
     if (ui.showClearConfirm) {
+        // モーダルは半紙の上に重なっている。どのボタンを押した場合でも、
+        // モーダルを閉じた直後に接地したままのペンが運筆を始めないようロックする。
+        ui.suppressPenUntilLift = true;
         if (PtIn(ui.rModalClearBtn, pt)) {
             ClearAllInk(hWnd, state, gpuInk);
             return true;

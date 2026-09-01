@@ -71,6 +71,12 @@ struct UIState {
     bool showClearConfirm = false;
     int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
 
+    // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
+    // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
+    // 紙へ触れたままだと、そのまま墨が落ちてしまう。ペンが紙から離れる
+    // （筆圧0 / 圏外）まで運筆入力を無視する。
+    bool suppressPenUntilLift = false;
+
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
     int hoverInkStone = 0;
