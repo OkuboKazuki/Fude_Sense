@@ -106,8 +106,13 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
 
     // 傾きオフセット計算（高度90°で中心、0°で外周）
     double tiltNorm = (90.0 - alt) / 90.0;
-    int tipX = centerX + static_cast<int>(radius * tiltNorm * std::cos(azmRad));
-    int tipY = centerY - static_cast<int>(radius * tiltNorm * std::sin(azmRad)); // 上方向がY-
+
+    // 方位角は Wintab の方位系（0°が上/奥、時計回りに増加）。画面の数学系
+    // （0°が右、反時計回り）とは軸が入れ替わっているため、X に sin、Y に cos を取る。
+    // cos/sin をそのまま使うと 45°/225° の対角線を軸にした鏡像になり、
+    // 第2・第4象限だけが入れ替わって見える。
+    int tipX = centerX + static_cast<int>(radius * tiltNorm * std::sin(azmRad));
+    int tipY = centerY - static_cast<int>(radius * tiltNorm * std::cos(azmRad)); // 上方向がY-
 
     // 筆軸ライン（中心からペン先へ）
     HPEN linePen = CreatePen(PS_SOLID, 2, RGB(80, 200, 255));
