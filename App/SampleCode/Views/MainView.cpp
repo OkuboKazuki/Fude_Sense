@@ -5,6 +5,7 @@
 #include "FloatingMenuView.h"
 #include "InkStoneView.h"
 #include "ModalView.h"
+#include "CalibrationView.h"
 #include "StatusBarView.h"
 
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
@@ -39,6 +40,9 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
     // 8. 全消し確認モーダルオーバーレイ
     ModalView::DrawClearConfirm(memDC, width, height, state);
+
+    // 9. 筆圧キャリブレーション（ガイダンスまたは結果モーダル）
+    CalibrationView::Draw(memDC, width, height, state);
 
     // 画面へ一括転送 (フリッカーフリー)
     BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);

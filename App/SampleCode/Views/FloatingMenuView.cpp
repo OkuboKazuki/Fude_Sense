@@ -51,6 +51,13 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         RECT rMaxLab = { ui.rHardnessTrack.right - 80, ui.rHardnessTrack.bottom + 6, ui.rHardnessTrack.right, ui.rHardnessTrack.bottom + 22 };
         DrawTextCustom(dc, rMaxLab, L"2.0 (極硬)", fSub, RGB(140, 145, 155), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
         DeleteObject(fSub);
+
+        // 🎯 筆圧キャリブレーション起動ボタン
+        bool hovCalib = (ui.hoverSub == 4);
+        Box(dc, ui.rSubCalibBtn, hovCalib ? RGB(45, 80, 130) : RGB(32, 48, 75), hovCalib ? RGB(85, 150, 235) : RGB(55, 95, 155), 1, 6);
+        HFONT fCalibBtn = CreateCustomFont(13, FW_BOLD);
+        Center(dc, ui.rSubCalibBtn, L"🎯 筆圧キャリブレーション (自動調整)", fCalibBtn, hovCalib ? RGB(255, 255, 255) : RGB(220, 235, 255));
+        DeleteObject(fCalibBtn);
     }
     else if (ui.leftTab == LeftTab::Paper) {
         const wchar_t* pTitles[4] = { L"半紙", L"条幅", L"色紙", L"短冊" };

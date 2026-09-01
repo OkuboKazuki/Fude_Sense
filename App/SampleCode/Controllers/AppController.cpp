@@ -48,6 +48,36 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         return true;
     }
 
+    // 1.5 筆圧キャリブレーション結果モーダル表示中のクリック
+    if (state.calibration.IsResult()) {
+        ui.suppressPenUntilLift = true;
+        if (PtIn(ui.rCalibApplyBtn, pt)) {
+            state.brush.hardness = state.calibration.GetResult().recommendedHardness;
+            state.calibration.Reset();
+            gpuInk.Clear();
+            state.trajectory.Clear();
+            state.ink.Refill();
+            state.SetSaveFeedback(L"✓ 筆の硬さを自動調整しました");
+            InvalidateRect(hWnd, NULL, FALSE);
+            return true;
+        } else if (PtIn(ui.rCalibRetryBtn, pt)) {
+            gpuInk.Clear();
+            state.trajectory.Clear();
+            state.ink.Refill();
+            state.calibration.Start();
+            InvalidateRect(hWnd, NULL, FALSE);
+            return true;
+        } else if (PtIn(ui.rCalibCloseBtn, pt) || !PtIn(ui.rCalibModalBox, pt)) {
+            state.calibration.Reset();
+            gpuInk.Clear();
+            state.trajectory.Clear();
+            state.ink.Refill();
+            InvalidateRect(hWnd, NULL, FALSE);
+            return true;
+        }
+        return true;
+    }
+
     // 2. 左上トグルボタン「<<<」「>>>」
     if (PtIn(ui.rTbNavToggle, pt)) {
         ui.isSubPanelOpen = !ui.isSubPanelOpen;
@@ -111,6 +141,14 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     state.brush.type = Brush::Large;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     InvalidateRect(hWnd, &ui.rStatus, FALSE);
+                    return true;
+                } else if (PtIn(ui.rSubCalibBtn, pt)) {
+                    gpuInk.Clear();
+                    state.trajectory.Clear();
+                    state.ink.Refill();
+                    state.calibration.Start();
+                    ui.suppressPenUntilLift = true;
+                    InvalidateRect(hWnd, NULL, FALSE);
                     return true;
                 }
             } else if (ui.leftTab == LeftTab::Paper) {
@@ -256,15 +294,21 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     int oldSub = ui.hoverSub;
     int oldStone = ui.hoverInkStone;
     int oldModal = ui.hoverClearModal;
+    int oldCalib = ui.hoverCalib;
 
     ui.hoverTb = TbButton::None;
     ui.hoverSub = 0;
     ui.hoverInkStone = 0;
     ui.hoverClearModal = 0;
+    ui.hoverCalib = 0;
 
     if (ui.showClearConfirm) {
         if (PtIn(ui.rModalClearBtn, pt)) ui.hoverClearModal = 1;
         else if (PtIn(ui.rModalCancelBtn, pt)) ui.hoverClearModal = 2;
+    } else if (state.calibration.IsResult()) {
+        if (PtIn(ui.rCalibApplyBtn, pt)) ui.hoverCalib = 1;
+        else if (PtIn(ui.rCalibRetryBtn, pt)) ui.hoverCalib = 2;
+        else if (PtIn(ui.rCalibCloseBtn, pt)) ui.hoverCalib = 3;
     } else {
         if (PtIn(ui.rTbNavToggle, pt)) ui.hoverTb = TbButton::NavToggle;
         else if (ui.isSubPanelOpen) {
@@ -279,6 +323,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
                     if (PtIn(ui.rSubSmall, pt)) ui.hoverSub = 1;
                     else if (PtIn(ui.rSubMedium, pt)) ui.hoverSub = 2;
                     else if (PtIn(ui.rSubLarge, pt)) ui.hoverSub = 3;
+                    else if (PtIn(ui.rSubCalibBtn, pt)) ui.hoverSub = 4;
                 } else if (ui.leftTab == LeftTab::Paper) {
                     for (int i = 0; i < 4; ++i) if (PtIn(ui.rPaperTile[i], pt)) ui.hoverSub = 50 + i;
                     for (int i = 0; i < 9; ++i) if (PtIn(ui.rGridTile[i], pt)) ui.hoverSub = 10 + i;
@@ -300,7 +345,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 
-    if (oldTb != ui.hoverTb || oldSub != ui.hoverSub || oldStone != ui.hoverInkStone || oldModal != ui.hoverClearModal) {
+    if (oldTb != ui.hoverTb || oldSub != ui.hoverSub || oldStone != ui.hoverInkStone || oldModal != ui.hoverClearModal || oldCalib != ui.hoverCalib) {
         InvalidateRect(hWnd, NULL, FALSE);
     }
 

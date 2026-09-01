@@ -96,6 +96,7 @@
     <ClInclude Include="Inputs\WintabAdapter.h" />
     <ClInclude Include="Models\AppEnums.h" />
     <ClInclude Include="Models\AppState.h" />
+    <ClInclude Include="Models\CalibrationModel.h" />
     <ClInclude Include="Models\TrajectoryModel.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Services\ImageExporter.h" />
@@ -104,6 +105,7 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="Views\AnalysisView.h" />
+    <ClInclude Include="Views\CalibrationView.h" />
     <ClInclude Include="Views\CanvasView.h" />
     <ClInclude Include="Views\FloatingMenuView.h" />
     <ClInclude Include="Views\InkStoneView.h" />
@@ -130,6 +132,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Views\AnalysisView.cpp" />
+    <ClCompile Include="Views\CalibrationView.cpp" />
     <ClCompile Include="Views\CanvasView.cpp" />
     <ClCompile Include="Views\FloatingMenuView.cpp" />
     <ClCompile Include="Views\InkStoneView.cpp" />
