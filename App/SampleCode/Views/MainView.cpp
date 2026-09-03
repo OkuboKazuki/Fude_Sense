@@ -19,12 +19,16 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     // 1. キャンバスエリア背景
     RenderUtils::Fill(memDC, state.ui.rCanvasArea, RGB(20, 22, 26));
 
-    // 2. 半紙背景 & お手本文字
+    // 2. 半紙背景
     CanvasView::DrawBackground(memDC, state);
-    CanvasView::DrawOtehon(memDC, state);
 
     // 3. GPU 墨汁テクスチャの合成
     CanvasView::RenderInk(memDC, gpuInk, state);
+
+    // 3-2. お手本文字
+    // 墨のテクスチャは不透明で半紙全面を覆うため、必ず墨より後に重ねる。
+    // 墨との合成は SRCAND なので、なぞった墨がお手本を隠す見え方になる。
+    CanvasView::DrawOtehon(memDC, state);
 
     // 4. 下敷き・升目格子ガイド
     CanvasView::DrawGrid(memDC, state);
