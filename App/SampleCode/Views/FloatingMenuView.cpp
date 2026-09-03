@@ -168,9 +168,9 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         for (int i = 0; i < ui.gridCellCount; ++i) {
             const RECT& rc = ui.rOtehonCellBtn[i];
             if (RW(rc) <= 0 || RH(rc) <= 0) continue;
-            int placed = state.otehon.GetCellChar(i);
+            const std::wstring& placed = state.otehon.GetCellText(i);
             // 固定中は配置済みのマス、追従中は現在の追従先を示す
-            bool sel = following ? (state.otehon.activeCell == i) : (placed >= 0);
+            bool sel = following ? (state.otehon.activeCell == i) : !placed.empty();
             bool hov = (ui.hoverSub == 90 + i);
             COLORREF fill = sel ? (following ? RGB(34, 44, 58) : RGB(36, 68, 105))
                                 : (hov ? RGB(42, 46, 56) : RGB(26, 29, 35));
@@ -179,9 +179,9 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
             Box(dc, rc, fill, edge, 1, 3);
 
             if (fCellNo && RW(rc) >= 16 && RH(rc) >= 14) {
-                if (placed >= 0) {
+                if (!placed.empty()) {
                     // 置いた字をそのまま出すと、半紙の仕上がりが一目で分かる
-                    Center(dc, rc, OtehonModel::GetCharacter(placed), fCellNo,
+                    Center(dc, rc, placed.c_str(), fCellNo,
                         following ? RGB(150, 158, 172) : RGB(235, 240, 250));
                 } else {
                     wchar_t noBuf[8];
@@ -207,15 +207,46 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
             RGB(140, 148, 162), DT_LEFT | DT_TOP | DT_WORDBREAK);
         DeleteObject(fHint);
 
-        RECT rOteHeader = { ui.rSub.left + 16, ui.rOtehonCellMapBox.bottom + 8, ui.rSub.right - 16, ui.rOtehonCellMapBox.bottom + 24 };
+        RECT rOteHeader = { ui.rSub.left + 16, ui.rOtehonInputBox.top - 22, ui.rSub.right - 16, ui.rOtehonInputBox.top - 6 };
         HFONT foh = CreateCustomFont(13, FW_BOLD);
-        DrawTextCustom(dc, rOteHeader, L"お手本文字を選択", foh, RGB(180, 185, 195));
+        DrawTextCustom(dc, rOteHeader, L"書きたい文字を入力（日本語入力で変換・確定）", foh, RGB(180, 185, 195));
         DeleteObject(foh);
 
-        for (int i = 0; i < 8; ++i) {
+        // 文字入力欄。入力中は枠を強調し、末尾にキャレットを描く
+        bool typing = state.otehon.isTyping;
+        bool hovInput = (ui.hoverSub == 73);
+        Box(dc, ui.rOtehonInputBox, RGB(22, 24, 29),
+            typing ? RGB(90, 155, 235) : (hovInput ? RGB(66, 72, 86) : RGB(50, 55, 68)), typing ? 2 : 1, 6);
+
+        HFONT fInput = CreateCustomFont(20);
+        RECT rInputText = { ui.rOtehonInputBox.left + 12, ui.rOtehonInputBox.top,
+                            ui.rOtehonInputBox.right - 12, ui.rOtehonInputBox.bottom };
+        if (!state.otehon.inputText.empty()) {
+            DrawTextCustom(dc, rInputText, state.otehon.inputText.c_str(), fInput, RGB(235, 240, 250));
+        } else if (!typing) {
+            DrawTextCustom(dc, rInputText, L"ここを押して文字を入力（例: 春夏秋冬）", fInput, RGB(96, 104, 118));
+        }
+        if (typing) {
+            // キャレット（入力位置の目印）
+            SIZE ext{ 0, 0 };
+            HFONT oldF = (HFONT)SelectObject(dc, fInput);
+            if (!state.otehon.inputText.empty()) {
+                GetTextExtentPoint32W(dc, state.otehon.inputText.c_str(),
+                    (int)state.otehon.inputText.size(), &ext);
+            }
+            SelectObject(dc, oldF);
+            int caretX = rInputText.left + ext.cx + 2;
+            RECT rCaret = { caretX, ui.rOtehonInputBox.top + 8, caretX + 2, ui.rOtehonInputBox.bottom - 8 };
+            Fill(dc, rCaret, RGB(150, 200, 255));
+        }
+        DeleteObject(fInput);
+
+        // 入力した文字が候補タイルになる（未入力なら既定の8字）
+        int paletteCount = state.otehon.GetPaletteCount();
+        for (int i = 0; i < paletteCount && i < 8; ++i) {
             bool act = (state.otehon.selectedIndex == i);
             bool hov = (ui.hoverSub == 80 + i);
-            DrawTileCard(dc, ui.rOtehonTile[i], OtehonModel::GetCharacter(i), L"", act, hov);
+            DrawTileCard(dc, ui.rOtehonTile[i], state.otehon.GetCharacter(i).c_str(), L"", act, hov);
         }
 
         RECT rCard = { ui.rSub.left + 14, ui.rOtehonOpacityTrack.top - 24, ui.rSub.right - 14, ui.rOtehonOpacityTrack.bottom + 28 };

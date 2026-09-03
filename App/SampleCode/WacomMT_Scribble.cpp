@@ -494,8 +494,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 
+	case WM_CHAR:
+	{
+		// お手本の文字入力（IME 変換確定後の文字がここへ届く）
+		AppController::OnChar(hWnd, (wchar_t)wParam, g_appState);
+		break;
+	}
+
 	case WM_KEYDOWN:
 	{
+		// 文字入力中はショートカット（Esc=全消し / I=インクウィンドウ）を止める。
+		// Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
+		if (g_appState.otehon.isTyping) break;
+
 		switch (wParam)
 		{
 		case VK_ESCAPE:

@@ -44,24 +44,53 @@ struct PaperModel {
     }
 };
 
+// お手本の候補文字数（入力欄から取り込む上限＝タイルの数）
+constexpr int OTEHON_PALETTE_MAX = 8;
+
 // お手本モデル
 struct OtehonModel {
     bool isVisible = false;
-    int selectedIndex = 0; // 0: 永, 1: 夢, 2: 和, 3: 心, 4: 道, 5: 光, 6: 美, 7: 桜
+    int selectedIndex = 0; // palette 内の選択位置
     double opacity = 0.35; // 0.05 ～ 1.0
     bool isDraggingOpacity = false;
+
+    // 書きたい文字の入力（IME 変換確定後の文字を WM_CHAR で受け取る）。
+    // 入力があればその文字が候補タイルになり、空なら既定の8字に戻る。
+    std::wstring inputText;
+    bool isTyping = false;
+    std::vector<std::wstring> palette;
 
     // 「書いている升目」への追従状態
     OtehonPlacement placement = OtehonPlacement::FollowPen;
     int activeCell = 0;        // 追従中のマス。UIState::rGridCell のインデックス（初期値0は書字順の先頭＝右上）
     bool cellLatched = false;  // 運筆中は追従を止める。ペンが紙から離れると解除される
 
-    // 固定表示のときにマスへ割り当てたお手本文字。-1 は未配置。
-    // マスごとに別の字を置けるので、半紙全体の手本を組める。
-    int cellChar[MAX_GRID_CELLS];
+    // 固定表示のときにマスへ置いたお手本文字。空文字は未配置。
+    // 候補の番号ではなく文字そのものを持つ。番号だと、入力を変えて候補が
+    // 入れ替わったときに、置いてある字まで別の字に化けてしまう。
+    std::wstring cellText[MAX_GRID_CELLS];
 
     OtehonModel() {
-        for (int& c : cellChar) c = -1;
+        RebuildPalette();
+    }
+
+    // 入力文字列から候補を作り直す。サロゲートペアは2要素で1文字として扱う。
+    void RebuildPalette() {
+        palette.clear();
+        for (size_t i = 0; i < inputText.size() && (int)palette.size() < OTEHON_PALETTE_MAX; ) {
+            size_t len = 1;
+            if (IS_HIGH_SURROGATE(inputText[i]) && i + 1 < inputText.size()
+                && IS_LOW_SURROGATE(inputText[i + 1])) {
+                len = 2;
+            }
+            palette.push_back(inputText.substr(i, len));
+            i += len;
+        }
+        if (palette.empty()) {
+            static const wchar_t* const kDefault[] = { L"永", L"夢", L"和", L"心", L"道", L"光", L"美", L"桜" };
+            for (const wchar_t* d : kDefault) palette.push_back(d);
+        }
+        if (selectedIndex < 0 || selectedIndex >= (int)palette.size()) selectedIndex = 0;
     }
 
     bool IsFollowingPen() const { return placement == OtehonPlacement::FollowPen; }
@@ -78,27 +107,28 @@ struct OtehonModel {
         if (IsFollowingPen()) ResetActiveCell();
     }
 
-    int GetCellChar(int cellIndex) const {
-        return (cellIndex >= 0 && cellIndex < MAX_GRID_CELLS) ? cellChar[cellIndex] : -1;
+    const std::wstring& GetCellText(int cellIndex) const {
+        static const std::wstring empty;
+        return (cellIndex >= 0 && cellIndex < MAX_GRID_CELLS) ? cellText[cellIndex] : empty;
     }
 
     // マスへお手本を配置する（固定表示へ切り替わる）。配置先はミニマップから選ぶ。
     // ペンのホバー位置を採用すると、ボタンを押すためにペンをパネルへ動かす途中で
     // 追従先が変わってしまい、意図しないマスに置かれてしまう。
     // 既に同じ字が置かれているマスを指した場合は取り消す。
-    void PlaceAtCell(int cellIndex, int charIndex) {
+    void PlaceAtCell(int cellIndex, const std::wstring& text) {
         if (cellIndex < 0 || cellIndex >= MAX_GRID_CELLS) return;
         placement = OtehonPlacement::Fixed;
-        cellChar[cellIndex] = (cellChar[cellIndex] == charIndex) ? -1 : charIndex;
+        cellText[cellIndex] = (cellText[cellIndex] == text) ? std::wstring() : text;
         cellLatched = false;
     }
 
     void ClearCellChars() {
-        for (int& c : cellChar) c = -1;
+        for (std::wstring& t : cellText) t.clear();
     }
 
     bool HasPlacedChar() const {
-        for (int c : cellChar) if (c >= 0) return true;
+        for (const std::wstring& t : cellText) if (!t.empty()) return true;
         return false;
     }
 
@@ -107,14 +137,41 @@ struct OtehonModel {
         cellLatched = false;
     }
 
-    static const wchar_t* GetCharacter(int index) {
-        static const wchar_t* chars[] = { L"永", L"夢", L"和", L"心", L"道", L"光", L"美", L"桜" };
-        if (index >= 0 && index < 8) return chars[index];
-        return L"永";
+    int GetPaletteCount() const { return (int)palette.size(); }
+
+    const std::wstring& GetCharacter(int index) const {
+        static const std::wstring empty;
+        if (index >= 0 && index < (int)palette.size()) return palette[index];
+        return empty;
     }
 
-    const wchar_t* GetCurrentCharacter() const {
+    const std::wstring& GetCurrentCharacter() const {
         return GetCharacter(selectedIndex);
+    }
+
+    // 入力欄への1文字追加。制御文字・空白は候補にならないので受け付けない。
+    void AppendInputChar(wchar_t ch) {
+        if (ch < 0x20 || ch == 0x7F || ch == L' ' || ch == L'　') return;
+        // サロゲートペアを保持できるよう、上限は文字数ではなく要素数で見る
+        if (inputText.size() >= OTEHON_PALETTE_MAX * 2) return;
+        inputText.push_back(ch);
+        RebuildPalette();
+    }
+
+    void BackspaceInput() {
+        if (inputText.empty()) return;
+        size_t n = inputText.size();
+        if (n >= 2 && IS_LOW_SURROGATE(inputText[n - 1]) && IS_HIGH_SURROGATE(inputText[n - 2])) {
+            inputText.erase(n - 2);
+        } else {
+            inputText.erase(n - 1);
+        }
+        RebuildPalette();
+    }
+
+    void ClearInput() {
+        inputText.clear();
+        RebuildPalette();
     }
 };
 
@@ -157,6 +214,7 @@ struct UIState {
     RECT rPaperTile[4]{};
     RECT rOtehonTile[8]{};
     RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
+    RECT rOtehonInputBox{};                  // 書きたい文字の入力欄
     RECT rOtehonFollowBtn{};                 // 「ペンに追従」へ戻すボタン
     RECT rOtehonCellMapBox{};                // 固定先を選ぶ升目ミニマップの配置枠
     RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）

@@ -141,12 +141,16 @@ void AppState::Layout(int w, int h) {
         // 配置: 左に升目のミニマップ（固定先の選択）、右に「ペンに追従」へ戻すボタン。
         // ミニマップ内の各マスの矩形は、升目のセルが確定してから 2-2 で算出する。
         int mapTop = ui.rOtehonToggleBtn.bottom + 12;
-        ui.rOtehonCellMapBox = { ui.rSub.left + 16, mapTop, ui.rSub.left + 16 + 190, mapTop + 104 };
+        ui.rOtehonCellMapBox = { ui.rSub.left + 16, mapTop, ui.rSub.left + 16 + 190, mapTop + 96 };
         ui.rOtehonFollowBtn = { ui.rOtehonCellMapBox.right + 12, mapTop, ui.rSub.right - 16, mapTop + 38 };
 
-        int oTop = ui.rOtehonCellMapBox.bottom + 28;
+        // 書きたい文字の入力欄
+        ui.rOtehonInputBox = { ui.rSub.left + 16, ui.rOtehonCellMapBox.bottom + 30,
+                               ui.rSub.right - 16, ui.rOtehonCellMapBox.bottom + 30 + 38 };
+
+        int oTop = ui.rOtehonInputBox.bottom + 12;
         int oW = (menuW - 48) / 4;
-        int oH = 54;
+        int oH = 48;
         for (int i = 0; i < 8; ++i) {
             int col = i % 4;
             int row = i / 4;

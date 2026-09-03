@@ -2,8 +2,24 @@
 #include "AppController.h"
 #include "RenderUtils.h"
 #include "ImageExporter.h"
+#include <imm.h>
+
+#pragma comment(lib, "imm32.lib")
 
 using namespace RenderUtils;
+
+// IME の変換候補ウィンドウを入力欄の位置へ寄せる。
+// 指定しないとウィンドウ左上に出てしまい、どこへ入力しているのか分からない。
+static void SetOtehonImePosition(HWND hWnd, const RECT& inputBox) {
+    HIMC hImc = ImmGetContext(hWnd);
+    if (!hImc) return;
+    COMPOSITIONFORM cf{};
+    cf.dwStyle = CFS_POINT;
+    cf.ptCurrentPos.x = inputBox.left + 12;
+    cf.ptCurrentPos.y = inputBox.top + 6;
+    ImmSetCompositionWindow(hImc, &cf);
+    ImmReleaseContext(hWnd, hImc);
+}
 
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
@@ -33,6 +49,12 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     GetClientRect(hWnd, &clientRect);
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
+
+    // 入力欄以外を押したら文字入力を終える
+    if (state.otehon.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
+        state.otehon.isTyping = false;
+        InvalidateRect(hWnd, &ui.rSub, FALSE);
+    }
 
     // 1. 全消し確認モーダル表示中のクリック
     if (ui.showClearConfirm) {
@@ -238,14 +260,22 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 // 配置: ミニマップのマスへ、選択中の文字を置く（同じ字なら取り消し）
                 for (int i = 0; i < ui.gridCellCount; ++i) {
                     if (PtIn(ui.rOtehonCellBtn[i], pt)) {
-                        state.otehon.PlaceAtCell(i, state.otehon.selectedIndex);
+                        state.otehon.PlaceAtCell(i, state.otehon.GetCurrentCharacter());
                         state.otehon.isVisible = true;
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }
                 }
 
-                for (int i = 0; i < 8; ++i) {
+                // 文字入力欄
+                if (PtIn(ui.rOtehonInputBox, pt)) {
+                    state.otehon.isTyping = true;
+                    SetOtehonImePosition(hWnd, ui.rOtehonInputBox);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
+                    return true;
+                }
+
+                for (int i = 0; i < state.otehon.GetPaletteCount() && i < 8; ++i) {
                     if (PtIn(ui.rOtehonTile[i], pt)) {
                         state.otehon.selectedIndex = i;
                         if (!state.otehon.isVisible) {
@@ -303,6 +333,27 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
         handled = true;
     }
     return handled;
+}
+
+bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {
+    if (!state.otehon.isTyping) return false;
+
+    switch (ch) {
+    case L'\b':
+        state.otehon.BackspaceInput();
+        break;
+    case L'\r':
+    case L'\n':
+    case 0x1B: // Esc
+        state.otehon.isTyping = false;
+        break;
+    default:
+        state.otehon.AppendInputChar(ch);
+        break;
+    }
+
+    InvalidateRect(hWnd, NULL, FALSE);
+    return true;
 }
 
 bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state) {
@@ -387,8 +438,11 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
                 } else if (ui.leftTab == LeftTab::Otehon) {
                     if (PtIn(ui.rOtehonToggleBtn, pt)) ui.hoverSub = 70;
                     if (PtIn(ui.rOtehonFollowBtn, pt)) ui.hoverSub = 71;
+                    if (PtIn(ui.rOtehonInputBox, pt)) ui.hoverSub = 73;
                     for (int i = 0; i < ui.gridCellCount; ++i) if (PtIn(ui.rOtehonCellBtn[i], pt)) ui.hoverSub = 90 + i;
-                    for (int i = 0; i < 8; ++i) if (PtIn(ui.rOtehonTile[i], pt)) ui.hoverSub = 80 + i;
+                    for (int i = 0; i < state.otehon.GetPaletteCount() && i < 8; ++i) {
+                        if (PtIn(ui.rOtehonTile[i], pt)) ui.hoverSub = 80 + i;
+                    }
                 }
             }
         }

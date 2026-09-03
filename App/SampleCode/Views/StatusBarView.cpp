@@ -28,7 +28,7 @@ void StatusBarView::Draw(HDC dc, int width, int height, const AppState& state) {
     wsprintfW(buf, L"状態: 準備完了 | 筆: %s | 下敷き: %s | お手本: %s | 墨量: %d%%", 
         BrushName(state.brush.type), 
         GetGridPatternName(state.paper.gridPattern),
-        state.otehon.isVisible ? state.otehon.GetCurrentCharacter() : L"なし",
+        state.otehon.isVisible ? state.otehon.GetCurrentCharacter().c_str() : L"なし",
         (int)(state.ink.stoneAmount * 100.0));
     DrawTextCustom(dc, t, buf, f, RGB(150, 155, 165));
     DeleteObject(f);

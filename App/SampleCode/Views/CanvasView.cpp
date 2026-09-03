@@ -82,9 +82,11 @@ void CanvasView::DrawBackground(HDC dc, const AppState& state) {
     DeleteObject(pb);
 }
 
-void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const wchar_t* ch, double opacity) {
+void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity) {
     using namespace RenderUtils;
-    if (!ch || !*ch) return;
+    if (text.empty()) return;
+    const wchar_t* ch = text.c_str();
+    const int chLen = (int)text.size(); // サロゲートペアは2要素で1文字
 
     int cellW = RW(cell);
     int cellH = RH(cell);
@@ -125,7 +127,7 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const wchar_t* ch, do
     TEXTMETRICW tm{};
     GetTextMetricsW(layerDC, &tm);
     SIZE ext{};
-    GetTextExtentPoint32W(layerDC, ch, 1, &ext);
+    GetTextExtentPoint32W(layerDC, ch, chLen, &ext);
 
     int emTop = (cellH - emSize) / 2;
     int baseline = emTop + (tm.tmAscent - tm.tmInternalLeading);
@@ -137,7 +139,7 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const wchar_t* ch, do
     SetTextAlign(layerDC, TA_LEFT | TA_BASELINE);
     SetBkMode(layerDC, TRANSPARENT);
     SetTextColor(layerDC, RGB(grayVal, (int)(grayVal * 0.98), (int)(grayVal * 0.95)));
-    TextOutW(layerDC, x, baseline, ch, 1);
+    TextOutW(layerDC, x, baseline, ch, chLen);
 
     BitBlt(dc, cell.left, cell.top, cellW, cellH, layerDC, 0, 0, SRCAND);
 
@@ -156,16 +158,13 @@ void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     if (state.otehon.IsFollowingPen()) {
         // ペン追従は1字だけ。書いている升目に重ねる。升目なし（GridPattern::None）は
         // 半紙全体が1マス、1字用の下敷き（Cross1 / StarGrid）は内枠が1マスになる。
-        if (state.otehon.selectedIndex < 0 || state.otehon.selectedIndex >= 8) return;
         DrawOtehonGlyph(dc, state.GetOtehonCell(), state.otehon.GetCurrentCharacter(), opacity);
         return;
     }
 
-    // 固定表示はマスごとに割り当てた字をすべて出す
+    // 固定表示はマスごとに置いた字をすべて出す
     for (int i = 0; i < ui.gridCellCount; ++i) {
-        int charIndex = state.otehon.GetCellChar(i);
-        if (charIndex < 0) continue;
-        DrawOtehonGlyph(dc, ui.rGridCell[i], OtehonModel::GetCharacter(charIndex), opacity);
+        DrawOtehonGlyph(dc, ui.rGridCell[i], state.otehon.GetCellText(i), opacity);
     }
 }
 

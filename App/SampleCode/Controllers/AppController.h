@@ -14,6 +14,9 @@ public:
     static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk);
     static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state);
     static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state);
+    // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。
+    // 入力中なら true を返し、呼び出し側は他のキー処理を行わない。
+    static bool OnChar(HWND hWnd, wchar_t ch, AppState& state);
     static void OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk);
     static void ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk);
 };
