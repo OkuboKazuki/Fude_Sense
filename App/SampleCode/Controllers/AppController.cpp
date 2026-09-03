@@ -9,6 +9,8 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.trajectory.Clear();
     state.ui.showClearConfirm = false;
+    // 書き直しなので、お手本も書き始めのマスへ戻す
+    state.otehon.ResetActiveCell();
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
     state.ui.suppressPenUntilLift = true;
@@ -157,6 +159,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     if (PtIn(ui.rPaperTile[i], pt)) {
                         state.paper.type = static_cast<PaperType>(i);
                         state.Layout(w, h);
+                        // マスの割り付けが変わるので、お手本は書き始めの位置へ
+                        state.otehon.ResetActiveCell();
                         int pw = RW(ui.rPaper);
                         int ph = RH(ui.rPaper);
                         if (pw > 0 && ph > 0) gpuInk.Resize(pw, ph);
@@ -172,6 +176,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         // 升目のセル分割は Layout で算出しているため、
                         // パターン変更時は再レイアウトが必要
                         state.Layout(w, h);
+                        state.otehon.ResetActiveCell();
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }
@@ -210,6 +215,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             } else if (ui.leftTab == LeftTab::Otehon) {
                 if (PtIn(ui.rOtehonToggleBtn, pt)) {
                     state.otehon.isVisible = !state.otehon.isVisible;
+                    // 表示を始めるときは書き始めのマスから出す。追従はペン先の
+                    // 位置を常に拾っているため、パネルへ向かう途中に横切ったマスへ
+                    // お手本が出てしまうのを防ぐ。
+                    if (state.otehon.isVisible) state.otehon.ResetActiveCell();
                     InvalidateRect(hWnd, NULL, FALSE);
                     return true;
                 }
@@ -217,7 +226,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 for (int i = 0; i < 8; ++i) {
                     if (PtIn(ui.rOtehonTile[i], pt)) {
                         state.otehon.selectedIndex = i;
-                        state.otehon.isVisible = true;
+                        if (!state.otehon.isVisible) {
+                            state.otehon.isVisible = true;
+                            state.otehon.ResetActiveCell();
+                        }
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }

@@ -55,6 +55,13 @@ struct OtehonModel {
     int activeCell = 0;       // UIState::rGridCell のインデックス（書字順なので初期値0は右上のマス）
     bool cellLatched = false; // 運筆中は追従を止める。ペンが紙から離れると解除される
 
+    // 書字順の先頭マス（右上）へ戻す。表示を始めるときや、全消し・升目変更で
+    // 書き始めの位置が変わったときに使う。
+    void ResetActiveCell() {
+        activeCell = 0;
+        cellLatched = false;
+    }
+
     static const wchar_t* GetCharacter(int index) {
         static const wchar_t* chars[] = { L"永", L"夢", L"和", L"心", L"道", L"光", L"美", L"桜" };
         if (index >= 0 && index < 8) return chars[index];
