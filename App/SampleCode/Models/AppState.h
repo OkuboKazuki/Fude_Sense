@@ -53,8 +53,16 @@ struct OtehonModel {
 
     // 「書いている升目」への追従状態
     OtehonPlacement placement = OtehonPlacement::FollowPen;
-    int activeCell = 0;        // UIState::rGridCell のインデックス（書字順なので初期値0は右上のマス）
+    int activeCell = 0;        // 追従中のマス。UIState::rGridCell のインデックス（初期値0は書字順の先頭＝右上）
     bool cellLatched = false;  // 運筆中は追従を止める。ペンが紙から離れると解除される
+
+    // 固定表示のときにマスへ割り当てたお手本文字。-1 は未配置。
+    // マスごとに別の字を置けるので、半紙全体の手本を組める。
+    int cellChar[MAX_GRID_CELLS];
+
+    OtehonModel() {
+        for (int& c : cellChar) c = -1;
+    }
 
     bool IsFollowingPen() const { return placement == OtehonPlacement::FollowPen; }
 
@@ -70,13 +78,28 @@ struct OtehonModel {
         if (IsFollowingPen()) ResetActiveCell();
     }
 
-    // 指定したマスに固定する。固定先はミニマップから選ぶ。
-    // ペンのホバー位置を採用すると、ボタンを押すためにペンをパネルへ動かす
-    // 途中で追従先が変わってしまい、意図しないマスに固定されてしまう。
-    void FixAtCell(int cellIndex) {
+    int GetCellChar(int cellIndex) const {
+        return (cellIndex >= 0 && cellIndex < MAX_GRID_CELLS) ? cellChar[cellIndex] : -1;
+    }
+
+    // マスへお手本を配置する（固定表示へ切り替わる）。配置先はミニマップから選ぶ。
+    // ペンのホバー位置を採用すると、ボタンを押すためにペンをパネルへ動かす途中で
+    // 追従先が変わってしまい、意図しないマスに置かれてしまう。
+    // 既に同じ字が置かれているマスを指した場合は取り消す。
+    void PlaceAtCell(int cellIndex, int charIndex) {
+        if (cellIndex < 0 || cellIndex >= MAX_GRID_CELLS) return;
         placement = OtehonPlacement::Fixed;
-        if (cellIndex >= 0) activeCell = cellIndex;
+        cellChar[cellIndex] = (cellChar[cellIndex] == charIndex) ? -1 : charIndex;
         cellLatched = false;
+    }
+
+    void ClearCellChars() {
+        for (int& c : cellChar) c = -1;
+    }
+
+    bool HasPlacedChar() const {
+        for (int c : cellChar) if (c >= 0) return true;
+        return false;
     }
 
     void FollowPen() {

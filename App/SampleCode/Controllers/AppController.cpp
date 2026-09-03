@@ -159,7 +159,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     if (PtIn(ui.rPaperTile[i], pt)) {
                         state.paper.type = static_cast<PaperType>(i);
                         state.Layout(w, h);
-                        // マスの割り付けが変わるので、お手本は書き始めの位置へ
+                        // マスの割り付けが別物になるので、配置済みのお手本は破棄して
+                        // ペン追従へ戻す（残すとどのマスの手本か分からなくなる）
+                        state.otehon.ClearCellChars();
+                        state.otehon.FollowPen();
                         state.otehon.ResetActiveCell();
                         int pw = RW(ui.rPaper);
                         int ph = RH(ui.rPaper);
@@ -176,6 +179,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         // 升目のセル分割は Layout で算出しているため、
                         // パターン変更時は再レイアウトが必要
                         state.Layout(w, h);
+                        state.otehon.ClearCellChars();
+                        state.otehon.FollowPen();
                         state.otehon.ResetActiveCell();
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
@@ -230,10 +235,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
 
-                // 配置: ミニマップで固定先のマスを選ぶ
+                // 配置: ミニマップのマスへ、選択中の文字を置く（同じ字なら取り消し）
                 for (int i = 0; i < ui.gridCellCount; ++i) {
                     if (PtIn(ui.rOtehonCellBtn[i], pt)) {
-                        state.otehon.FixAtCell(i);
+                        state.otehon.PlaceAtCell(i, state.otehon.selectedIndex);
                         state.otehon.isVisible = true;
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;

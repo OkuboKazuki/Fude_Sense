@@ -149,12 +149,24 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const wchar_t* ch, do
 
 void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     if (!state.otehon.isVisible) return;
-    if (state.otehon.selectedIndex < 0 || state.otehon.selectedIndex >= 8) return;
 
-    // 書いている升目に重ねる。升目なし（GridPattern::None）は半紙全体が1マス、
-    // 1字用の下敷き（Cross1 / StarGrid）は内枠が1マスとして算出されている。
-    RECT cell = state.GetOtehonCell();
-    DrawOtehonGlyph(dc, cell, state.otehon.GetCurrentCharacter(), state.otehon.opacity);
+    const UIState& ui = state.ui;
+    const double opacity = state.otehon.opacity;
+
+    if (state.otehon.IsFollowingPen()) {
+        // ペン追従は1字だけ。書いている升目に重ねる。升目なし（GridPattern::None）は
+        // 半紙全体が1マス、1字用の下敷き（Cross1 / StarGrid）は内枠が1マスになる。
+        if (state.otehon.selectedIndex < 0 || state.otehon.selectedIndex >= 8) return;
+        DrawOtehonGlyph(dc, state.GetOtehonCell(), state.otehon.GetCurrentCharacter(), opacity);
+        return;
+    }
+
+    // 固定表示はマスごとに割り当てた字をすべて出す
+    for (int i = 0; i < ui.gridCellCount; ++i) {
+        int charIndex = state.otehon.GetCellChar(i);
+        if (charIndex < 0) continue;
+        DrawOtehonGlyph(dc, ui.rGridCell[i], OtehonModel::GetCharacter(charIndex), opacity);
+    }
 }
 
 void CanvasView::DrawCross(HDC dc, int x, int y, int s) {

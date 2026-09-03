@@ -156,28 +156,41 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         Center(dc, ui.rOtehonToggleBtn, state.otehon.isVisible ? L"✓ お手本表示: ON" : L"お手本表示: OFF", fTog, state.otehon.isVisible ? RGB(255, 255, 255) : RGB(190, 195, 205));
         DeleteObject(fTog);
 
-        // 配置: 升目のミニマップから固定先のマスを選ぶ
+        // 配置: 升目のミニマップ。押したマスへ選択中の文字を置く
         bool following = state.otehon.IsFollowingPen();
-        HFONT fCellNo = CreateCustomFont(12, FW_BOLD);
+        HFONT fCellNo = nullptr;
+        if (ui.gridCellCount > 0) {
+            // マスは全て同じ大きさなので、文字サイズは先頭のマスから決める
+            const RECT& r0 = ui.rOtehonCellBtn[0];
+            int size = (std::min)(RW(r0), RH(r0)) * 7 / 10;
+            fCellNo = CreateCustomFont(Clamp(size, 9, 22), FW_BOLD);
+        }
         for (int i = 0; i < ui.gridCellCount; ++i) {
             const RECT& rc = ui.rOtehonCellBtn[i];
             if (RW(rc) <= 0 || RH(rc) <= 0) continue;
-            bool sel = (state.otehon.activeCell == i);
+            int placed = state.otehon.GetCellChar(i);
+            // 固定中は配置済みのマス、追従中は現在の追従先を示す
+            bool sel = following ? (state.otehon.activeCell == i) : (placed >= 0);
             bool hov = (ui.hoverSub == 90 + i);
-            // 固定中の選択マスは強調、追従中の現在位置は控えめに示す
             COLORREF fill = sel ? (following ? RGB(34, 44, 58) : RGB(36, 68, 105))
                                 : (hov ? RGB(42, 46, 56) : RGB(26, 29, 35));
             COLORREF edge = sel ? (following ? RGB(70, 90, 120) : RGB(70, 135, 220))
                                 : (hov ? RGB(66, 72, 86) : RGB(56, 60, 72));
             Box(dc, rc, fill, edge, 1, 3);
 
-            if (RW(rc) >= 20 && RH(rc) >= 15) {
-                wchar_t noBuf[8];
-                wsprintfW(noBuf, L"%d", i + 1);
-                Center(dc, rc, noBuf, fCellNo, sel ? RGB(235, 240, 250) : RGB(120, 128, 142));
+            if (fCellNo && RW(rc) >= 16 && RH(rc) >= 14) {
+                if (placed >= 0) {
+                    // 置いた字をそのまま出すと、半紙の仕上がりが一目で分かる
+                    Center(dc, rc, OtehonModel::GetCharacter(placed), fCellNo,
+                        following ? RGB(150, 158, 172) : RGB(235, 240, 250));
+                } else {
+                    wchar_t noBuf[8];
+                    wsprintfW(noBuf, L"%d", i + 1);
+                    Center(dc, rc, noBuf, fCellNo, RGB(96, 104, 118));
+                }
             }
         }
-        DeleteObject(fCellNo);
+        if (fCellNo) DeleteObject(fCellNo);
 
         // 配置: ペン追従へ戻す
         bool hovFollow = (ui.hoverSub == 71);
@@ -190,8 +203,8 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
 
         HFONT fHint = CreateCustomFont(12);
         RECT rHint = { ui.rOtehonFollowBtn.left, ui.rOtehonFollowBtn.bottom + 8, ui.rOtehonFollowBtn.right, ui.rOtehonCellMapBox.bottom };
-        DrawTextCustom(dc, rHint, L"左の升目を押すと\nその位置に固定します", fHint, RGB(140, 148, 162),
-            DT_LEFT | DT_TOP | DT_WORDBREAK);
+        DrawTextCustom(dc, rHint, L"下の文字を選び、左の升目を\n押すと配置します（複数可）。\n同じ字をもう一度押すと消去", fHint,
+            RGB(140, 148, 162), DT_LEFT | DT_TOP | DT_WORDBREAK);
         DeleteObject(fHint);
 
         RECT rOteHeader = { ui.rSub.left + 16, ui.rOtehonCellMapBox.bottom + 8, ui.rSub.right - 16, ui.rOtehonCellMapBox.bottom + 24 };
