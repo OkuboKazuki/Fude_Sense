@@ -70,9 +70,28 @@ HFONT GetOtehonFont(HDC dc, int emSize) {
 } // namespace
 
 void CanvasView::DrawBackground(HDC dc, const AppState& state) {
+    using namespace RenderUtils;
     const RECT& rPaper = state.ui.rPaper;
-    HBRUSH pb = CreateSolidBrush(RGB(248, 247, 242));
-    HPEN pp = CreatePen(PS_SOLID, 1, RGB(175, 172, 162));
+    if (RW(rPaper) <= 0 || RH(rPaper) <= 0) return;
+
+    // 1. 本物の書道用下敷き（毛氈：縦長フェルト布マット）
+    int marginX = (std::max)(22, RW(rPaper) / 18);
+    int marginTop = (std::max)(26, RH(rPaper) / 16);
+    int marginBottom = (std::max)(32, RH(rPaper) / 13);
+
+    RECT rMat = {
+        rPaper.left - marginX,
+        rPaper.top - marginTop,
+        rPaper.right + marginX,
+        rPaper.bottom + marginBottom
+    };
+
+    // 毛氈本体（品格のある濃紺インディゴフェルト布地・影なしでスッキリ描画）
+    Box(dc, rMat, RGB(20, 26, 40), RGB(46, 54, 76), 1, 6);
+
+    // 2. 和紙（半紙）本体
+    HBRUSH pb = CreateSolidBrush(RGB(252, 251, 248));
+    HPEN pp = CreatePen(PS_SOLID, 1, RGB(220, 216, 206));
     HBRUSH ob = (HBRUSH)SelectObject(dc, pb);
     HPEN op = (HPEN)SelectObject(dc, pp);
     Rectangle(dc, rPaper.left, rPaper.top, rPaper.right, rPaper.bottom);

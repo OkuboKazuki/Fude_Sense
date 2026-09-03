@@ -105,6 +105,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 2. 左上トグルボタン「<<<」「>>>」
     if (PtIn(ui.rTbNavToggle, pt)) {
         ui.isSubPanelOpen = !ui.isSubPanelOpen;
+        state.Layout(w, h);
         InvalidateRect(hWnd, NULL, FALSE);
         return true;
     }
@@ -113,23 +114,23 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     if (ui.isSubPanelOpen) {
         if (PtIn(ui.rTbBrush, pt)) {
             ui.leftTab = LeftTab::Brush;
-            InvalidateRect(hWnd, &ui.rSub, FALSE);
+            InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbPaper, pt)) {
             ui.leftTab = LeftTab::Paper;
-            InvalidateRect(hWnd, &ui.rSub, FALSE);
+            InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbAnalysis, pt)) {
             ui.leftTab = LeftTab::Analysis;
-            InvalidateRect(hWnd, &ui.rSub, FALSE);
+            InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbSave, pt)) {
             ui.leftTab = LeftTab::Save;
-            InvalidateRect(hWnd, &ui.rSub, FALSE);
+            InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbOtehon, pt)) {
             ui.leftTab = LeftTab::Otehon;
-            InvalidateRect(hWnd, &ui.rSub, FALSE);
+            InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
 
