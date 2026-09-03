@@ -151,15 +151,9 @@ void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     if (!state.otehon.isVisible) return;
     if (state.otehon.selectedIndex < 0 || state.otehon.selectedIndex >= 8) return;
 
-    const UIState& ui = state.ui;
-
     // 書いている升目に重ねる。升目なし（GridPattern::None）は半紙全体が1マス、
     // 1字用の下敷き（Cross1 / StarGrid）は内枠が1マスとして算出されている。
-    RECT cell = ui.rPaper;
-    if (state.otehon.activeCell >= 0 && state.otehon.activeCell < ui.gridCellCount) {
-        cell = ui.rGridCell[state.otehon.activeCell];
-    }
-
+    RECT cell = state.GetOtehonCell();
     DrawOtehonGlyph(dc, cell, state.otehon.GetCurrentCharacter(), state.otehon.opacity);
 }
 

@@ -21,26 +21,9 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
     FillRect(memDC, &rLocal, pb);
     DeleteObject(pb);
 
-    // 2. お手本文字
-    if (state.otehon.isVisible && state.otehon.selectedIndex >= 0 && state.otehon.selectedIndex < 8) {
-        const wchar_t* ch = state.otehon.GetCurrentCharacter();
-        int size = (int)((std::min)(pw, ph) * 0.72);
-        if (size > 0) {
-            HFONT fOtehon = CreateFontW(size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                DEFAULT_PITCH | FF_DONTCARE, L"Yu Mincho");
-            int grayVal = (int)(248 - state.otehon.opacity * 105.0);
-            grayVal = Clamp(grayVal, 80, 245);
-            HFONT old = (HFONT)SelectObject(memDC, fOtehon);
-            SetBkMode(memDC, TRANSPARENT);
-            SetTextColor(memDC, RGB(grayVal, (int)(grayVal * 0.98), (int)(grayVal * 0.95)));
-            DrawTextW(memDC, ch, 1, &rLocal, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            SelectObject(memDC, old);
-            DeleteObject(fOtehon);
-        }
-    }
-
-    // 3. 墨汁レンダリング
+    // 2. 墨汁レンダリング
+    // お手本はなぞるための下敷きであって作品の一部ではないため、書き出しには
+    // 含めない（画面表示のみ）。下敷きの罫線を書き出さないのと同じ扱い。
     gpuInk.Render(memDC, 0, 0, pw, ph);
 
     bool success = false;
