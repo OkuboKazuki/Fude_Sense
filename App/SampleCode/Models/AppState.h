@@ -51,6 +51,10 @@ struct OtehonModel {
     double opacity = 0.35; // 0.05 ～ 1.0
     bool isDraggingOpacity = false;
 
+    // 「書いている升目」への追従状態
+    int activeCell = 0;       // UIState::rGridCell のインデックス（書字順なので初期値0は右上のマス）
+    bool cellLatched = false; // 運筆中は追従を止める。ペンが紙から離れると解除される
+
     static const wchar_t* GetCharacter(int index) {
         static const wchar_t* chars[] = { L"永", L"夢", L"和", L"心", L"道", L"光", L"美", L"桜" };
         if (index >= 0 && index < 8) return chars[index];
@@ -116,6 +120,14 @@ struct UIState {
     int gridCellCount = 0;              // 有効なセル数
     int gridCols = 1;                   // 列数（縦書きの「行（ぎょう）」に相当）
     int gridRows = 1;                   // 1列あたりの文字数
+
+    // 指定座標を含む升目セルの番号を返す。どのセルにも含まれなければ -1
+    int FindGridCell(POINT pt) const {
+        for (int i = 0; i < gridCellCount; ++i) {
+            if (RenderUtils::PtIn(rGridCell[i], pt)) return i;
+        }
+        return -1;
+    }
 };
 
 // アプリケーション全体の状態を統合する Model クラス

@@ -207,6 +207,12 @@ void AppState::Layout(int w, int h) {
                 };
             }
         }
+
+        // 升目パターンや用紙の変更でセル数が減ることがある。
+        // 追従中のマスが範囲外に取り残されないよう書字順の先頭へ戻す。
+        if (otehon.activeCell < 0 || otehon.activeCell >= ui.gridCellCount) {
+            otehon.activeCell = 0;
+        }
     }
 
     // 3. 右側 硯・墨量・全消し

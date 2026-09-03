@@ -292,6 +292,20 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
+    // お手本のマス追従（マウス操作時）。
+    // ペン (Wintab) はホバーのパケットが StrokeController へ届くのでそちらで
+    // 追従するが、マウスは押下中しか StrokeController を通らないため、
+    // ペンの無い環境でもマスを移動できるようここでも拾う。
+    if (!ui.showClearConfirm && !state.calibration.IsResult()
+        && !(ui.isSubPanelOpen && PtIn(ui.rSub, pt))
+        && !state.otehon.cellLatched) {
+        int cell = ui.FindGridCell(pt);
+        if (cell >= 0 && cell != state.otehon.activeCell) {
+            state.otehon.activeCell = cell;
+            if (state.otehon.isVisible) InvalidateRect(hWnd, &ui.rPaper, FALSE);
+        }
+    }
+
     // ホバー状態の更新
     TbButton oldTb = ui.hoverTb;
     int oldSub = ui.hoverSub;
