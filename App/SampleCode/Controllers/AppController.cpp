@@ -169,6 +169,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 for (int i = 0; i < 9; ++i) {
                     if (PtIn(ui.rGridTile[i], pt)) {
                         state.paper.gridPattern = static_cast<GridPattern>(i);
+                        // 升目のセル分割は Layout で算出しているため、
+                        // パターン変更時は再レイアウトが必要
+                        state.Layout(w, h);
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }

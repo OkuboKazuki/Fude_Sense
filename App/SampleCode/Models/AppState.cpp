@@ -1,6 +1,46 @@
 #include "stdafx.h"
 #include "AppState.h"
 
+namespace {
+
+// 升目の分割数（列×行）をパターンから求める。
+// 列は縦書きの「行（ぎょう）」に相当し、右列から左列へ向かって書き進める。
+// Lines3 / Lines4 は縦罫線のみで横の区切りが無いため、列幅を1辺とする
+// 正方セルを縦に敷き詰め、お手本配置用の仮想的な行として扱う。
+void GetGridDivision(GridPattern pattern, int borderW, int borderH, int& cols, int& rows) {
+    cols = 1;
+    rows = 1;
+
+    switch (pattern) {
+    case GridPattern::Div2:  cols = 1; rows = 2; break;
+    case GridPattern::Grid4: cols = 2; rows = 2; break;
+    case GridPattern::Grid6: cols = 2; rows = 3; break;
+    case GridPattern::Grid8: cols = 2; rows = 4; break;
+    case GridPattern::Lines3:
+    case GridPattern::Lines4:
+    {
+        cols = (pattern == GridPattern::Lines3) ? 3 : 4;
+        int colW = borderW / cols;
+        rows = (colW > 0) ? static_cast<int>(static_cast<double>(borderH) / colW + 0.5) : 1;
+        break;
+    }
+    case GridPattern::None:
+    case GridPattern::Cross1:
+    case GridPattern::StarGrid:
+    default:
+        break; // 1字用（1マス）
+    }
+
+    if (cols < 1) cols = 1;
+    if (rows < 1) rows = 1;
+    if (cols * rows > MAX_GRID_CELLS) {
+        rows = MAX_GRID_CELLS / cols;
+        if (rows < 1) rows = 1;
+    }
+}
+
+} // namespace
+
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
@@ -136,6 +176,38 @@ void AppState::Layout(int w, int h) {
     ui.rPaper.right = ui.rPaper.left + paperW;
     ui.rPaper.top = canvasCenterY - paperH / 2;
     ui.rPaper.bottom = ui.rPaper.top + paperH;
+
+    // 2-2. 下敷き升目のジオメトリ
+    // 内側の罫線とセル境界を一致させるため、外枠のマージンからセル矩形まで
+    // ここで一括して算出する（CanvasView::DrawGrid と共有）。
+    {
+        int margin = (std::max)(6, RW(ui.rPaper) / 48);
+        if (paper.gridPattern == GridPattern::None) {
+            // 罫線なしのときは半紙全体を1マスとして扱う
+            ui.rGridBorder = ui.rPaper;
+        } else {
+            ui.rGridBorder = { ui.rPaper.left + margin, ui.rPaper.top + margin,
+                               ui.rPaper.right - margin, ui.rPaper.bottom - margin };
+        }
+
+        int bw = RW(ui.rGridBorder);
+        int bh = RH(ui.rGridBorder);
+        GetGridDivision(paper.gridPattern, bw, bh, ui.gridCols, ui.gridRows);
+
+        ui.gridCellCount = 0;
+        for (int i = 0; i < ui.gridCols; ++i) {
+            int col = ui.gridCols - 1 - i; // 縦書きは右列から左列へ
+            for (int row = 0; row < ui.gridRows; ++row) {
+                if (ui.gridCellCount >= MAX_GRID_CELLS) break;
+                ui.rGridCell[ui.gridCellCount++] = {
+                    ui.rGridBorder.left + (bw * col) / ui.gridCols,
+                    ui.rGridBorder.top + (bh * row) / ui.gridRows,
+                    ui.rGridBorder.left + (bw * (col + 1)) / ui.gridCols,
+                    ui.rGridBorder.top + (bh * (row + 1)) / ui.gridRows
+                };
+            }
+        }
+    }
 
     // 3. 右側 硯・墨量・全消し
     int rightW_actual = RW(ui.rRight);

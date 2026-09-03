@@ -52,7 +52,12 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     if (state.paper.gridPattern == GridPattern::None) return;
 
     using namespace RenderUtils;
-    const RECT& rPaper = state.ui.rPaper;
+    const UIState& ui = state.ui;
+
+    // 外枠・セル分割は AppState::Layout が算出済みのものを使う。
+    // ここで再計算すると、お手本の配置に使うセルと罫線がずれる。
+    const RECT& rBorder = ui.rGridBorder;
+    if (RW(rBorder) <= 0 || RH(rBorder) <= 0) return;
 
     COLORREF lineColor = RGB(228, 90, 90);
     if (state.paper.gridColor == GridColorTheme::WhiteLine) lineColor = RGB(220, 222, 230);
@@ -62,15 +67,6 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     HPEN gpDash = CreatePen(PS_DOT, 1, lineColor);
     HPEN op = (HPEN)SelectObject(dc, gp);
 
-    int left = rPaper.left;
-    int top = rPaper.top;
-    int right = rPaper.right;
-    int bottom = rPaper.bottom;
-    int w = RW(rPaper);
-    int h = RH(rPaper);
-
-    int m = (std::max)(6, w / 48);
-    RECT rBorder = { left + m, top + m, right - m, bottom - m };
     MoveToEx(dc, rBorder.left, rBorder.top, nullptr);
     LineTo(dc, rBorder.right, rBorder.top);
     LineTo(dc, rBorder.right, rBorder.bottom);
@@ -80,9 +76,28 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     int bw = RW(rBorder);
     int bh = RH(rBorder);
 
+    // 升目の内側罫線（セル境界）。
+    // Lines3 / Lines4 は縦罫線のみの下敷きで、行方向の区切りはお手本配置用の
+    // 仮想的なものなので線としては描かない。
+    bool drawRowLines = (state.paper.gridPattern != GridPattern::Lines3
+                      && state.paper.gridPattern != GridPattern::Lines4);
+
+    for (int c = 1; c < ui.gridCols; ++c) {
+        int x = rBorder.left + (bw * c) / ui.gridCols;
+        MoveToEx(dc, x, rBorder.top, nullptr); LineTo(dc, x, rBorder.bottom);
+    }
+    if (drawRowLines) {
+        for (int r = 1; r < ui.gridRows; ++r) {
+            int y = rBorder.top + (bh * r) / ui.gridRows;
+            MoveToEx(dc, rBorder.left, y, nullptr); LineTo(dc, rBorder.right, y);
+        }
+    }
+
+    // パターン固有の補助線（セル境界ではない装飾）
     switch (state.paper.gridPattern) {
     case GridPattern::Cross1:
     {
+        // 1字用。マス中央の十字と四分割位置の目印
         int mx = rBorder.left + bw / 2;
         int my = rBorder.top + bh / 2;
         MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
@@ -95,8 +110,7 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     }
     case GridPattern::Div2:
     {
-        int my = rBorder.top + bh / 2;
-        MoveToEx(dc, rBorder.left, my, nullptr); LineTo(dc, rBorder.right, my);
+        // 中央の縦線は字の中心を示す点線ガイド（セル境界ではない）
         int mx = rBorder.left + bw / 2;
         SelectObject(dc, gpDash);
         MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
@@ -105,50 +119,10 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     }
     case GridPattern::Grid4:
     {
-        int mx = rBorder.left + bw / 2;
-        int my = rBorder.top + bh / 2;
-        MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
-        MoveToEx(dc, rBorder.left, my, nullptr); LineTo(dc, rBorder.right, my);
-
-        DrawCross(dc, rBorder.left + bw / 4, rBorder.top + bh / 4, 12);
-        DrawCross(dc, rBorder.left + 3 * bw / 4, rBorder.top + bh / 4, 12);
-        DrawCross(dc, rBorder.left + 3 * bw / 4, rBorder.top + 3 * bh / 4, 12);
-        DrawCross(dc, rBorder.left + bw / 4, rBorder.top + 3 * bh / 4, 12);
-        break;
-    }
-    case GridPattern::Grid6:
-    {
-        int mx = rBorder.left + bw / 2;
-        MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
-        for (int r = 1; r < 3; ++r) {
-            int y = rBorder.top + (bh * r) / 3;
-            MoveToEx(dc, rBorder.left, y, nullptr); LineTo(dc, rBorder.right, y);
-        }
-        break;
-    }
-    case GridPattern::Grid8:
-    {
-        int mx = rBorder.left + bw / 2;
-        MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
-        for (int r = 1; r < 4; ++r) {
-            int y = rBorder.top + (bh * r) / 4;
-            MoveToEx(dc, rBorder.left, y, nullptr); LineTo(dc, rBorder.right, y);
-        }
-        break;
-    }
-    case GridPattern::Lines3:
-    {
-        for (int c = 1; c < 3; ++c) {
-            int x = rBorder.left + (bw * c) / 3;
-            MoveToEx(dc, x, rBorder.top, nullptr); LineTo(dc, x, rBorder.bottom);
-        }
-        break;
-    }
-    case GridPattern::Lines4:
-    {
-        for (int c = 1; c < 4; ++c) {
-            int x = rBorder.left + (bw * c) / 4;
-            MoveToEx(dc, x, rBorder.top, nullptr); LineTo(dc, x, rBorder.bottom);
+        // 各マスの中心に目印
+        for (int i = 0; i < ui.gridCellCount; ++i) {
+            const RECT& cell = ui.rGridCell[i];
+            DrawCross(dc, (cell.left + cell.right) / 2, (cell.top + cell.bottom) / 2, 12);
         }
         break;
     }

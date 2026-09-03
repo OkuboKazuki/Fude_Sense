@@ -107,6 +107,15 @@ struct UIState {
     RECT rHardnessTrack{};
     RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
     RECT rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
+
+    // 下敷き升目のジオメトリ。罫線描画（CanvasView::DrawGrid）とお手本の配置が
+    // 同じセルを参照できるよう、AppState::Layout で一元的に算出する。
+    // ここを分けて計算すると、お手本がマスからずれる。
+    RECT rGridBorder{};                 // 升目の外枠（半紙の内側マージン適用後）
+    RECT rGridCell[MAX_GRID_CELLS]{};   // 升目セル。並びは縦書きの書字順（右列を上から下、次に左列）
+    int gridCellCount = 0;              // 有効なセル数
+    int gridCols = 1;                   // 列数（縦書きの「行（ぎょう）」に相当）
+    int gridRows = 1;                   // 1列あたりの文字数
 };
 
 // アプリケーション全体の状態を統合する Model クラス

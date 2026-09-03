@@ -69,3 +69,7 @@ enum class LeftTab {
 };
 
 constexpr double INK_MAX_VALUE = 1.0;
+
+// 升目セル配列の上限。Lines3 / Lines4 は縦罫線のみで横の区切りが無いため、
+// 用紙の縦横比によって仮想的な行数が伸びる。その上限を与える。
+constexpr int MAX_GRID_CELLS = 32;
