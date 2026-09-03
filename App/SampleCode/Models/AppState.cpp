@@ -39,12 +39,16 @@ void AppState::Layout(int w, int h) {
         int topOff = ui.rSub.top + 64;
 
         // 筆タブ
-        int cardH = 68;
+        int cardH = 62;
         ui.rSubSmall  = { ui.rSub.left + 14, topOff, ui.rSub.right - 14, topOff + cardH };
-        ui.rSubMedium = { ui.rSub.left + 14, topOff + (cardH + 8), ui.rSub.right - 14, topOff + (cardH + 8) + cardH };
-        ui.rSubLarge  = { ui.rSub.left + 14, topOff + (cardH + 8) * 2, ui.rSub.right - 14, topOff + (cardH + 8) * 2 + cardH };
-        int cardBottom = topOff + (cardH + 8) * 2 + cardH;
-        ui.rHardnessTrack = { ui.rSub.left + 30, cardBottom + 58, ui.rSub.right - 30, cardBottom + 66 };
+        ui.rSubMedium = { ui.rSub.left + 14, topOff + (cardH + 6), ui.rSub.right - 14, topOff + (cardH + 6) + cardH };
+        ui.rSubLarge  = { ui.rSub.left + 14, topOff + (cardH + 6) * 2, ui.rSub.right - 14, topOff + (cardH + 6) * 2 + cardH };
+        int cardBottom = topOff + (cardH + 6) * 2 + cardH;
+        ui.rHardnessTrack = { ui.rSub.left + 30, cardBottom + 54, ui.rSub.right - 30, cardBottom + 62 };
+
+        // 筆圧キャリブレーションボタン
+        int calibBtnY = cardBottom + 106;
+        ui.rSubCalibBtn = { ui.rSub.left + 14, calibBtnY, ui.rSub.right - 14, calibBtnY + 44 };
 
         // 紙タブ
         int ptW = (menuW - 36) / 2;
@@ -153,4 +157,20 @@ void AppState::Layout(int w, int h) {
     int btnY = ui.rClearModalBox.bottom - 56;
     ui.rModalCancelBtn = { ui.rClearModalBox.left + 40, btnY, ui.rClearModalBox.left + 40 + btnW, btnY + btnH };
     ui.rModalClearBtn  = { ui.rClearModalBox.right - 40 - btnW, btnY, ui.rClearModalBox.right - 40, btnY + btnH };
+
+    // 5. 筆圧キャリブレーション結果モーダル
+    int calibModalW = 540;
+    int calibModalH = 340;
+    ui.rCalibModalBox = { w / 2 - calibModalW / 2, h / 2 - calibModalH / 2, w / 2 + calibModalW / 2, h / 2 + calibModalH / 2 };
+    int cBtnH = 42;
+    int cBtnY = ui.rCalibModalBox.bottom - 58;
+    int cApplyW = 200;
+    int cRetryW = 120;
+    int cCloseW = 110;
+    int cTotalW = cApplyW + cRetryW + cCloseW + 24;
+    int cStartX = ui.rCalibModalBox.left + (calibModalW - cTotalW) / 2;
+
+    ui.rCalibApplyBtn = { cStartX, cBtnY, cStartX + cApplyW, cBtnY + cBtnH };
+    ui.rCalibRetryBtn = { cStartX + cApplyW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW, cBtnY + cBtnH };
+    ui.rCalibCloseBtn = { cStartX + cApplyW + 12 + cRetryW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW + 12 + cCloseW, cBtnY + cBtnH };
 }

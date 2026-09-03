@@ -64,6 +64,7 @@ struct OtehonModel {
 
 #include "InkModel.h"
 #include "TrajectoryModel.h"
+#include "CalibrationModel.h"
 
 // UI・レイアウト状態
 struct UIState {
@@ -71,6 +72,7 @@ struct UIState {
     bool isSubPanelOpen = true;
     bool showClearConfirm = false;
     int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
+    int hoverCalib = 0;      // 1: 適用, 2: 再計測, 3: キャンセル/閉じる
 
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
     // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
@@ -93,6 +95,7 @@ struct UIState {
     RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
     RECT rPaper{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
+    RECT rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
     RECT rGridTile[9]{};
     RECT rColorBtn[3]{};
     RECT rPaperTile[4]{};
@@ -103,6 +106,7 @@ struct UIState {
     RECT rInkStoneLarge{}, rInkRefillBtn{}, rClearAllBtn{};
     RECT rHardnessTrack{};
     RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
+    RECT rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
 };
 
 // アプリケーション全体の状態を統合する Model クラス
@@ -113,6 +117,7 @@ public:
     OtehonModel otehon;
     InkModel ink;
     TrajectorySession trajectory;
+    CalibrationModel calibration;
     UIState ui;
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
