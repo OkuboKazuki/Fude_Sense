@@ -34,6 +34,12 @@ namespace RenderUtils {
     // 角丸枠線付きボックス描画
     void Box(HDC dc, const RECT& r, COLORREF fill, COLORREF border, int bw = 1, int round = 6);
 
+    // ドロップシャドウ描画
+    void DrawShadow(HDC dc, const RECT& r, int blurSize = 10, int round = 8);
+
+    // 和風木製机（文机）の背景描画
+    void DrawWoodDesk(HDC dc, int width, int height);
+
     // テキスト描画
     void DrawTextCustom(HDC dc, RECT r, const wchar_t* s, HFONT f, COLORREF c, UINT align = DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 

@@ -16,8 +16,8 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     HBITMAP memBmp = CreateCompatibleBitmap(hdc, width, height);
     HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
 
-    // 1. キャンバスエリア背景
-    RenderUtils::Fill(memDC, state.ui.rCanvasArea, RGB(20, 22, 26));
+    // 1. 和風木製机（文机）の背景描画
+    RenderUtils::DrawWoodDesk(memDC, width, height);
 
     // 2. 半紙背景 & お手本文字
     CanvasView::DrawBackground(memDC, state);
