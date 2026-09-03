@@ -39,6 +39,12 @@ enum class GridPattern {
     StarGrid        // 米字格 (対角線入り)
 };
 
+// お手本の配置方法
+enum class OtehonPlacement {
+    FollowPen,  // 書いている升目へ追従
+    Fixed       // 置いたマスに固定
+};
+
 // 下敷き・罫線の配色テーマ
 enum class GridColorTheme {
     RedLine,        // 定番朱赤線

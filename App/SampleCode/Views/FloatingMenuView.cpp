@@ -156,7 +156,45 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         Center(dc, ui.rOtehonToggleBtn, state.otehon.isVisible ? L"✓ お手本表示: ON" : L"お手本表示: OFF", fTog, state.otehon.isVisible ? RGB(255, 255, 255) : RGB(190, 195, 205));
         DeleteObject(fTog);
 
-        RECT rOteHeader = { ui.rSub.left + 16, ui.rOtehonToggleBtn.bottom + 12, ui.rSub.right - 16, ui.rOtehonToggleBtn.bottom + 28 };
+        // 配置: 升目のミニマップから固定先のマスを選ぶ
+        bool following = state.otehon.IsFollowingPen();
+        HFONT fCellNo = CreateCustomFont(12, FW_BOLD);
+        for (int i = 0; i < ui.gridCellCount; ++i) {
+            const RECT& rc = ui.rOtehonCellBtn[i];
+            if (RW(rc) <= 0 || RH(rc) <= 0) continue;
+            bool sel = (state.otehon.activeCell == i);
+            bool hov = (ui.hoverSub == 90 + i);
+            // 固定中の選択マスは強調、追従中の現在位置は控えめに示す
+            COLORREF fill = sel ? (following ? RGB(34, 44, 58) : RGB(36, 68, 105))
+                                : (hov ? RGB(42, 46, 56) : RGB(26, 29, 35));
+            COLORREF edge = sel ? (following ? RGB(70, 90, 120) : RGB(70, 135, 220))
+                                : (hov ? RGB(66, 72, 86) : RGB(56, 60, 72));
+            Box(dc, rc, fill, edge, 1, 3);
+
+            if (RW(rc) >= 20 && RH(rc) >= 15) {
+                wchar_t noBuf[8];
+                wsprintfW(noBuf, L"%d", i + 1);
+                Center(dc, rc, noBuf, fCellNo, sel ? RGB(235, 240, 250) : RGB(120, 128, 142));
+            }
+        }
+        DeleteObject(fCellNo);
+
+        // 配置: ペン追従へ戻す
+        bool hovFollow = (ui.hoverSub == 71);
+        Box(dc, ui.rOtehonFollowBtn, following ? RGB(36, 68, 105) : (hovFollow ? RGB(42, 46, 56) : RGB(30, 33, 40)),
+            following ? RGB(70, 135, 220) : (hovFollow ? RGB(66, 72, 86) : RGB(46, 50, 62)), 1, 6);
+        HFONT fFollow = CreateCustomFont(14, FW_BOLD);
+        Center(dc, ui.rOtehonFollowBtn, following ? L"✓ ペンに追従" : L"ペンに追従", fFollow,
+            following ? RGB(255, 255, 255) : RGB(190, 195, 205));
+        DeleteObject(fFollow);
+
+        HFONT fHint = CreateCustomFont(12);
+        RECT rHint = { ui.rOtehonFollowBtn.left, ui.rOtehonFollowBtn.bottom + 8, ui.rOtehonFollowBtn.right, ui.rOtehonCellMapBox.bottom };
+        DrawTextCustom(dc, rHint, L"左の升目を押すと\nその位置に固定します", fHint, RGB(140, 148, 162),
+            DT_LEFT | DT_TOP | DT_WORDBREAK);
+        DeleteObject(fHint);
+
+        RECT rOteHeader = { ui.rSub.left + 16, ui.rOtehonCellMapBox.bottom + 8, ui.rSub.right - 16, ui.rOtehonCellMapBox.bottom + 24 };
         HFONT foh = CreateCustomFont(13, FW_BOLD);
         DrawTextCustom(dc, rOteHeader, L"お手本文字を選択", foh, RGB(180, 185, 195));
         DeleteObject(foh);

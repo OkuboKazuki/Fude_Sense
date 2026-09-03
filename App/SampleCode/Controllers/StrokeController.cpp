@@ -67,7 +67,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // 動かさない。書いている最中に足元のお手本が隣のマスへ移ると、なぞって
     // いる線の狙いが狂うため。ラッチはペンが紙から離れた時点（ResetStroke）で
     // 解除され、次に接地したマスを拾い直す。
-    if (canDrawInk && !state.otehon.cellLatched) {
+    if (canDrawInk && state.otehon.IsFollowingPen() && !state.otehon.cellLatched) {
         int cell = state.ui.FindGridCell(clientPt);
         if (cell >= 0) state.otehon.activeCell = cell;
     }

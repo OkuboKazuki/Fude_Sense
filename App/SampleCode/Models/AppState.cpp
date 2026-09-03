@@ -137,7 +137,14 @@ void AppState::Layout(int w, int h) {
 
         // お手本タブ
         ui.rOtehonToggleBtn = { ui.rSub.left + 16, topOff, ui.rSub.right - 16, topOff + 48 };
-        int oTop = topOff + 78;
+
+        // 配置: 左に升目のミニマップ（固定先の選択）、右に「ペンに追従」へ戻すボタン。
+        // ミニマップ内の各マスの矩形は、升目のセルが確定してから 2-2 で算出する。
+        int mapTop = ui.rOtehonToggleBtn.bottom + 12;
+        ui.rOtehonCellMapBox = { ui.rSub.left + 16, mapTop, ui.rSub.left + 16 + 190, mapTop + 104 };
+        ui.rOtehonFollowBtn = { ui.rOtehonCellMapBox.right + 12, mapTop, ui.rSub.right - 16, mapTop + 38 };
+
+        int oTop = ui.rOtehonCellMapBox.bottom + 28;
         int oW = (menuW - 48) / 4;
         int oH = 54;
         for (int i = 0; i < 8; ++i) {
@@ -212,6 +219,35 @@ void AppState::Layout(int w, int h) {
         // 追従中のマスが範囲外に取り残されないよう書字順の先頭へ戻す。
         if (otehon.activeCell < 0 || otehon.activeCell >= ui.gridCellCount) {
             otehon.activeCell = 0;
+        }
+
+        // お手本の固定先を選ぶミニマップ。実際のセルを枠内へ相似縮小したものなので、
+        // 升目の割り付けと必ず一致する（並びも rGridCell と同じ書字順）。
+        const RECT& mapBox = ui.rOtehonCellMapBox;
+        int boxW = RW(mapBox);
+        int boxH = RH(mapBox);
+        if (bw > 0 && bh > 0 && boxW > 0 && boxH > 0) {
+            int mapH = boxH;
+            int mapW = (bh > 0) ? (mapH * bw / bh) : boxW;
+            if (mapW > boxW) {
+                mapW = boxW;
+                mapH = (bw > 0) ? (mapW * bh / bw) : boxH;
+            }
+            int mapX = mapBox.left + (boxW - mapW) / 2;
+            int mapY = mapBox.top + (boxH - mapH) / 2;
+
+            for (int i = 0; i < ui.gridCellCount; ++i) {
+                const RECT& c = ui.rGridCell[i];
+                ui.rOtehonCellBtn[i] = {
+                    mapX + (c.left   - ui.rGridBorder.left) * mapW / bw,
+                    mapY + (c.top    - ui.rGridBorder.top)  * mapH / bh,
+                    mapX + (c.right  - ui.rGridBorder.left) * mapW / bw,
+                    mapY + (c.bottom - ui.rGridBorder.top)  * mapH / bh
+                };
+            }
+        }
+        for (int i = ui.gridCellCount; i < MAX_GRID_CELLS; ++i) {
+            ui.rOtehonCellBtn[i] = { 0, 0, 0, 0 };
         }
     }
 

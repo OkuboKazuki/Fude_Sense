@@ -52,13 +52,35 @@ struct OtehonModel {
     bool isDraggingOpacity = false;
 
     // 「書いている升目」への追従状態
-    int activeCell = 0;       // UIState::rGridCell のインデックス（書字順なので初期値0は右上のマス）
-    bool cellLatched = false; // 運筆中は追従を止める。ペンが紙から離れると解除される
+    OtehonPlacement placement = OtehonPlacement::FollowPen;
+    int activeCell = 0;        // UIState::rGridCell のインデックス（書字順なので初期値0は右上のマス）
+    bool cellLatched = false;  // 運筆中は追従を止める。ペンが紙から離れると解除される
 
-    // 書字順の先頭マス（右上）へ戻す。表示を始めるときや、全消し・升目変更で
-    // 書き始めの位置が変わったときに使う。
+    bool IsFollowingPen() const { return placement == OtehonPlacement::FollowPen; }
+
+    // 書字順の先頭マス（右上）へ戻す。升目や用紙が変わって、そもそもマスの
+    // 割り付けが別物になったときに使う。
     void ResetActiveCell() {
         activeCell = 0;
+        cellLatched = false;
+    }
+
+    // 表示開始や全消しのように、固定していれば動かしたくない場面用
+    void ResetActiveCellIfFollowing() {
+        if (IsFollowingPen()) ResetActiveCell();
+    }
+
+    // 指定したマスに固定する。固定先はミニマップから選ぶ。
+    // ペンのホバー位置を採用すると、ボタンを押すためにペンをパネルへ動かす
+    // 途中で追従先が変わってしまい、意図しないマスに固定されてしまう。
+    void FixAtCell(int cellIndex) {
+        placement = OtehonPlacement::Fixed;
+        if (cellIndex >= 0) activeCell = cellIndex;
+        cellLatched = false;
+    }
+
+    void FollowPen() {
+        placement = OtehonPlacement::FollowPen;
         cellLatched = false;
     }
 
@@ -112,6 +134,9 @@ struct UIState {
     RECT rPaperTile[4]{};
     RECT rOtehonTile[8]{};
     RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
+    RECT rOtehonFollowBtn{};                 // 「ペンに追従」へ戻すボタン
+    RECT rOtehonCellMapBox{};                // 固定先を選ぶ升目ミニマップの配置枠
+    RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
     RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};
     RECT rInkStoneLarge{}, rInkRefillBtn{}, rClearAllBtn{};
