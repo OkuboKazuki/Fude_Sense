@@ -64,10 +64,12 @@ App/SampleCode/
 ## 3. ビルド & 実行方法
 
 ### ソリューション / プロジェクト
+
 - ソリューションファイル: `App/SampleCode/Fudesence.sln`
 - プロジェクトファイル: `App/SampleCode/Fudesence.vcxproj`
 
 ### MSBuild コマンドライン
+
 ```powershell
 # Debug ビルド (Win32)
 & 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\Fudesence.sln /p:Configuration=Debug /p:Platform=Win32
