@@ -37,6 +37,7 @@ public:
 
 private:
     void FeedForward(const TrajectorySession& session, DWORD timeMs);
+    void AdvanceDiffusion(int steps);
 
     std::unique_ptr<GpuInk> m_ink;
     unsigned m_revision = 0;            // 流し込み済みの記録リビジョン

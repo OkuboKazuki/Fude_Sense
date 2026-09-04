@@ -312,8 +312,10 @@ bool TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession&
     return false;
 }
 
+// タイムラインは m_strokes から決まるので、何度作り直しても
+// 記録が変わらなければ結果は同じ。リビジョンを進めると、
+// 解析タブへ入るたびにリプレイの墨を全部引き直すことになる。
 void TrajectorySession::BuildReplayTimeline() {
-    ++m_revision;
     m_strokeTimelines.clear();
     m_totalReplayDurationMs = 0;
 

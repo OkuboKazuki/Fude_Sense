@@ -5,6 +5,15 @@
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
+
+// にじみ1段階分の時間。書いているときの拡散スレッドと同じ刻み。
+constexpr DWORD kDiffusionStepMs = 16;
+// 1フレームで進める段数の上限。拡散は墨の広がった範囲全体を
+// 走るので、高速再生で段数が伸びると描画が止まる。
+constexpr int kMaxDiffusionStepsPerFrame = 4;
+// 引き直した直後にまとめて進める段数。
+// シークで飛んだ先でにじみが全く乗っていないのを避ける。
+constexpr int kRebuildDiffusionSteps = 12;
 }
 
 ReplayInk::~ReplayInk() {
@@ -34,7 +43,9 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
     // 記録は正規化座標で持っているので座標は追従できるが、線幅は記録時の
     // ピクセル値なので、大きさを変えると太さの比率はずれる。
     if (!m_ready || m_paperW != paperW || m_paperH != paperH) {
-        if (!m_ink->Initialize(paperW, paperH)) {
+        // 拡散スレッドは立てない。立てると拡散のたびにウィンドウ全体の
+        // 再描画を 60fps で要求し続け、解析タブを離れた後も重さが残る。
+        if (!m_ink->Initialize(paperW, paperH, false)) {
             m_ready = false;
             return false;
         }
@@ -49,7 +60,8 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
     bool rewound = (timeMs < m_timeMs);
     bool recordChanged = (m_revision != session.GetRevision()) || (m_fedCount.size() != strokeCount);
 
-    if (rewound || recordChanged) {
+    bool rebuilt = (rewound || recordChanged);
+    if (rebuilt) {
         m_ink->Clear();
         m_fedCount.assign(strokeCount, 0);
         m_openStroke = -1;
@@ -57,7 +69,18 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
         m_revision = session.GetRevision();
     }
 
+    // にじみは時間発展なので、進める量を再生時刻の進みに合わせる。
+    // 停止中は進まず、2倍速なら2倍速で進む。
+    int steps = 0;
+    if (rebuilt) {
+        steps = kRebuildDiffusionSteps;
+    } else if (timeMs > m_timeMs) {
+        steps = static_cast<int>((timeMs - m_timeMs) / kDiffusionStepMs);
+        if (steps > kMaxDiffusionStepsPerFrame) steps = kMaxDiffusionStepsPerFrame;
+    }
+
     FeedForward(session, timeMs);
+    AdvanceDiffusion(steps);
     m_timeMs = timeMs;
     return true;
 }
@@ -114,6 +137,13 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs) {
         && m_fedCount[m_openStroke] >= strokes[m_openStroke].points.size()) {
         m_ink->EndStroke();
         m_openStroke = -1;
+    }
+}
+
+void ReplayInk::AdvanceDiffusion(int steps) {
+    if (!m_ready || !m_ink) return;
+    for (int i = 0; i < steps; ++i) {
+        if (!m_ink->StepPropagation()) break;  // 変化が止まったら打ち切り
     }
 }
 
