@@ -157,10 +157,12 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
     int cellH = RH(cell);
     if (cellW <= 0 || cellH <= 0) return;
 
-    // 縦書きの書写では、字は上下いっぱいに書いて余白は左右に残す。
-    // 横基準と縦基準で比率を分け、厳しい方に合わせる。単純に短辺 x 0.85 とすると、
-    // 2文字（横長のマス）のように高さが効く下敷きで字が小さくなりすぎる。
-    int emSize = (int)((std::min)(cellW * 0.85, cellH * 0.95));
+    // 中筆で升目いっぱいに書く実寸の手本にするため、em ボックスを升目とほぼ
+    // 同じ大きさにする。字の墨は em ボックスより一回り小さく（em を 1000 とすると
+    // 墨幅は「夢」で 816、「道」で 937）、em を升目より小さく取ると手本が
+    // 升目の中で浮いてしまう。縦横比は崩さないので、縦長の升目（4字組みなど）
+    // では上下に余白が残る。
+    int emSize = (int)((std::min)(cellW, cellH) * 0.95);
     if (emSize <= 0) return;
 
     HFONT font = GetOtehonFont(dc, emSize, style);
