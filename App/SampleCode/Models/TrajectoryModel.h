@@ -75,8 +75,10 @@ struct ReplayModel {
     void Reset() {
         state = ReplayState::Stopped;
         currentTimeMs = 0;
+        totalDurationMs = 0;
         isDraggingSeekBar = false;
         isDraggingWaveform = false;
+        currentSample = ReplaySample();
         hasValidSample = false;
     }
 };

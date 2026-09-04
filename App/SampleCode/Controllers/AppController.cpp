@@ -24,12 +24,20 @@ static void SetOtehonImePosition(HWND hWnd, const RECT& inputBox) {
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.trajectory.Clear();
+    state.replay.Reset();
     state.ui.showClearConfirm = false;
     // 書き直しなので、お手本も書き始めのマスへ戻す（位置を固定していれば動かさない）
     state.otehon.ResetActiveCellIfFollowing();
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
     state.ui.suppressPenUntilLift = true;
+    // シークバーのツマミ位置は再生時刻から Layout で決まる。全消しで時刻を 0 へ戻した後に
+    // 取り直さないと、ツマミだけ古い位置に残る。
+    RECT rcClient = { 0, 0, 0, 0 };
+    GetClientRect(hWnd, &rcClient);
+    if (rcClient.right > 0 && rcClient.bottom > 0) {
+        state.Layout(rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
+    }
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -80,6 +88,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             state.calibration.Reset();
             gpuInk.Clear();
             state.trajectory.Clear();
+            state.replay.Reset();
             state.ink.Refill();
             state.SetSaveFeedback(L"✓ 筆の硬さを自動調整しました");
             InvalidateRect(hWnd, NULL, FALSE);
@@ -87,6 +96,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         } else if (PtIn(ui.rCalibRetryBtn, pt)) {
             gpuInk.Clear();
             state.trajectory.Clear();
+            state.replay.Reset();
             state.ink.Refill();
             state.calibration.Start();
             InvalidateRect(hWnd, NULL, FALSE);
@@ -95,6 +105,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             state.calibration.Reset();
             gpuInk.Clear();
             state.trajectory.Clear();
+            state.replay.Reset();
             state.ink.Refill();
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
@@ -149,8 +160,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         // 詳細パネル内部の操作
         if (PtIn(ui.rSub, pt)) {
             if (ui.leftTab == LeftTab::Analysis) {
+                // 記録が1画も無い間は再生・シーク系の操作を受け付けない（ボタンも無効表示）
+                bool hasRecording = state.trajectory.GetTotalStrokeCount() > 0;
                 // 1. 最初に戻る (↺)
-                if (PtIn(ui.rReplayResetBtn, pt)) {
+                if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) {
                     state.replay.currentTimeMs = 0;
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
                     state.Layout(w, h);
@@ -158,7 +171,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
                 // 2. 前画 (⏮)
-                else if (PtIn(ui.rReplayPrevBtn, pt)) {
+                else if (hasRecording && PtIn(ui.rReplayPrevBtn, pt)) {
                     int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
                     DWORD curStart = state.trajectory.GetStrokeTimelineStart(curIdx);
                     if (state.replay.currentTimeMs > curStart + 180) {
@@ -174,7 +187,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
                 // 3. 再生 / 一時停止 (▶ / ❚❚)
-                else if (PtIn(ui.rReplayPlayBtn, pt)) {
+                else if (hasRecording && PtIn(ui.rReplayPlayBtn, pt)) {
                     if (state.replay.totalDurationMs == 0) {
                         state.trajectory.BuildReplayTimeline();
                         state.replay.totalDurationMs = state.trajectory.GetReplayTotalDurationMs();
@@ -193,7 +206,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
                 // 4. 次画 (⏭)
-                else if (PtIn(ui.rReplayNextBtn, pt)) {
+                else if (hasRecording && PtIn(ui.rReplayNextBtn, pt)) {
                     int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
                     if (curIdx + 1 < static_cast<int>(state.trajectory.GetTotalStrokeCount())) {
                         state.replay.currentTimeMs = state.trajectory.GetStrokeTimelineStart(curIdx + 1);
@@ -222,7 +235,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 // 6. シークバーのクリック・ドラッグ開始
                 RECT rSeekHit = ui.rReplaySeekTrack;
                 rSeekHit.top -= 6; rSeekHit.bottom += 6;
-                if (PtIn(rSeekHit, pt)) {
+                if (hasRecording && PtIn(rSeekHit, pt)) {
                     state.replay.isDraggingSeekBar = true;
                     SetCapture(hWnd);
                     double trackW = static_cast<double>(RW(ui.rReplaySeekTrack));
@@ -236,7 +249,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 }
                 // 7. 波形グラフのクリック・ドラッグによるシーク
                 RECT rPlotHit = { ui.rAnalysisGraphBox.left + 38, ui.rAnalysisGraphBox.top + 32, ui.rAnalysisGraphBox.right - 14, ui.rAnalysisGraphBox.bottom - 20 };
-                if (PtIn(rPlotHit, pt)) {
+                if (hasRecording && PtIn(rPlotHit, pt)) {
                     state.replay.isDraggingWaveform = true;
                     SetCapture(hWnd);
                     double plotW = static_cast<double>(RW(rPlotHit));
@@ -283,6 +296,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 } else if (PtIn(ui.rSubCalibBtn, pt)) {
                     gpuInk.Clear();
                     state.trajectory.Clear();
+                    state.replay.Reset();
                     state.ink.Refill();
                     state.calibration.Start();
                     ui.suppressPenUntilLift = true;
@@ -572,14 +586,15 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
 
             if (PtIn(ui.rSub, pt)) {
                 if (ui.leftTab == LeftTab::Analysis) {
-                    if (PtIn(ui.rReplayResetBtn, pt)) ui.hoverReplayBtn = 1;
-                    else if (PtIn(ui.rReplayPrevBtn, pt)) ui.hoverReplayBtn = 2;
-                    else if (PtIn(ui.rReplayPlayBtn, pt)) ui.hoverReplayBtn = 3;
-                    else if (PtIn(ui.rReplayNextBtn, pt)) ui.hoverReplayBtn = 4;
+                    bool hasRecording = state.trajectory.GetTotalStrokeCount() > 0;
+                    if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) ui.hoverReplayBtn = 1;
+                    else if (hasRecording && PtIn(ui.rReplayPrevBtn, pt)) ui.hoverReplayBtn = 2;
+                    else if (hasRecording && PtIn(ui.rReplayPlayBtn, pt)) ui.hoverReplayBtn = 3;
+                    else if (hasRecording && PtIn(ui.rReplayNextBtn, pt)) ui.hoverReplayBtn = 4;
                     else if (PtIn(ui.rReplaySpeedBtn[0], pt)) ui.hoverReplayBtn = 5;
                     else if (PtIn(ui.rReplaySpeedBtn[1], pt)) ui.hoverReplayBtn = 6;
                     else if (PtIn(ui.rReplaySpeedBtn[2], pt)) ui.hoverReplayBtn = 7;
-                    else {
+                    else if (hasRecording) {
                         RECT rSeekH = ui.rReplaySeekTrack; rSeekH.top -= 6; rSeekH.bottom += 6;
                         if (PtIn(rSeekH, pt) || PtIn(ui.rReplaySeekThumb, pt)) ui.hoverReplayBtn = 8;
                     }

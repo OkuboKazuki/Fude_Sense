@@ -19,6 +19,11 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     const auto& rep = state.replay;
     const auto& session = state.trajectory;
     size_t strokeCount = session.GetTotalStrokeCount();
+    // 記録が1画も無い間は再生系を無効表示にする（操作側も受け付けない）
+    bool hasRecording = (strokeCount > 0);
+    const COLORREF DIS_BG     = RGB(26, 29, 36);
+    const COLORREF DIS_BORDER = RGB(44, 48, 60);
+    const COLORREF DIS_TEXT   = RGB(88, 95, 110);
 
     // 1. ヘッダー: タイトル & 時刻表示
     RECT rHeader = { rBox.left + 14, rBox.top + 8, rBox.left + 220, rBox.top + 28 };
@@ -73,9 +78,9 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
 
     // シークバーのツマミ (Thumb)
     const RECT& rThumb = state.ui.rReplaySeekThumb;
-    bool isThumbActive = (state.ui.hoverReplayBtn == 8 || rep.isDraggingSeekBar);
-    COLORREF thumbColor = isThumbActive ? RGB(255, 230, 100) : RGB(230, 240, 255);
-    COLORREF thumbBorder = isThumbActive ? RGB(255, 255, 255) : RGB(80, 160, 240);
+    bool isThumbActive = hasRecording && (state.ui.hoverReplayBtn == 8 || rep.isDraggingSeekBar);
+    COLORREF thumbColor = !hasRecording ? RGB(56, 61, 74) : (isThumbActive ? RGB(255, 230, 100) : RGB(230, 240, 255));
+    COLORREF thumbBorder = !hasRecording ? DIS_BORDER : (isThumbActive ? RGB(255, 255, 255) : RGB(80, 160, 240));
     Box(dc, rThumb, thumbColor, thumbBorder, 2, 4);
 
     // 3. 再生操作ボタン
@@ -83,26 +88,26 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
 
     // 最初に戻る (↺)
     bool hReset = (state.ui.hoverReplayBtn == 1);
-    Box(dc, state.ui.rReplayResetBtn, hReset ? RGB(45, 52, 68) : RGB(34, 38, 48), hReset ? RGB(100, 120, 160) : RGB(58, 66, 84), 1, 6);
-    Center(dc, state.ui.rReplayResetBtn, L"↺", fBtnIcon, RGB(200, 215, 235));
+    Box(dc, state.ui.rReplayResetBtn, !hasRecording ? DIS_BG : (hReset ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hReset ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
+    Center(dc, state.ui.rReplayResetBtn, L"↺", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
     // 前画 (⏮)
     bool hPrev = (state.ui.hoverReplayBtn == 2);
-    Box(dc, state.ui.rReplayPrevBtn, hPrev ? RGB(45, 52, 68) : RGB(34, 38, 48), hPrev ? RGB(100, 120, 160) : RGB(58, 66, 84), 1, 6);
-    Center(dc, state.ui.rReplayPrevBtn, L"⏮", fBtnIcon, RGB(200, 215, 235));
+    Box(dc, state.ui.rReplayPrevBtn, !hasRecording ? DIS_BG : (hPrev ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hPrev ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
+    Center(dc, state.ui.rReplayPrevBtn, L"⏮", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
     // 再生 / 一時停止 (▶ / ❚❚)
-    bool isPlaying = (rep.state == ReplayState::Playing);
+    bool isPlaying = hasRecording && (rep.state == ReplayState::Playing);
     bool hPlay = (state.ui.hoverReplayBtn == 3);
-    COLORREF playBg = isPlaying ? (hPlay ? RGB(200, 70, 60) : RGB(170, 50, 45)) : (hPlay ? RGB(40, 160, 230) : RGB(28, 130, 200));
-    COLORREF playBorder = isPlaying ? RGB(255, 110, 100) : RGB(80, 190, 255);
+    COLORREF playBg = !hasRecording ? DIS_BG : isPlaying ? (hPlay ? RGB(200, 70, 60) : RGB(170, 50, 45)) : (hPlay ? RGB(40, 160, 230) : RGB(28, 130, 200));
+    COLORREF playBorder = !hasRecording ? DIS_BORDER : (isPlaying ? RGB(255, 110, 100) : RGB(80, 190, 255));
     Box(dc, state.ui.rReplayPlayBtn, playBg, playBorder, 1, 6);
-    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 停止" : L"▶ 再生", fBtnIcon, RGB(255, 255, 255));
+    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 停止" : L"▶ 再生", fBtnIcon, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
 
     // 次画 (⏭)
     bool hNext = (state.ui.hoverReplayBtn == 4);
-    Box(dc, state.ui.rReplayNextBtn, hNext ? RGB(45, 52, 68) : RGB(34, 38, 48), hNext ? RGB(100, 120, 160) : RGB(58, 66, 84), 1, 6);
-    Center(dc, state.ui.rReplayNextBtn, L"⏭", fBtnIcon, RGB(200, 215, 235));
+    Box(dc, state.ui.rReplayNextBtn, !hasRecording ? DIS_BG : (hNext ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hNext ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
+    Center(dc, state.ui.rReplayNextBtn, L"⏭", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
     DeleteObject(fBtnIcon);
 
