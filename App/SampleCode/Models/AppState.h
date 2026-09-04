@@ -60,12 +60,7 @@ struct OtehonModel {
     bool isTyping = false;
     std::vector<std::wstring> palette;
 
-    // 「書いている升目」への追従状態
-    OtehonPlacement placement = OtehonPlacement::FollowPen;
-    int activeCell = 0;        // 追従中のマス。UIState::rGridCell のインデックス（初期値0は書字順の先頭＝右上）
-    bool cellLatched = false;  // 運筆中は追従を止める。ペンが紙から離れると解除される
-
-    // 固定表示のときにマスへ置いたお手本文字。空文字は未配置。
+    // マスへ置いたお手本文字。空文字は未配置。
     // 候補の番号ではなく文字そのものを持つ。番号だと、入力を変えて候補が
     // 入れ替わったときに、置いてある字まで別の字に化けてしまう。
     std::wstring cellText[MAX_GRID_CELLS];
@@ -93,34 +88,16 @@ struct OtehonModel {
         if (selectedIndex < 0 || selectedIndex >= (int)palette.size()) selectedIndex = 0;
     }
 
-    bool IsFollowingPen() const { return placement == OtehonPlacement::FollowPen; }
-
-    // 書字順の先頭マス（右上）へ戻す。升目や用紙が変わって、そもそもマスの
-    // 割り付けが別物になったときに使う。
-    void ResetActiveCell() {
-        activeCell = 0;
-        cellLatched = false;
-    }
-
-    // 表示開始や全消しのように、固定していれば動かしたくない場面用
-    void ResetActiveCellIfFollowing() {
-        if (IsFollowingPen()) ResetActiveCell();
-    }
-
     const std::wstring& GetCellText(int cellIndex) const {
         static const std::wstring empty;
         return (cellIndex >= 0 && cellIndex < MAX_GRID_CELLS) ? cellText[cellIndex] : empty;
     }
 
-    // マスへお手本を配置する（固定表示へ切り替わる）。配置先はミニマップから選ぶ。
-    // ペンのホバー位置を採用すると、ボタンを押すためにペンをパネルへ動かす途中で
-    // 追従先が変わってしまい、意図しないマスに置かれてしまう。
+    // マスへお手本を配置する。配置先はミニマップから選ぶ。
     // 既に同じ字が置かれているマスを指した場合は取り消す。
     void PlaceAtCell(int cellIndex, const std::wstring& text) {
         if (cellIndex < 0 || cellIndex >= MAX_GRID_CELLS) return;
-        placement = OtehonPlacement::Fixed;
         cellText[cellIndex] = (cellText[cellIndex] == text) ? std::wstring() : text;
-        cellLatched = false;
     }
 
     void ClearCellChars() {
@@ -130,11 +107,6 @@ struct OtehonModel {
     bool HasPlacedChar() const {
         for (const std::wstring& t : cellText) if (!t.empty()) return true;
         return false;
-    }
-
-    void FollowPen() {
-        placement = OtehonPlacement::FollowPen;
-        cellLatched = false;
     }
 
     int GetPaletteCount() const { return (int)palette.size(); }
@@ -215,8 +187,7 @@ struct UIState {
     RECT rOtehonTile[8]{};
     RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
     RECT rOtehonInputBox{};                  // 書きたい文字の入力欄
-    RECT rOtehonFollowBtn{};                 // 「ペンに追従」へ戻すボタン
-    RECT rOtehonCellMapBox{};                // 固定先を選ぶ升目ミニマップの配置枠
+    RECT rOtehonCellMapBox{};                // 配置先を選ぶ升目ミニマップの配置枠
     RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
     RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};
@@ -233,14 +204,6 @@ struct UIState {
     int gridCellCount = 0;              // 有効なセル数
     int gridCols = 1;                   // 列数（縦書きの「行（ぎょう）」に相当）
     int gridRows = 1;                   // 1列あたりの文字数
-
-    // 指定座標を含む升目セルの番号を返す。どのセルにも含まれなければ -1
-    int FindGridCell(POINT pt) const {
-        for (int i = 0; i < gridCellCount; ++i) {
-            if (RenderUtils::PtIn(rGridCell[i], pt)) return i;
-        }
-        return -1;
-    }
 };
 
 // アプリケーション全体の状態を統合する Model クラス
@@ -256,14 +219,6 @@ public:
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);
-
-    // お手本を出す升目。追従先が無効なら半紙全体を返す
-    RECT GetOtehonCell() const {
-        if (otehon.activeCell >= 0 && otehon.activeCell < ui.gridCellCount) {
-            return ui.rGridCell[otehon.activeCell];
-        }
-        return ui.rPaper;
-    }
 
     void SetSaveFeedback(const std::wstring& message) {
         ui.saveFeedback = message;

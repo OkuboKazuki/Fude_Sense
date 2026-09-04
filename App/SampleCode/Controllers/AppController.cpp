@@ -25,8 +25,6 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.trajectory.Clear();
     state.ui.showClearConfirm = false;
-    // 書き直しなので、お手本も書き始めのマスへ戻す（位置を固定していれば動かさない）
-    state.otehon.ResetActiveCellIfFollowing();
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
     state.ui.suppressPenUntilLift = true;
@@ -182,11 +180,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     if (PtIn(ui.rPaperTile[i], pt)) {
                         state.paper.type = static_cast<PaperType>(i);
                         state.Layout(w, h);
-                        // マスの割り付けが別物になるので、配置済みのお手本は破棄して
-                        // ペン追従へ戻す（残すとどのマスの手本か分からなくなる）
+                        // マスの割り付けが別物になるので、配置済みのお手本は破棄する
+                        // （残すとどのマスの手本か分からなくなる）
                         state.otehon.ClearCellChars();
-                        state.otehon.FollowPen();
-                        state.otehon.ResetActiveCell();
                         int pw = RW(ui.rPaper);
                         int ph = RH(ui.rPaper);
                         if (pw > 0 && ph > 0) gpuInk.Resize(pw, ph);
@@ -203,8 +199,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         // パターン変更時は再レイアウトが必要
                         state.Layout(w, h);
                         state.otehon.ClearCellChars();
-                        state.otehon.FollowPen();
-                        state.otehon.ResetActiveCell();
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }
@@ -243,17 +237,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             } else if (ui.leftTab == LeftTab::Otehon) {
                 if (PtIn(ui.rOtehonToggleBtn, pt)) {
                     state.otehon.isVisible = !state.otehon.isVisible;
-                    // 表示を始めるときは書き始めのマスから出す。追従はペン先の
-                    // 位置を常に拾っているため、パネルへ向かう途中に横切ったマスへ
-                    // お手本が出てしまうのを防ぐ。
-                    if (state.otehon.isVisible) state.otehon.ResetActiveCellIfFollowing();
-                    InvalidateRect(hWnd, NULL, FALSE);
-                    return true;
-                }
-
-                // 配置: ペン追従へ戻す
-                if (PtIn(ui.rOtehonFollowBtn, pt)) {
-                    state.otehon.FollowPen();
                     InvalidateRect(hWnd, NULL, FALSE);
                     return true;
                 }
@@ -279,10 +262,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 for (int i = 0; i < state.otehon.GetPaletteCount() && i < 8; ++i) {
                     if (PtIn(ui.rOtehonTile[i], pt)) {
                         state.otehon.selectedIndex = i;
-                        if (!state.otehon.isVisible) {
-                            state.otehon.isVisible = true;
-                            state.otehon.ResetActiveCellIfFollowing();
-                        }
+                        state.otehon.isVisible = true;
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }
@@ -378,20 +358,6 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
-    // お手本のマス追従（マウス操作時）。
-    // ペン (Wintab) はホバーのパケットが StrokeController へ届くのでそちらで
-    // 追従するが、マウスは押下中しか StrokeController を通らないため、
-    // ペンの無い環境でもマスを移動できるようここでも拾う。
-    if (!ui.showClearConfirm && !state.calibration.IsResult()
-        && !(ui.isSubPanelOpen && PtIn(ui.rSub, pt))
-        && state.otehon.IsFollowingPen() && !state.otehon.cellLatched) {
-        int cell = ui.FindGridCell(pt);
-        if (cell >= 0 && cell != state.otehon.activeCell) {
-            state.otehon.activeCell = cell;
-            if (state.otehon.isVisible) InvalidateRect(hWnd, &ui.rPaper, FALSE);
-        }
-    }
-
     // ホバー状態の更新
     TbButton oldTb = ui.hoverTb;
     int oldSub = ui.hoverSub;
@@ -438,7 +404,6 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
                     else if (PtIn(ui.rSaveBtnCsv, pt)) ui.hoverSub = 63;
                 } else if (ui.leftTab == LeftTab::Otehon) {
                     if (PtIn(ui.rOtehonToggleBtn, pt)) ui.hoverSub = 70;
-                    if (PtIn(ui.rOtehonFollowBtn, pt)) ui.hoverSub = 71;
                     if (PtIn(ui.rOtehonInputBox, pt)) ui.hoverSub = 73;
                     for (int i = 0; i < ui.gridCellCount; ++i) if (PtIn(ui.rOtehonCellBtn[i], pt)) ui.hoverSub = 90 + i;
                     for (int i = 0; i < state.otehon.GetPaletteCount() && i < 8; ++i) {

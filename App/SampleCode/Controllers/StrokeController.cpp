@@ -18,8 +18,6 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     if (pState) {
         pState->trajectory.OnStrokeEnd();
         pState->calibration.OnStrokeEnd();
-        // 紙から離れたのでお手本のマス追従を再開する
-        pState->otehon.cellLatched = false;
     }
 }
 
@@ -62,20 +60,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         && PtInRect(&rPaper, clientPt)
         && !(state.ui.isSubPanelOpen && PtInRect(&rSub, clientPt));
 
-    // お手本を「書いている升目」へ追従させる。
-    // ホバー中（筆圧0）も含めてペン先のあるマスを拾うが、運筆中はラッチして
-    // 動かさない。書いている最中に足元のお手本が隣のマスへ移ると、なぞって
-    // いる線の狙いが狂うため。ラッチはペンが紙から離れた時点（ResetStroke）で
-    // 解除され、次に接地したマスを拾い直す。
-    if (canDrawInk && state.otehon.IsFollowingPen() && !state.otehon.cellLatched) {
-        int cell = state.ui.FindGridCell(clientPt);
-        if (cell >= 0) state.otehon.activeCell = cell;
-    }
-
     if (m_smoothedPressure > 0.0 && canDrawInk) {
-        // 接地したらお手本のマスを固定する
-        state.otehon.cellLatched = true;
-
         // キャリブレーション中の筆圧サンプリング
         if (state.calibration.IsInDrawingStep()) {
             state.calibration.RecordPoint(m_smoothedPressure);

@@ -174,14 +174,7 @@ void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     const UIState& ui = state.ui;
     const double opacity = state.otehon.opacity;
 
-    if (state.otehon.IsFollowingPen()) {
-        // ペン追従は1字だけ。書いている升目に重ねる。升目なし（GridPattern::None）は
-        // 半紙全体が1マス、1字用の下敷き（Cross1 / StarGrid）は内枠が1マスになる。
-        DrawOtehonGlyph(dc, state.GetOtehonCell(), state.otehon.GetCurrentCharacter(), opacity);
-        return;
-    }
-
-    // 固定表示はマスごとに置いた字をすべて出す
+    // マスごとに置いた字をすべて出す
     for (int i = 0; i < ui.gridCellCount; ++i) {
         DrawOtehonGlyph(dc, ui.rGridCell[i], state.otehon.GetCellText(i), opacity);
     }

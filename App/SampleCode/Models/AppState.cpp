@@ -138,11 +138,10 @@ void AppState::Layout(int w, int h) {
         // お手本タブ
         ui.rOtehonToggleBtn = { ui.rSub.left + 20, topOff, ui.rSub.right - 20, topOff + 60 };
 
-        // 配置: 左に升目のミニマップ（固定先の選択）、右に「ペンに追従」へ戻すボタン。
+        // 配置: 左に升目のミニマップ（配置先の選択）、右に操作の説明を出す。
         // ミニマップ内の各マスの矩形は、升目のセルが確定してから 2-2 で算出する。
         int mapTop = ui.rOtehonToggleBtn.bottom + 12;
         ui.rOtehonCellMapBox = { ui.rSub.left + 20, mapTop, ui.rSub.left + 20 + 240, mapTop + 110 };
-        ui.rOtehonFollowBtn = { ui.rOtehonCellMapBox.right + 14, mapTop, ui.rSub.right - 20, mapTop + 46 };
 
         // 書きたい文字の入力欄
         ui.rOtehonInputBox = { ui.rSub.left + 20, ui.rOtehonCellMapBox.bottom + 28,
@@ -217,13 +216,7 @@ void AppState::Layout(int w, int h) {
             }
         }
 
-        // 升目パターンや用紙の変更でセル数が減ることがある。
-        // 追従中のマスが範囲外に取り残されないよう書字順の先頭へ戻す。
-        if (otehon.activeCell < 0 || otehon.activeCell >= ui.gridCellCount) {
-            otehon.activeCell = 0;
-        }
-
-        // お手本の固定先を選ぶミニマップ。実際のセルを枠内へ相似縮小したものなので、
+        // お手本の配置先を選ぶミニマップ。実際のセルを枠内へ相似縮小したものなので、
         // 升目の割り付けと必ず一致する（並びも rGridCell と同じ書字順）。
         const RECT& mapBox = ui.rOtehonCellMapBox;
         int boxW = RW(mapBox);
