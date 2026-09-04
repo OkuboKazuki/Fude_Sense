@@ -172,6 +172,7 @@ struct UIState {
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
     int hoverInkStone = 0;
+    int hoverReplayBtn = 0; // 1: Reset, 2: Prev, 3: Play/Pause, 4: Next, 5: Speed0.5, 6: Speed1.0, 7: Speed2.0, 8: SeekTrack
 
     std::wstring saveFeedback = L"";
     DWORD saveFeedbackTime = 0;
@@ -195,7 +196,10 @@ struct UIState {
     RECT rOtehonFontBtn[OTEHON_FONT_COUNT]{}; // 書体の切り替え（楷書 / 教科書体 / 行書）
     RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
-    RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};
+    RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{}, rAnalysisReplayBox{};
+    RECT rReplayPlayBtn{}, rReplayPrevBtn{}, rReplayNextBtn{}, rReplayResetBtn{};
+    RECT rReplaySeekTrack{}, rReplaySeekThumb{};
+    RECT rReplaySpeedBtn[3]{};
     RECT rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
     RECT rHardnessTrack{};
     RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
@@ -219,12 +223,17 @@ public:
     OtehonModel otehon;
     InkModel ink;
     TrajectorySession trajectory;
+    ReplayModel replay;
     CalibrationModel calibration;
     UndoHistory undo;   // 「一画戻す」用に、画を書き始める直前の状態を控える
     UIState ui;
 
+
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);
+
+    // シークバーのツマミ位置だけを再計算する
+    void UpdateReplaySeekThumb();
 
     void SetSaveFeedback(const std::wstring& message) {
         ui.saveFeedback = message;

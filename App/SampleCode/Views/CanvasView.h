@@ -25,6 +25,15 @@ public:
     static void DrawGrid(HDC dc, const AppState& state);
     static void RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state);
 
+    // リプレイ用半紙描画
+    static void DrawReplayCanvas(HDC dc, const AppState& state);
+
+    // リプレイ描画用のオフスクリーンレイヤを破棄する（終了時）
+    static void ReleaseReplayCache();
+
+    static void Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoint& pose, bool isPenDown);
+
 private:
     static void DrawCross(HDC dc, int x, int y, int s);
 };
+

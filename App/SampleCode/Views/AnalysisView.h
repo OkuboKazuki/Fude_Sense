@@ -13,7 +13,9 @@ public:
     static void Draw(HDC dc, const AppState& state);
 
 private:
+    static void DrawReplayControls(HDC dc, const RECT& rBox, const AppState& state);
     static void DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& state);
     static void DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& state);
     static void DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& state);
 };
+

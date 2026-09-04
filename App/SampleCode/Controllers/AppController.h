@@ -23,4 +23,7 @@ public:
     static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 戻しすぎた1画を復元する
     static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
+
+    // 記録が変わったときにリプレイのタイムラインを作り直す
+    static void SyncReplayTimeline(HWND hWnd, AppState& state);
 };
