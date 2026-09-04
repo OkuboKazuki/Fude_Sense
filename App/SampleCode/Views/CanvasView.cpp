@@ -419,11 +419,17 @@ struct ReplayLayer {
 };
 
 struct ReplayCacheState {
-    ReplayLayer ghost;                  // 全画の薄いゴースト筆跡
+    // ゴースト筆跡は「これから書く部分」だけを出す。書き終わった墨の上へ重ねると、
+    // SRCAND で墨の縁（かすれや輪郭の中間調）が暗くなり、実物とずれるため。
+    ReplayLayer ghostFuture;            // まだ始まっていない画。先頭の画が変わった時だけ焼き直す
+    ReplayLayer ghostCurrent;           // 今書いている画の、これから走る部分。毎フレーム焼き直す
     unsigned revision = 0;              // 焼き込み済みの記録リビジョン
     int paperW = 0;
     int paperH = 0;
-    bool valid = false;                 // ghost が現在の記録と一致しているか
+    int futureFrom = -1;                // ghostFuture に焼いてある先頭の画
+    bool futureValid = false;
+    RECT currentBox = { 0, 0, 0, 0 };   // ghostCurrent の有効範囲（半紙ローカル）
+    bool currentValid = false;
 };
 
 ReplayCacheState g_replayCache;
@@ -445,10 +451,54 @@ void DrawReplaySegment(HDC dc, PenPool& pens, int fromX, int fromY, int toX, int
     LineTo(dc, toX, toY);
 }
 
-// 全画のゴースト線を ghost レイヤへ焼き込む
-void BakeGhostLayer(const AppState& state, int pw, int ph) {
-    ReplayLayer& layer = g_replayCache.ghost;
+// 1画ぶんのゴーストを、fromPoint 以降の点について描く（半紙ローカル座標）
+void DrawGhostStroke(HDC dc, PenPool& pens, const StrokeData& s, size_t fromPoint, int pw, int ph) {
+    for (size_t i = fromPoint; i < s.points.size(); ++i) {
+        const auto& p = s.points[i];
+        int px = static_cast<int>(p.normX * pw);
+        int py = static_cast<int>(p.normY * ph);
+        DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(p.width * 0.45)));
+
+        // 描き始めの点は、直前の（もう墨が乗っている）点とは繋がない
+        if (i > fromPoint) {
+            const auto& q = s.points[i - 1];
+            DrawReplaySegment(dc, pens,
+                static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
+                (std::max)(2, static_cast<int>((p.width + q.width) * 0.45)));
+        }
+    }
+}
+
+// 1画を囲む矩形（半紙ローカル）。線幅ぶん外側へ広げる。
+RECT GhostStrokeBox(const StrokeData& s, int pw, int ph) {
+    RECT box = { 0, 0, 0, 0 };
+    if (s.points.empty()) return box;
+
+    double minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9, maxW = 0.0;
+    for (const auto& p : s.points) {
+        double x = p.normX * pw;
+        double y = p.normY * ph;
+        minX = (std::min)(minX, x);
+        minY = (std::min)(minY, y);
+        maxX = (std::max)(maxX, x);
+        maxY = (std::max)(maxY, y);
+        maxW = (std::max)(maxW, p.width);
+    }
+    int pad = static_cast<int>(maxW * 0.5) + 4;
+    box.left   = (std::max)(0,      static_cast<int>(minX) - pad);
+    box.top    = (std::max)(0,      static_cast<int>(minY) - pad);
+    box.right  = (std::min)(pw, static_cast<int>(maxX) + pad + 1);
+    box.bottom = (std::min)(ph, static_cast<int>(maxY) + pad + 1);
+    return box;
+}
+
+// まだ始まっていない画（fromStroke 以降）をまとめて焼く
+void BakeFutureGhost(const AppState& state, int pw, int ph, size_t fromStroke) {
+    ReplayLayer& layer = g_replayCache.ghostFuture;
     layer.FillWhite();
+
+    const auto& strokes = state.trajectory.GetStrokes();
+    if (fromStroke >= strokes.size()) return;
 
     HDC dc = layer.dc;
     PenPool pens(kGhostColor);
@@ -456,21 +506,41 @@ void BakeGhostLayer(const AppState& state, int pw, int ph) {
     HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
     HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
 
-    for (const auto& s : state.trajectory.GetStrokes()) {
-        for (size_t i = 0; i < s.points.size(); ++i) {
-            const auto& p = s.points[i];
-            int px = static_cast<int>(p.normX * pw);
-            int py = static_cast<int>(p.normY * ph);
-            DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(p.width * 0.45)));
-
-            if (i > 0) {
-                const auto& q = s.points[i - 1];
-                DrawReplaySegment(dc, pens,
-                    static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
-                    (std::max)(2, static_cast<int>((p.width + q.width) * 0.45)));
-            }
-        }
+    for (size_t i = fromStroke; i < strokes.size(); ++i) {
+        DrawGhostStroke(dc, pens, strokes[i], 0, pw, ph);
     }
+
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    DeleteObject(brush);
+}
+
+// 今書いている画の、まだ走っていない部分だけを焼く。
+// 画を囲む矩形の中だけ塗り直すので、毎フレーム呼んでも半紙全面を触らない。
+void BakeCurrentGhost(const AppState& state, int pw, int ph, size_t strokeIdx, size_t fromPoint) {
+    ReplayLayer& layer = g_replayCache.ghostCurrent;
+    const auto& strokes = state.trajectory.GetStrokes();
+    if (strokeIdx >= strokes.size()) {
+        g_replayCache.currentValid = false;
+        return;
+    }
+
+    const StrokeData& s = strokes[strokeIdx];
+    RECT box = GhostStrokeBox(s, pw, ph);
+    g_replayCache.currentBox = box;
+    g_replayCache.currentValid = (box.right > box.left && box.bottom > box.top);
+    if (!g_replayCache.currentValid) return;
+
+    HDC dc = layer.dc;
+    FillRect(dc, &box, (HBRUSH)GetStockObject(WHITE_BRUSH));
+    if (fromPoint >= s.points.size()) return;  // 走り終わった画。白のまま
+
+    PenPool pens(kGhostColor);
+    HBRUSH brush = CreateSolidBrush(kGhostColor);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
+    HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
+
+    DrawGhostStroke(dc, pens, s, fromPoint, pw, ph);
 
     SelectObject(dc, oldPen);
     SelectObject(dc, oldBrush);
@@ -480,8 +550,11 @@ void BakeGhostLayer(const AppState& state, int pw, int ph) {
 } // namespace
 
 void CanvasView::ReleaseReplayCache() {
-    g_replayCache.ghost.Release();
-    g_replayCache.valid = false;
+    g_replayCache.ghostFuture.Release();
+    g_replayCache.ghostCurrent.Release();
+    g_replayCache.futureValid = false;
+    g_replayCache.currentValid = false;
+    g_replayCache.futureFrom = -1;
     g_replayCache.revision = 0;
     g_replayCache.paperW = 0;
     g_replayCache.paperH = 0;
@@ -494,28 +567,46 @@ void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
     int ph = RenderUtils::RH(rPaper);
     if (pw <= 0 || ph <= 0) return;
 
-    if (!state.trajectory.GetStrokes().empty()) {
+    const auto& strokes = state.trajectory.GetStrokes();
+    if (!strokes.empty()) {
         // 1. 再生済みの墨。GpuInk の墨テクスチャは不透明で半紙全面を覆うため、
         //    ゴースト筆跡より先に置く。
         if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph)) {
             g_replayInk.Render(dc, rPaper.left, rPaper.top);
         }
 
-        // 2. まだ書かれていない部分も含めた全画のゴースト筆跡。
-        //    記録が変わった時だけ焼き直し、画面へは SRCAND で重ねるだけ。
+        // 2. これから書く部分のゴースト筆跡。
+        //    合成は SRCAND なので、既に墨が乗っている場所へ重ねると縁が暗くなる。
+        //    走り終わった部分は出さない。
+        int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
+        if (curIdx < 0) curIdx = 0;
+        size_t futureFrom = static_cast<size_t>(curIdx) + 1;
+
         unsigned rev = state.trajectory.GetRevision();
-        bool keyChanged = (!g_replayCache.valid || g_replayCache.revision != rev
+        bool keyChanged = (g_replayCache.revision != rev
             || g_replayCache.paperW != pw || g_replayCache.paperH != ph);
 
-        if (g_replayCache.ghost.Ensure(dc, pw, ph)) {
-            if (keyChanged) {
-                BakeGhostLayer(state, pw, ph);
+        if (g_replayCache.ghostFuture.Ensure(dc, pw, ph) && g_replayCache.ghostCurrent.Ensure(dc, pw, ph)) {
+            if (keyChanged || !g_replayCache.futureValid
+                || g_replayCache.futureFrom != static_cast<int>(futureFrom)) {
+                BakeFutureGhost(state, pw, ph, futureFrom);
+                g_replayCache.futureFrom = static_cast<int>(futureFrom);
                 g_replayCache.revision = rev;
                 g_replayCache.paperW = pw;
                 g_replayCache.paperH = ph;
-                g_replayCache.valid = true;
+                g_replayCache.futureValid = true;
             }
-            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghost.dc, 0, 0, SRCAND);
+
+            BakeCurrentGhost(state, pw, ph, static_cast<size_t>(curIdx),
+                state.trajectory.GetVisiblePointCount(static_cast<size_t>(curIdx), state.replay.currentTimeMs));
+
+            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghostFuture.dc, 0, 0, SRCAND);
+            if (g_replayCache.currentValid) {
+                const RECT& b = g_replayCache.currentBox;
+                BitBlt(dc, rPaper.left + b.left, rPaper.top + b.top,
+                    b.right - b.left, b.bottom - b.top,
+                    g_replayCache.ghostCurrent.dc, b.left, b.top, SRCAND);
+            }
         }
     }
 

@@ -129,6 +129,9 @@ public:
     bool GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const;
     DWORD GetStrokeTimelineStart(size_t strokeIdx) const;
     int FindStrokeIndexAtTimeline(DWORD timeMs) const;
+    // 指定時刻までに打ち終えている記録点の数。
+    // まだ始まっていない画は 0、書き終わった画は全点数。
+    size_t GetVisiblePointCount(size_t strokeIdx, DWORD timeMs) const;
 
     // エクスポート機能 (JSON / CSV)
     bool ExportToJson(const std::wstring& filePath, PaperType paperType, Brush brushType, double hardness) const;

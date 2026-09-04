@@ -372,6 +372,17 @@ int TrajectorySession::FindStrokeIndexAtTimeline(DWORD timeMs) const {
     return static_cast<int>(m_strokeTimelines.size() - 1);
 }
 
+size_t TrajectorySession::GetVisiblePointCount(size_t strokeIdx, DWORD timeMs) const {
+    if (strokeIdx >= m_strokes.size() || strokeIdx >= m_strokeTimelines.size()) return 0;
+    const auto& pts = m_strokes[strokeIdx].points;
+    DWORD start = m_strokeTimelines[strokeIdx].startTimelineMs;
+    if (timeMs < start) return 0;
+    DWORD rel = timeMs - start;
+    size_t n = 0;
+    while (n < pts.size() && pts[n].timeMs <= rel) ++n;
+    return n;
+}
+
 bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const {
     if (m_strokes.empty() || m_strokeTimelines.empty()) return false;
 

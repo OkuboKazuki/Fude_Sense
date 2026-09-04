@@ -92,15 +92,12 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs) {
         const auto& pts = strokes[si].points;
         if (pts.empty()) continue;
 
-        DWORD start = session.GetStrokeTimelineStart(si);
-        if (timeMs < start) break;  // これ以降の画はまだ始まっていない
-        DWORD rel = timeMs - start;
+        // これ以降の画はまだ始まっていない
+        if (timeMs < session.GetStrokeTimelineStart(si)) break;
 
-        // 画内の相対時刻が現在時刻に届いている記録点までを流し込む。
         // 点と点の間を補間した先端は打たない。墨は重ねるほど濃くなるので、
         // 次のフレームで本来の記録点に打ち直されると濃さが狂うため。
-        size_t visible = 0;
-        while (visible < pts.size() && pts[visible].timeMs <= rel) ++visible;
+        size_t visible = session.GetVisiblePointCount(si, timeMs);
         if (visible <= m_fedCount[si]) continue;
 
         if (m_openStroke != static_cast<int>(si)) {
