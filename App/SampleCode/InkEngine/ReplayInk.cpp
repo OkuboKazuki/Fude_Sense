@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "ReplayInk.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -18,24 +19,66 @@ constexpr int kRebuildDiffusionSteps = 12;
 // 再生が止まらないようにする。拡散は落ち着くと StepPropagation が false を
 // 返すので、通常はその手前で打ち切れる。
 constexpr int kMaxGapDiffusionSteps = 60;
+// 巻き戻し用に控える墨の状態の最大数と、その合計サイズの上限。
+// 半紙はほとんどが白紙なので RLE がよく効くが、書き込むほど大きくなる。
+constexpr size_t kMaxCheckpoints = 12;
+constexpr size_t kCheckpointByteBudget = 64u * 1024u * 1024u;
+// 控えを取る間隔の下限。短い記録で控えだらけにならないようにする。
+constexpr DWORD kMinCheckpointIntervalMs = 400;
 }
 
 ReplayInk::~ReplayInk() {
     Release();
 }
 
+void ReplayInk::ClearCheckpoints() {
+    m_checkpoints.clear();
+    m_checkpointBytes = 0;
+}
+
 void ReplayInk::Release() {
     m_ink.reset();
     m_fedCount.clear();
+    ClearCheckpoints();
     m_revision = 0;
     m_paperW = 0;
     m_paperH = 0;
     m_timeMs = 0;
     m_ready = false;
     m_openStroke = -1;
+    m_checkpointIntervalMs = 0;
+    m_wasScrubbing = false;
 }
 
-bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paperW, int paperH) {
+// 巻き戻し先の手前で控えてある状態を書き戻す。
+// 見つかれば、そこから目的の時刻までを引き直すだけで済む。
+bool ReplayInk::RestoreNearest(DWORD timeMs) {
+    for (size_t i = m_checkpoints.size(); i > 0; --i) {
+        const Checkpoint& cp = m_checkpoints[i - 1];
+        if (cp.timeMs > timeMs) continue;
+        if (!m_ink->RestoreSnapshot(cp.snap)) return false;
+        m_fedCount = cp.fedCount;
+        m_openStroke = -1;
+        m_timeMs = cp.timeMs;
+        return true;
+    }
+    return false;
+}
+
+void ReplayInk::CaptureCheckpoint(DWORD timeMs) {
+    if (m_checkpoints.size() >= kMaxCheckpoints) return;
+    if (m_checkpointBytes >= kCheckpointByteBudget) return;
+
+    Checkpoint cp;
+    cp.timeMs = timeMs;
+    cp.fedCount = m_fedCount;
+    if (!m_ink->CaptureSnapshot(cp.snap)) return;
+
+    m_checkpointBytes += cp.snap.ByteSize();
+    m_checkpoints.push_back(std::move(cp));
+}
+
+bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paperW, int paperH, bool scrubbing) {
     if (paperW <= 0 || paperH <= 0) return false;
 
     if (!m_ink) {
@@ -58,25 +101,44 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
         m_ready = true;
         m_revision = 0;
         m_fedCount.clear();
+        ClearCheckpoints();
     }
 
     const size_t strokeCount = session.GetStrokes().size();
     bool rewound = (timeMs < m_timeMs);
     bool recordChanged = (m_revision != session.GetRevision()) || (m_fedCount.size() != strokeCount);
 
-    bool rebuilt = (rewound || recordChanged);
-    if (rebuilt) {
-        m_ink->Clear();
-        m_fedCount.assign(strokeCount, 0);
-        m_openStroke = -1;
-        m_timeMs = 0;
+    // 記録そのものが変わったら控えは使えない
+    if (recordChanged) {
+        ClearCheckpoints();
         m_revision = session.GetRevision();
+        m_checkpointIntervalMs = (std::max)(kMinCheckpointIntervalMs,
+            session.GetReplayTotalDurationMs() / static_cast<DWORD>(kMaxCheckpoints));
+    }
+
+    // 墨は画素へ破壊的に積み上がるので、巻き戻すには引き直すしかない。
+    // 全部引き直すとシークのドラッグが毎フレーム重くなるため、手前の控えまで
+    // 書き戻して、そこからの差分だけを引く。
+    bool rebuilt = (rewound || recordChanged);
+    bool restored = false;
+    if (rebuilt) {
+        restored = !recordChanged && RestoreNearest(timeMs);
+        if (!restored) {
+            m_ink->Clear();
+            m_fedCount.assign(strokeCount, 0);
+            m_openStroke = -1;
+            m_timeMs = 0;
+        }
     }
 
     // にじみは時間発展なので、進める量を再生時刻の進みに合わせる。
     // 停止中は進まず、2倍速なら2倍速で進む。
+    // ドラッグ中は毎フレーム引き直しになるので、まとめ進めは省く。
+    // 指を離した時にまとめて進める。
     int steps = 0;
     if (rebuilt) {
+        steps = scrubbing ? 0 : kRebuildDiffusionSteps;
+    } else if (m_wasScrubbing && !scrubbing) {
         steps = kRebuildDiffusionSteps;
     } else if (timeMs > m_timeMs) {
         steps = static_cast<int>((timeMs - m_timeMs) / kDiffusionStepMs);
@@ -85,9 +147,10 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
 
     // 引き直しの最中は全画を一気に流し込むため、画ごとの間の拡散を積むと
     // 1フレームで数百段走ることになる。そこでは補わない。
-    FeedForward(session, timeMs, rebuilt);
+    FeedForward(session, timeMs, rebuilt, !scrubbing);
     AdvanceDiffusion(steps);
     m_timeMs = timeMs;
+    m_wasScrubbing = scrubbing;
     return true;
 }
 
@@ -123,7 +186,7 @@ int ReplayInk::GapDiffusionSteps(const TrajectorySession& session, size_t stroke
     return steps;
 }
 
-void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool skipGapDiffusion) {
+void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool skipGapDiffusion, bool allowCapture) {
     const auto& strokes = session.GetStrokes();
 
     for (size_t si = 0; si < strokes.size(); ++si) {
@@ -138,9 +201,21 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
         size_t visible = session.GetVisiblePointCount(si, timeMs);
         if (visible <= m_fedCount[si]) continue;
 
-        // この画の1点目を置く前に、手前の空中移動のにじみを補う
-        if (!skipGapDiffusion && m_fedCount[si] == 0) {
-            AdvanceDiffusion(GapDiffusionSteps(session, si));
+        if (m_fedCount[si] == 0) {
+            // 画の切れ目は、巻き戻しの足がかりとして墨の状態を控えておく。
+            // 一定の間隔を空けて、記録全体をまばらに覆う。
+            DWORD startMs = session.GetStrokeTimelineStart(si);
+            if (allowCapture && si > 0 && m_checkpointIntervalMs > 0
+                && (m_checkpoints.empty() || startMs >= m_checkpoints.back().timeMs + m_checkpointIntervalMs)) {
+                if (m_openStroke >= 0) m_ink->EndStroke();
+                m_openStroke = -1;
+                CaptureCheckpoint(startMs);
+            }
+
+            // この画の1点目を置く前に、手前の空中移動のにじみを補う
+            if (!skipGapDiffusion) {
+                AdvanceDiffusion(GapDiffusionSteps(session, si));
+            }
         }
 
         if (m_openStroke != static_cast<int>(si)) {

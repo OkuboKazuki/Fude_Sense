@@ -571,7 +571,8 @@ void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
     if (!strokes.empty()) {
         // 1. 再生済みの墨。GpuInk の墨テクスチャは不透明で半紙全面を覆うため、
         //    ゴースト筆跡より先に置く。
-        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph)) {
+        bool scrubbing = (state.replay.isDraggingSeekBar || state.replay.isDraggingWaveform);
+        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph, scrubbing)) {
             g_replayInk.Render(dc, rPaper.left, rPaper.top);
         }
 
