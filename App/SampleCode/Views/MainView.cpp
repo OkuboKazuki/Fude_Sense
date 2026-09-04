@@ -22,10 +22,15 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     // 2. 半紙背景
     CanvasView::DrawBackground(memDC, state);
 
-    // 3. GPU 墨汁テクスチャの合成
-    CanvasView::RenderInk(memDC, gpuInk, state);
+    // 3. 墨汁の描画（解析タブ表示中はリプレイ墨＆3D筆姿勢、通常時は GPU 墨汁テクスチャ）
+    if (state.ui.leftTab == LeftTab::Analysis) {
+        CanvasView::DrawReplayCanvas(memDC, state);
+    } else {
+        CanvasView::RenderInk(memDC, gpuInk, state);
+    }
 
     // 3-2. お手本文字
+
     // 墨のテクスチャは不透明で半紙全面を覆うため、必ず墨より後に重ねる。
     // 墨との合成は SRCAND なので、なぞった墨がお手本を隠す見え方になる。
     CanvasView::DrawOtehon(memDC, state);

@@ -46,6 +46,41 @@ struct RealtimeMetrics {
     double peakPressureInStroke = 0.0;
 };
 
+// リプレイ状態
+enum class ReplayState {
+    Stopped,
+    Playing,
+    Paused
+};
+
+// リプレイサンプリング姿勢情報
+struct ReplaySample {
+    DWORD timeMs = 0;
+    int strokeIndex = -1;       // 現在の画インデックス (-1: 空中移動中または無効)
+    bool isPenDown = false;      // 着筆中かどうか
+    StrokePoint point;          // 補間された運筆姿勢
+};
+
+// リプレイ制御モデル
+struct ReplayModel {
+    ReplayState state = ReplayState::Stopped;
+    DWORD currentTimeMs = 0;
+    DWORD totalDurationMs = 0;
+    double playbackSpeed = 1.0; // 0.5, 1.0, 2.0
+    bool isDraggingSeekBar = false;
+    bool isDraggingWaveform = false;
+    ReplaySample currentSample;
+    bool hasValidSample = false;
+
+    void Reset() {
+        state = ReplayState::Stopped;
+        currentTimeMs = 0;
+        isDraggingSeekBar = false;
+        isDraggingWaveform = false;
+        hasValidSample = false;
+    }
+};
+
 // 揮毫セッション全体のアーカイブ管理
 class TrajectorySession {
 public:
@@ -65,6 +100,14 @@ public:
     size_t GetTotalStrokeCount() const { return m_strokes.size(); }
     bool IsRecordingStroke() const { return m_isRecordingStroke; }
 
+    // リプレイ用タイムライン＆サンプリング機能
+    void BuildReplayTimeline();
+    DWORD GetReplayTotalDurationMs() const { return m_totalReplayDurationMs; }
+    bool GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const;
+    void GetReplayVisiblePoints(DWORD timeMs, const RECT& rPaper, std::vector<std::vector<StrokePoint>>& outStrokes) const;
+    DWORD GetStrokeTimelineStart(size_t strokeIdx) const;
+    int FindStrokeIndexAtTimeline(DWORD timeMs) const;
+
     // エクスポート機能 (JSON / CSV)
     bool ExportToJson(const std::wstring& filePath, PaperType paperType, Brush brushType, double hardness) const;
     bool ExportToCsv(const std::wstring& filePath) const;
@@ -79,4 +122,13 @@ private:
     bool m_isRecordingStroke = false;
     DWORD m_sessionStartTime = 0;
     RealtimeMetrics m_realtime;
+
+    // リプレイ用内部タイムライン情報
+    struct StrokeTimelineInfo {
+        DWORD startTimelineMs = 0;
+        DWORD endTimelineMs = 0;
+    };
+    std::vector<StrokeTimelineInfo> m_strokeTimelines;
+    DWORD m_totalReplayDurationMs = 0;
 };
+

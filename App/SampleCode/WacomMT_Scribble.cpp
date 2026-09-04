@@ -486,7 +486,45 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			ShowError("Could Not Open Wintab Tablet Contexts.");
 		}
+
+		SetTimer(hWnd, 101, 16, NULL);
 		break;
+	}
+
+	case WM_TIMER:
+	{
+		if (wParam == 101)
+		{
+			static DWORD s_lastReplayTick = 0;
+			DWORD now = GetTickCount();
+
+			if (g_appState.ui.leftTab == LeftTab::Analysis && g_appState.replay.state == ReplayState::Playing)
+			{
+				DWORD dt = (s_lastReplayTick != 0) ? (now - s_lastReplayTick) : 16;
+				if (dt > 100) dt = 16;
+
+				DWORD advanceMs = static_cast<DWORD>(dt * g_appState.replay.playbackSpeed);
+				if (advanceMs < 1 && g_appState.replay.playbackSpeed > 0.0) advanceMs = 1;
+
+				g_appState.replay.currentTimeMs += advanceMs;
+				if (g_appState.replay.currentTimeMs >= g_appState.replay.totalDurationMs)
+				{
+					g_appState.replay.currentTimeMs = g_appState.replay.totalDurationMs;
+					g_appState.replay.state = ReplayState::Paused;
+				}
+
+				g_appState.replay.hasValidSample = g_appState.trajectory.GetReplaySample(
+					g_appState.replay.currentTimeMs, g_appState.ui.rPaper, g_appState.replay.currentSample);
+
+				int w = g_clientRect.right - g_clientRect.left;
+				int h = g_clientRect.bottom - g_clientRect.top;
+				g_appState.Layout(w, h);
+
+				InvalidateRect(hWnd, NULL, FALSE);
+			}
+			s_lastReplayTick = now;
+		}
+		return 0;
 	}
 
 	case WM_CLOSE:
@@ -691,6 +729,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_DESTROY:
 	{
+		KillTimer(hWnd, 101);
 		ReleaseDC(hWnd, g_hdc);
 		CloseTabletContexts();
 		Cleanup();

@@ -114,29 +114,142 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     if (ui.isSubPanelOpen) {
         if (PtIn(ui.rTbBrush, pt)) {
             ui.leftTab = LeftTab::Brush;
+            state.replay.state = ReplayState::Stopped;
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbPaper, pt)) {
             ui.leftTab = LeftTab::Paper;
+            state.replay.state = ReplayState::Stopped;
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbAnalysis, pt)) {
             ui.leftTab = LeftTab::Analysis;
+            state.trajectory.BuildReplayTimeline();
+            state.replay.totalDurationMs = state.trajectory.GetReplayTotalDurationMs();
+            if (state.replay.currentTimeMs > state.replay.totalDurationMs || state.replay.currentTimeMs == 0) {
+                state.replay.currentTimeMs = state.replay.totalDurationMs;
+            }
+            state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+            state.replay.state = ReplayState::Paused;
+            state.Layout(w, h);
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbSave, pt)) {
             ui.leftTab = LeftTab::Save;
+            state.replay.state = ReplayState::Stopped;
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         } else if (PtIn(ui.rTbOtehon, pt)) {
             ui.leftTab = LeftTab::Otehon;
+            state.replay.state = ReplayState::Stopped;
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
 
         // 詳細パネル内部の操作
         if (PtIn(ui.rSub, pt)) {
-            if (ui.leftTab == LeftTab::Brush) {
+            if (ui.leftTab == LeftTab::Analysis) {
+                // 1. 最初に戻る (↺)
+                if (PtIn(ui.rReplayResetBtn, pt)) {
+                    state.replay.currentTimeMs = 0;
+                    state.replay.hasValidSample = state.trajectory.GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
+                    state.Layout(w, h);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                // 2. 前画 (⏮)
+                else if (PtIn(ui.rReplayPrevBtn, pt)) {
+                    int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
+                    DWORD curStart = state.trajectory.GetStrokeTimelineStart(curIdx);
+                    if (state.replay.currentTimeMs > curStart + 180) {
+                        state.replay.currentTimeMs = curStart;
+                    } else if (curIdx > 0) {
+                        state.replay.currentTimeMs = state.trajectory.GetStrokeTimelineStart(curIdx - 1);
+                    } else {
+                        state.replay.currentTimeMs = 0;
+                    }
+                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.Layout(w, h);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                // 3. 再生 / 一時停止 (▶ / ❚❚)
+                else if (PtIn(ui.rReplayPlayBtn, pt)) {
+                    if (state.replay.totalDurationMs == 0) {
+                        state.trajectory.BuildReplayTimeline();
+                        state.replay.totalDurationMs = state.trajectory.GetReplayTotalDurationMs();
+                    }
+                    if (state.replay.state == ReplayState::Playing) {
+                        state.replay.state = ReplayState::Paused;
+                    } else {
+                        if (state.replay.currentTimeMs >= state.replay.totalDurationMs) {
+                            state.replay.currentTimeMs = 0;
+                        }
+                        state.replay.state = ReplayState::Playing;
+                    }
+                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.Layout(w, h);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                // 4. 次画 (⏭)
+                else if (PtIn(ui.rReplayNextBtn, pt)) {
+                    int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
+                    if (curIdx + 1 < static_cast<int>(state.trajectory.GetTotalStrokeCount())) {
+                        state.replay.currentTimeMs = state.trajectory.GetStrokeTimelineStart(curIdx + 1);
+                    } else {
+                        state.replay.currentTimeMs = state.replay.totalDurationMs;
+                    }
+                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.Layout(w, h);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                // 5. 再生速度切替 (0.5x, 1.0x, 2.0x)
+                else if (PtIn(ui.rReplaySpeedBtn[0], pt)) {
+                    state.replay.playbackSpeed = 0.5;
+                    InvalidateRect(hWnd, &ui.rAnalysisReplayBox, FALSE);
+                    return true;
+                } else if (PtIn(ui.rReplaySpeedBtn[1], pt)) {
+                    state.replay.playbackSpeed = 1.0;
+                    InvalidateRect(hWnd, &ui.rAnalysisReplayBox, FALSE);
+                    return true;
+                } else if (PtIn(ui.rReplaySpeedBtn[2], pt)) {
+                    state.replay.playbackSpeed = 2.0;
+                    InvalidateRect(hWnd, &ui.rAnalysisReplayBox, FALSE);
+                    return true;
+                }
+                // 6. シークバーのクリック・ドラッグ開始
+                RECT rSeekHit = ui.rReplaySeekTrack;
+                rSeekHit.top -= 6; rSeekHit.bottom += 6;
+                if (PtIn(rSeekHit, pt)) {
+                    state.replay.isDraggingSeekBar = true;
+                    SetCapture(hWnd);
+                    double trackW = static_cast<double>(RW(ui.rReplaySeekTrack));
+                    double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
+                    norm = Clamp(norm, 0.0, 1.0);
+                    state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
+                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.Layout(w, h);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                // 7. 波形グラフのクリック・ドラッグによるシーク
+                RECT rPlotHit = { ui.rAnalysisGraphBox.left + 38, ui.rAnalysisGraphBox.top + 32, ui.rAnalysisGraphBox.right - 14, ui.rAnalysisGraphBox.bottom - 20 };
+                if (PtIn(rPlotHit, pt)) {
+                    state.replay.isDraggingWaveform = true;
+                    SetCapture(hWnd);
+                    double plotW = static_cast<double>(RW(rPlotHit));
+                    double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
+                    norm = Clamp(norm, 0.0, 1.0);
+                    state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
+                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.Layout(w, h);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+            } else if (ui.leftTab == LeftTab::Brush) {
+
                 if (RW(ui.rHardnessTrack) > 0) {
                     RECT hitBox = ui.rHardnessTrack;
                     hitBox.top -= 6; hitBox.bottom += 6;
@@ -333,6 +446,16 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
         ReleaseCapture();
         handled = true;
     }
+    if (state.replay.isDraggingSeekBar) {
+        state.replay.isDraggingSeekBar = false;
+        ReleaseCapture();
+        handled = true;
+    }
+    if (state.replay.isDraggingWaveform) {
+        state.replay.isDraggingWaveform = false;
+        ReleaseCapture();
+        handled = true;
+    }
     return handled;
 }
 
@@ -359,6 +482,10 @@ bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {
 
 bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state) {
     UIState& ui = state.ui;
+    RECT clientRect = { 0, 0, 0, 0 };
+    GetClientRect(hWnd, &clientRect);
+    int w = clientRect.right - clientRect.left;
+    int h = clientRect.bottom - clientRect.top;
 
     // スライダードラッグ中の更新
     if (state.brush.isDraggingHardness && (wParam & MK_LBUTTON)) {
@@ -378,10 +505,30 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
-    // お手本のマス追従（マウス操作時）。
-    // ペン (Wintab) はホバーのパケットが StrokeController へ届くのでそちらで
-    // 追従するが、マウスは押下中しか StrokeController を通らないため、
-    // ペンの無い環境でもマスを移動できるようここでも拾う。
+    if (state.replay.isDraggingSeekBar && (wParam & MK_LBUTTON)) {
+        double trackW = static_cast<double>(RW(ui.rReplaySeekTrack));
+        double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
+        norm = Clamp(norm, 0.0, 1.0);
+        state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
+        state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+        state.Layout(w, h);
+        InvalidateRect(hWnd, NULL, FALSE);
+        return true;
+    }
+
+    if (state.replay.isDraggingWaveform && (wParam & MK_LBUTTON)) {
+        RECT rPlotHit = { ui.rAnalysisGraphBox.left + 38, ui.rAnalysisGraphBox.top + 32, ui.rAnalysisGraphBox.right - 14, ui.rAnalysisGraphBox.bottom - 20 };
+        double plotW = static_cast<double>(RW(rPlotHit));
+        double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
+        norm = Clamp(norm, 0.0, 1.0);
+        state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
+        state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+        state.Layout(w, h);
+        InvalidateRect(hWnd, NULL, FALSE);
+        return true;
+    }
+
+    // お手本のマス追従（マウス操作時）
     if (!ui.showClearConfirm && !state.calibration.IsResult()
         && !(ui.isSubPanelOpen && PtIn(ui.rSub, pt))
         && state.otehon.IsFollowingPen() && !state.otehon.cellLatched) {
@@ -398,12 +545,14 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     int oldStone = ui.hoverInkStone;
     int oldModal = ui.hoverClearModal;
     int oldCalib = ui.hoverCalib;
+    int oldReplay = ui.hoverReplayBtn;
 
     ui.hoverTb = TbButton::None;
     ui.hoverSub = 0;
     ui.hoverInkStone = 0;
     ui.hoverClearModal = 0;
     ui.hoverCalib = 0;
+    ui.hoverReplayBtn = 0;
 
     if (ui.showClearConfirm) {
         if (PtIn(ui.rModalClearBtn, pt)) ui.hoverClearModal = 1;
@@ -422,7 +571,19 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
             else if (PtIn(ui.rTbOtehon, pt)) ui.hoverTb = TbButton::Otehon;
 
             if (PtIn(ui.rSub, pt)) {
-                if (ui.leftTab == LeftTab::Brush) {
+                if (ui.leftTab == LeftTab::Analysis) {
+                    if (PtIn(ui.rReplayResetBtn, pt)) ui.hoverReplayBtn = 1;
+                    else if (PtIn(ui.rReplayPrevBtn, pt)) ui.hoverReplayBtn = 2;
+                    else if (PtIn(ui.rReplayPlayBtn, pt)) ui.hoverReplayBtn = 3;
+                    else if (PtIn(ui.rReplayNextBtn, pt)) ui.hoverReplayBtn = 4;
+                    else if (PtIn(ui.rReplaySpeedBtn[0], pt)) ui.hoverReplayBtn = 5;
+                    else if (PtIn(ui.rReplaySpeedBtn[1], pt)) ui.hoverReplayBtn = 6;
+                    else if (PtIn(ui.rReplaySpeedBtn[2], pt)) ui.hoverReplayBtn = 7;
+                    else {
+                        RECT rSeekH = ui.rReplaySeekTrack; rSeekH.top -= 6; rSeekH.bottom += 6;
+                        if (PtIn(rSeekH, pt) || PtIn(ui.rReplaySeekThumb, pt)) ui.hoverReplayBtn = 8;
+                    }
+                } else if (ui.leftTab == LeftTab::Brush) {
                     if (PtIn(ui.rSubSmall, pt)) ui.hoverSub = 1;
                     else if (PtIn(ui.rSubMedium, pt)) ui.hoverSub = 2;
                     else if (PtIn(ui.rSubLarge, pt)) ui.hoverSub = 3;
@@ -453,9 +614,10 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 
-    if (oldTb != ui.hoverTb || oldSub != ui.hoverSub || oldStone != ui.hoverInkStone || oldModal != ui.hoverClearModal || oldCalib != ui.hoverCalib) {
+    if (oldTb != ui.hoverTb || oldSub != ui.hoverSub || oldStone != ui.hoverInkStone || oldModal != ui.hoverClearModal || oldCalib != ui.hoverCalib || oldReplay != ui.hoverReplayBtn) {
         InvalidateRect(hWnd, NULL, FALSE);
     }
 
     return true;
 }
+

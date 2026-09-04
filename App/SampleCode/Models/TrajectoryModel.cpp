@@ -19,7 +19,10 @@ void TrajectorySession::Clear() {
     m_isRecordingStroke = false;
     m_realtime = RealtimeMetrics();
     m_sessionStartTime = GetTickCount();
+    m_strokeTimelines.clear();
+    m_totalReplayDurationMs = 0;
 }
+
 
 void TrajectorySession::OnStrokeBegin(DWORD time) {
     m_isRecordingStroke = true;
@@ -273,3 +276,228 @@ bool TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession&
     }
     return false;
 }
+
+void TrajectorySession::BuildReplayTimeline() {
+    m_strokeTimelines.clear();
+    m_totalReplayDurationMs = 0;
+
+    if (m_strokes.empty()) return;
+
+    DWORD curTimeline = 0;
+    for (size_t i = 0; i < m_strokes.size(); ++i) {
+        const auto& s = m_strokes[i];
+        DWORD duration = 0;
+        if (!s.points.empty()) {
+            duration = s.points.back().timeMs;
+            if (duration == 0) duration = static_cast<DWORD>(s.points.size() * 16);
+        }
+        if (duration < 50) duration = 50;
+
+        if (i > 0) {
+            // 画と画の間の空中移動時間（長すぎる待機時間は 300ms ~ 700ms に調整）
+            DWORD gap = 400;
+            if (s.startTime >= m_strokes[i - 1].endTime && m_strokes[i - 1].endTime > 0) {
+                gap = s.startTime - m_strokes[i - 1].endTime;
+                if (gap < 250) gap = 250;
+                if (gap > 700) gap = 700;
+            }
+            curTimeline += gap;
+        }
+
+        StrokeTimelineInfo info;
+        info.startTimelineMs = curTimeline;
+        info.endTimelineMs = curTimeline + duration;
+        m_strokeTimelines.push_back(info);
+
+        curTimeline = info.endTimelineMs;
+    }
+    m_totalReplayDurationMs = curTimeline;
+}
+
+DWORD TrajectorySession::GetStrokeTimelineStart(size_t strokeIdx) const {
+    if (strokeIdx < m_strokeTimelines.size()) {
+        return m_strokeTimelines[strokeIdx].startTimelineMs;
+    }
+    return 0;
+}
+
+int TrajectorySession::FindStrokeIndexAtTimeline(DWORD timeMs) const {
+    if (m_strokeTimelines.empty()) return -1;
+    for (size_t i = 0; i < m_strokeTimelines.size(); ++i) {
+        if (timeMs >= m_strokeTimelines[i].startTimelineMs && timeMs <= m_strokeTimelines[i].endTimelineMs) {
+            return static_cast<int>(i);
+        }
+        if (timeMs < m_strokeTimelines[i].startTimelineMs) {
+            return (i > 0) ? static_cast<int>(i - 1) : 0;
+        }
+    }
+    return static_cast<int>(m_strokeTimelines.size() - 1);
+}
+
+bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const {
+    if (m_strokes.empty() || m_strokeTimelines.empty()) return false;
+
+    int pw = RenderUtils::RW(rPaper);
+    int ph = RenderUtils::RH(rPaper);
+    if (pw <= 0) pw = 1;
+    if (ph <= 0) ph = 1;
+
+    DWORD clampedTime = (timeMs > m_totalReplayDurationMs) ? m_totalReplayDurationMs : timeMs;
+    outSample.timeMs = clampedTime;
+
+    // 1. 各画の中にあるかを検索
+    for (size_t i = 0; i < m_strokeTimelines.size(); ++i) {
+        const auto& tl = m_strokeTimelines[i];
+        const auto& s = m_strokes[i];
+        if (s.points.empty()) continue;
+
+        if (clampedTime >= tl.startTimelineMs && clampedTime <= tl.endTimelineMs) {
+            outSample.strokeIndex = static_cast<int>(i);
+            outSample.isPenDown = true;
+
+            DWORD relTime = clampedTime - tl.startTimelineMs;
+            if (s.points.size() == 1 || relTime <= s.points.front().timeMs) {
+                outSample.point = s.points.front();
+            } else if (relTime >= s.points.back().timeMs) {
+                outSample.point = s.points.back();
+            } else {
+                // 線形補間
+                size_t pIdx = 0;
+                while (pIdx + 1 < s.points.size() && s.points[pIdx + 1].timeMs < relTime) {
+                    pIdx++;
+                }
+                const auto& p1 = s.points[pIdx];
+                const auto& p2 = s.points[pIdx + 1];
+                double span = static_cast<double>(p2.timeMs - p1.timeMs);
+                double t = (span > 0.0) ? (static_cast<double>(relTime - p1.timeMs) / span) : 0.0;
+                t = RenderUtils::Clamp(t, 0.0, 1.0);
+
+                outSample.point.timeMs = relTime;
+                outSample.point.normX = p1.normX + (p2.normX - p1.normX) * t;
+                outSample.point.normY = p1.normY + (p2.normY - p1.normY) * t;
+                outSample.point.pressure = p1.pressure + (p2.pressure - p1.pressure) * t;
+                outSample.point.altitudeDeg = p1.altitudeDeg + (p2.altitudeDeg - p1.altitudeDeg) * t;
+                
+                // 方位角の補間（360度境界処理）
+                double dAzm = p2.azimuthDeg - p1.azimuthDeg;
+                while (dAzm > 180.0) dAzm -= 360.0;
+                while (dAzm < -180.0) dAzm += 360.0;
+                outSample.point.azimuthDeg = p1.azimuthDeg + dAzm * t;
+                while (outSample.point.azimuthDeg < 0.0) outSample.point.azimuthDeg += 360.0;
+                while (outSample.point.azimuthDeg >= 360.0) outSample.point.azimuthDeg -= 360.0;
+
+                outSample.point.speedPxPerSec = p1.speedPxPerSec + (p2.speedPxPerSec - p1.speedPxPerSec) * t;
+                outSample.point.width = p1.width + (p2.width - p1.width) * t;
+            }
+
+            outSample.point.paperX = rPaper.left + static_cast<int>(outSample.point.normX * pw);
+            outSample.point.paperY = rPaper.top + static_cast<int>(outSample.point.normY * ph);
+            return true;
+        }
+
+        // 2. 画と画の間の空中移動 (Hover)
+        if (i + 1 < m_strokeTimelines.size()) {
+            const auto& nextTl = m_strokeTimelines[i + 1];
+            const auto& nextS = m_strokes[i + 1];
+            if (clampedTime > tl.endTimelineMs && clampedTime < nextTl.startTimelineMs) {
+                outSample.strokeIndex = static_cast<int>(i);
+                outSample.isPenDown = false; // 空中ホバー
+
+                double gapSpan = static_cast<double>(nextTl.startTimelineMs - tl.endTimelineMs);
+                double t = (gapSpan > 0.0) ? (static_cast<double>(clampedTime - tl.endTimelineMs) / gapSpan) : 0.0;
+                t = RenderUtils::Clamp(t, 0.0, 1.0);
+
+                const auto& pEnd = s.points.back();
+                const auto& pStart = nextS.points.front();
+
+                outSample.point.timeMs = clampedTime;
+                outSample.point.normX = pEnd.normX + (pStart.normX - pEnd.normX) * t;
+                outSample.point.normY = pEnd.normY + (pStart.normY - pEnd.normY) * t;
+                outSample.point.pressure = 0.0;
+                // 空中では筆が一度立ち上がる自然な動きを再現（最大85°）
+                double arc = std::sin(t * 3.14159265358979323846);
+                double baseAlt = pEnd.altitudeDeg + (pStart.altitudeDeg - pEnd.altitudeDeg) * t;
+                outSample.point.altitudeDeg = baseAlt + (85.0 - baseAlt) * arc * 0.6;
+                outSample.point.altitudeDeg = RenderUtils::Clamp(outSample.point.altitudeDeg, 20.0, 90.0);
+                
+                double dAzm = pStart.azimuthDeg - pEnd.azimuthDeg;
+                while (dAzm > 180.0) dAzm -= 360.0;
+                while (dAzm < -180.0) dAzm += 360.0;
+                outSample.point.azimuthDeg = pEnd.azimuthDeg + dAzm * t;
+                outSample.point.speedPxPerSec = 150.0;
+                outSample.point.width = 0.0;
+
+                outSample.point.paperX = rPaper.left + static_cast<int>(outSample.point.normX * pw);
+                outSample.point.paperY = rPaper.top + static_cast<int>(outSample.point.normY * ph);
+                return true;
+            }
+        }
+    }
+
+    // 末尾以降
+    if (!m_strokes.empty() && !m_strokes.back().points.empty()) {
+        const auto& lastP = m_strokes.back().points.back();
+        outSample.strokeIndex = static_cast<int>(m_strokes.size() - 1);
+        outSample.isPenDown = false;
+        outSample.point = lastP;
+        outSample.point.pressure = 0.0;
+        outSample.point.paperX = rPaper.left + static_cast<int>(lastP.normX * pw);
+        outSample.point.paperY = rPaper.top + static_cast<int>(lastP.normY * ph);
+        return true;
+    }
+
+    return false;
+}
+
+void TrajectorySession::GetReplayVisiblePoints(DWORD timeMs, const RECT& rPaper, std::vector<std::vector<StrokePoint>>& outStrokes) const {
+    outStrokes.clear();
+    if (m_strokes.empty() || m_strokeTimelines.empty()) return;
+
+    int pw = RenderUtils::RW(rPaper);
+    int ph = RenderUtils::RH(rPaper);
+    if (pw <= 0) pw = 1;
+    if (ph <= 0) ph = 1;
+
+    for (size_t i = 0; i < m_strokeTimelines.size(); ++i) {
+        const auto& tl = m_strokeTimelines[i];
+        const auto& s = m_strokes[i];
+        if (s.points.empty()) continue;
+
+        if (timeMs >= tl.endTimelineMs) {
+            // 全点追加
+            std::vector<StrokePoint> pts;
+            pts.reserve(s.points.size());
+            for (auto p : s.points) {
+                p.paperX = rPaper.left + static_cast<int>(p.normX * pw);
+                p.paperY = rPaper.top + static_cast<int>(p.normY * ph);
+                pts.push_back(p);
+            }
+            outStrokes.push_back(pts);
+        } else if (timeMs >= tl.startTimelineMs) {
+            // 一部追加
+            DWORD relTime = timeMs - tl.startTimelineMs;
+            std::vector<StrokePoint> pts;
+            for (auto p : s.points) {
+                if (p.timeMs <= relTime) {
+                    p.paperX = rPaper.left + static_cast<int>(p.normX * pw);
+                    p.paperY = rPaper.top + static_cast<int>(p.normY * ph);
+                    pts.push_back(p);
+                } else {
+                    break;
+                }
+            }
+            // 最後の補間点を追加して滑らかに繋ぐ
+            ReplaySample curSample;
+            if (GetReplaySample(timeMs, rPaper, curSample) && curSample.isPenDown && curSample.strokeIndex == static_cast<int>(i)) {
+                pts.push_back(curSample.point);
+            }
+            if (!pts.empty()) {
+                outStrokes.push_back(pts);
+            }
+            break;
+        } else {
+            break;
+        }
+    }
+}
+
