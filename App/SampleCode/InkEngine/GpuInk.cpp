@@ -118,6 +118,85 @@ static inline double PaperGrainMask(int x, int y)
 	return nx0 + (nx1 - nx0) * fy;
 }
 
+// 同じ値が続く区間を [長さ(uint32)][値(T)] の並びに畳む。半紙はほとんどが
+// 白紙（墨量 0・水分 0）なので、これだけで控えの容量が大きく減る。
+// 畳んだ結果が生データより大きくなる場合は、生データをそのまま入れて
+// compressed = false を返す（市松模様のような最悪ケースの保険）。
+template <typename T>
+static void RleEncode(const T* src, size_t count, std::vector<uint8_t>& out, bool& compressed)
+{
+	const size_t rawBytes = count * sizeof(T);
+
+	// 画の書き始めごとに走る処理なので、走査中に領域を伸ばさない。
+	// 生データ分を先に確保して生ポインタで詰め、最後に使った分へ切り詰める。
+	// （Debug ビルドでは vector::insert の反復子チェックが効いて 20 倍以上遅くなる）
+	out.clear();
+	out.resize(rawBytes);
+	uint8_t* dst = out.data();
+
+	size_t used = 0;
+	bool tooBig = false;
+	size_t i = 0;
+	while (i < count)
+	{
+		const T value = src[i];
+		size_t run = 1;
+		while (i + run < count && src[i + run] == value) ++run;
+
+		if (used + sizeof(uint32_t) + sizeof(T) > rawBytes) { tooBig = true; break; }
+
+		const uint32_t len = static_cast<uint32_t>(run);
+		std::memcpy(dst + used, &len, sizeof(len));
+		used += sizeof(len);
+		std::memcpy(dst + used, &value, sizeof(T));
+		used += sizeof(T);
+
+		i += run;
+	}
+
+	if (tooBig)
+	{
+		// 市松模様のように畳めない絵。生データをそのまま持つ
+		std::memcpy(dst, src, rawBytes);
+		compressed = false;
+	}
+	else
+	{
+		out.resize(used);
+		compressed = true;
+	}
+	out.shrink_to_fit();
+}
+
+template <typename T>
+static bool RleDecode(const std::vector<uint8_t>& src, bool compressed, T* dst, size_t count)
+{
+	const size_t rawBytes = count * sizeof(T);
+	if (!compressed)
+	{
+		if (src.size() != rawBytes) return false;
+		std::memcpy(dst, src.data(), rawBytes);
+		return true;
+	}
+
+	size_t pos = 0;
+	size_t written = 0;
+	while (pos + sizeof(uint32_t) + sizeof(T) <= src.size())
+	{
+		uint32_t len = 0;
+		std::memcpy(&len, src.data() + pos, sizeof(len));
+		pos += sizeof(len);
+		T value{};
+		std::memcpy(&value, src.data() + pos, sizeof(T));
+		pos += sizeof(T);
+
+		if (len == 0 || written + len > count) return false;
+		std::fill_n(dst + written, len, value);
+		written += len;
+	}
+	return written == count;
+}
+
 static inline uint32_t CalculateInkPixel(int inkAmount)
 {
 	if (inkAmount <= 0) return 0xFFFFFFFF; // 白キャンバス（インクなし）
@@ -408,6 +487,65 @@ void GpuInk::Clear()
 			D2D1_RECT_U rect = D2D1::RectU(0, 0, m_width, m_height);
 			m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 		}
+	}
+}
+
+bool GpuInk::CaptureSnapshot(InkSnapshot& out)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (m_width <= 0 || m_height <= 0) return false;
+	const size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+	if (m_ink.size() != pixels || m_wetField.size() != pixels) return false;
+
+	out.width = m_width;
+	out.height = m_height;
+	RleEncode(m_ink.data(), pixels, out.ink, out.inkCompressed);
+	RleEncode(m_wetField.data(), pixels, out.wet, out.wetCompressed);
+	return true;
+}
+
+bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (snap.IsEmpty()) return false;
+	// ウィンドウや用紙が変わって半紙の大きさが違えば、もう書き戻せない
+	if (snap.width != m_width || snap.height != m_height) return false;
+
+	const size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+	if (m_ink.size() != pixels || m_wetField.size() != pixels) return false;
+
+	if (!RleDecode(snap.ink, snap.inkCompressed, m_ink.data(), pixels)) return false;
+	if (!RleDecode(snap.wet, snap.wetCompressed, m_wetField.data(), pixels)) return false;
+
+	// 拡散の作業用バッファは 1 パスごとに作り直されるので 0 に戻すだけでよい
+	if (!m_deltaInk.empty()) std::fill_n(m_deltaInk.data(), pixels, 0);
+
+	// 運筆の途中で戻された場合でも、前の画の続きとして描画が再開されないようにする
+	m_inStroke = false;
+
+	RebuildPixels_NoLock();
+
+	// 書き戻した時点の絵で止める。ここで拡散の対象範囲を半紙全面にすると、
+	// 戻すたびに全画素を舐める重いパスが走るため、範囲は空にしておく。
+	// 次の画を置いた時点で、その周りから拡散が再開する。
+	ResetDirtyRect_NoLock();
+
+	if (m_pInkBitmap && !m_pixelBuffer.empty())
+	{
+		D2D1_RECT_U rect = D2D1::RectU(0, 0, m_width, m_height);
+		m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
+	}
+	return true;
+}
+
+void GpuInk::RebuildPixels_NoLock()
+{
+	if (m_pixelBuffer.size() != m_ink.size()) return;
+	for (size_t i = 0; i < m_ink.size(); ++i)
+	{
+		m_pixelBuffer[i] = CalculateInkPixel(m_ink[i]);
 	}
 }
 

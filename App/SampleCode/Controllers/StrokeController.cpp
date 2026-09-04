@@ -130,6 +130,9 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
 
         double startWidth = m_smoothedWidth;
         if (!gpuInk.IsInStroke() || !m_strokeActive) {
+            // 新しい画の書き始め。墨を置く前の状態を控えて「一画戻す」に備える。
+            // ここは墨の消費・アーカイブ記録・描画のいずれよりも前になる。
+            state.undo.PushBeforeStroke(gpuInk, state.ink, state.trajectory.GetTotalStrokeCount());
             m_smoothedWidth = rawWidth;
             startWidth = rawWidth;
             m_strokeActive = true;

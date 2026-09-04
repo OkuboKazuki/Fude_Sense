@@ -258,11 +258,12 @@ void AppState::Layout(int w, int h) {
     int stoneW = 210;
     int stoneH = (int)(stoneW * 1.34);
     int refillBtnH = 46;
+    int undoBtnH = 46;
     int clearBtnH = 46;
     int spacing = 12;
     int headerSpace = 32; // 墨残量ヘッダー用スペース
 
-    int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + clearBtnH;
+    int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH + spacing + clearBtnH;
     int blockStartY = canvasCenterY - totalBlockH / 2;
     if (blockStartY < 24) blockStartY = 24;
 
@@ -279,7 +280,8 @@ void AppState::Layout(int w, int h) {
     ui.rRight = { rightSpaceLeft, 0, w, h - statusH };
     ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
     ui.rInkRefillBtn  = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH };
-    ui.rClearAllBtn   = { stoneX, stoneY + stoneH + spacing + refillBtnH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH + spacing + clearBtnH };
+    ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
+    ui.rClearAllBtn   = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + clearBtnH };
 
     // 4. 全消し確認モーダルダイアログ
     int modalW = 660;

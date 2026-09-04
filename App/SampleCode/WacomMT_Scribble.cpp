@@ -514,6 +514,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			AppController::ClearAllInk(hWnd, g_appState, g_gpuInk);
 			break;
 		}
+		case 'Z':
+		case 'z':
+		{
+			// Ctrl+Z で一画戻す
+			if (GetKeyState(VK_CONTROL) < 0)
+			{
+				AppController::UndoStroke(hWnd, g_appState, g_gpuInk);
+			}
+			break;
+		}
 		case 'I':
 		case 'i':
 		{

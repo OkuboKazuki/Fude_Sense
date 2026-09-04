@@ -14,6 +14,8 @@
 #include <atomic>
 #include <chrono>
 
+#include "InkSnapshot.h"
+
 struct KinematicsInfo
 {
 	double currentSpeed;
@@ -82,6 +84,12 @@ public:
 	// クリア
 	void Clear();
 
+	// 「一画戻す」用。CaptureSnapshot は画を書き始める直前の墨・水分を控え、
+	// RestoreSnapshot はその状態を書き戻す。どちらも拡散スレッドと同じ
+	// ミューテックスで守る。半紙の寸法が変わっていると書き戻せない。
+	bool CaptureSnapshot(InkSnapshot& out);
+	bool RestoreSnapshot(const InkSnapshot& snap);
+
 	// デバッグ用: 現在の墨汁量をスレッドセーフにコピーして取得
 	void GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight);
 
@@ -97,6 +105,9 @@ private:
 	bool PropagateInk_NoLock();
 	void PropagationThreadLoop();
 	void StopPropagationThread();
+
+	// 墨量から画面用の ARGB バッファを組み直す（書き戻し後に使う）
+	void RebuildPixels_NoLock();
 
 	void ResetDirtyRect_NoLock();
 	void ExpandDirtyRect_NoLock(int x, int y);

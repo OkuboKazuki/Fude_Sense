@@ -62,7 +62,24 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     Center(dc, ui.rInkRefillBtn, L"💧 墨を補充", fBtn, hovRefill ? RGB(255, 255, 255) : RGB(220, 230, 245));
     DeleteObject(fBtn);
 
-    // 6. 「🗑️ 筆跡をすべて消す」ボタン（シャドウなし・スッキリ配置）
+    // 6. 「↩ 一画戻す」ボタン。控えが無いときは押せないことが分かるよう沈める
+    bool canUndo = state.undo.CanUndo();
+    bool hovUndo = (ui.hoverInkStone == 4) && canUndo;
+    Box(dc, ui.rUndoBtn,
+        canUndo ? (hovUndo ? RGB(44, 62, 92) : RGB(30, 36, 46)) : RGB(24, 26, 32),
+        canUndo ? (hovUndo ? RGB(120, 165, 240) : RGB(54, 62, 78)) : RGB(40, 44, 54), 1, 8);
+    HFONT fUndo = CreateCustomFont(17, FW_BOLD);
+    wchar_t undoBuf[48];
+    if (canUndo) {
+        wsprintfW(undoBuf, L"↩ 一画戻す (%d)", state.undo.Depth());
+    } else {
+        wsprintfW(undoBuf, L"↩ 一画戻す");
+    }
+    Center(dc, ui.rUndoBtn, undoBuf, fUndo,
+        canUndo ? (hovUndo ? RGB(255, 255, 255) : RGB(215, 226, 245)) : RGB(96, 102, 116));
+    DeleteObject(fUndo);
+
+    // 7. 「🗑️ 筆跡をすべて消す」ボタン（シャドウなし・スッキリ配置）
     bool hovClear = (ui.hoverInkStone == 3);
     Box(dc, ui.rClearAllBtn, hovClear ? RGB(85, 38, 38) : RGB(42, 30, 32), hovClear ? RGB(180, 70, 70) : RGB(74, 48, 52), 1, 8);
     HFONT fClear = CreateCustomFont(17, FW_BOLD);

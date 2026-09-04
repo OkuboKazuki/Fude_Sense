@@ -19,4 +19,6 @@ public:
     static bool OnChar(HWND hWnd, wchar_t ch, AppState& state);
     static void OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk);
     static void ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk);
+    // 直前の1画を取り消す（墨・墨残量・運筆アーカイブをまとめて戻す）
+    static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
 };

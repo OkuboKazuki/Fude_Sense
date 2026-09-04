@@ -91,6 +91,7 @@
     <ClInclude Include="Controllers\StrokeController.h" />
     <ClInclude Include="InkEngine\GpuInk.h" />
     <ClInclude Include="InkEngine\InkModel.h" />
+    <ClInclude Include="InkEngine\InkSnapshot.h" />
     <ClInclude Include="Inputs\MouseAdapter.h" />
     <ClInclude Include="Inputs\PenInputEvent.h" />
     <ClInclude Include="Inputs\WintabAdapter.h" />
@@ -98,6 +99,7 @@
     <ClInclude Include="Models\AppState.h" />
     <ClInclude Include="Models\CalibrationModel.h" />
     <ClInclude Include="Models\TrajectoryModel.h" />
+    <ClInclude Include="Models\UndoHistory.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Services\ImageExporter.h" />
     <ClInclude Include="Services\WintabManager.h" />
@@ -124,6 +126,7 @@
     <ClCompile Include="Inputs\WintabAdapter.cpp" />
     <ClCompile Include="Models\AppState.cpp" />
     <ClCompile Include="Models\TrajectoryModel.cpp" />
+    <ClCompile Include="Models\UndoHistory.cpp" />
     <ClCompile Include="Services\ImageExporter.cpp" />
     <ClCompile Include="Services\WintabManager.cpp" />
     <ClCompile Include="Services\WintabUtils.cpp" />

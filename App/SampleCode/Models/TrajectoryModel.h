@@ -55,6 +55,8 @@ public:
     void OnStrokeBegin(DWORD time);
     void AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed);
     void OnStrokeEnd();
+    // 直前の1画を記録から取り消す（「一画戻す」で画面と揃えるため）
+    void UndoLastStroke();
     void Clear();
 
     // ゲッター

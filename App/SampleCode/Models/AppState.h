@@ -153,6 +153,7 @@ struct OtehonModel {
 #include "InkModel.h"
 #include "TrajectoryModel.h"
 #include "CalibrationModel.h"
+#include "UndoHistory.h"
 
 // UI・レイアウト状態
 struct UIState {
@@ -195,7 +196,7 @@ struct UIState {
     RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
     RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};
-    RECT rInkStoneLarge{}, rInkRefillBtn{}, rClearAllBtn{};
+    RECT rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rClearAllBtn{};
     RECT rHardnessTrack{};
     RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
     RECT rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
@@ -219,6 +220,7 @@ public:
     InkModel ink;
     TrajectorySession trajectory;
     CalibrationModel calibration;
+    UndoHistory undo;   // 「一画戻す」用に、画を書き始める直前の状態を控える
     UIState ui;
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
