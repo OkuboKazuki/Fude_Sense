@@ -15,6 +15,7 @@ TrajectorySession::TrajectorySession() {
 
 void TrajectorySession::Clear() {
     m_strokes.clear();
+    ++m_revision;
     m_currentStroke = StrokeData();
     m_isRecordingStroke = false;
     m_realtime = RealtimeMetrics();
@@ -36,6 +37,7 @@ void TrajectorySession::OnStrokeBegin(DWORD time) {
 }
 
 void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed) {
+    ++m_revision;
     if (!m_isRecordingStroke) {
         OnStrokeBegin(event.time);
     }
@@ -90,6 +92,7 @@ void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper,
 
 void TrajectorySession::OnStrokeEnd() {
     if (m_isRecordingStroke) {
+        ++m_revision;
         m_isRecordingStroke = false;
         m_realtime.isPenDown = false;
         m_currentStroke.endTime = GetTickCount();
@@ -278,6 +281,7 @@ bool TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession&
 }
 
 void TrajectorySession::BuildReplayTimeline() {
+    ++m_revision;
     m_strokeTimelines.clear();
     m_totalReplayDurationMs = 0;
 
@@ -447,57 +451,5 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
     }
 
     return false;
-}
-
-void TrajectorySession::GetReplayVisiblePoints(DWORD timeMs, const RECT& rPaper, std::vector<std::vector<StrokePoint>>& outStrokes) const {
-    outStrokes.clear();
-    if (m_strokes.empty() || m_strokeTimelines.empty()) return;
-
-    int pw = RenderUtils::RW(rPaper);
-    int ph = RenderUtils::RH(rPaper);
-    if (pw <= 0) pw = 1;
-    if (ph <= 0) ph = 1;
-
-    for (size_t i = 0; i < m_strokeTimelines.size(); ++i) {
-        const auto& tl = m_strokeTimelines[i];
-        const auto& s = m_strokes[i];
-        if (s.points.empty()) continue;
-
-        if (timeMs >= tl.endTimelineMs) {
-            // 全点追加
-            std::vector<StrokePoint> pts;
-            pts.reserve(s.points.size());
-            for (auto p : s.points) {
-                p.paperX = rPaper.left + static_cast<int>(p.normX * pw);
-                p.paperY = rPaper.top + static_cast<int>(p.normY * ph);
-                pts.push_back(p);
-            }
-            outStrokes.push_back(pts);
-        } else if (timeMs >= tl.startTimelineMs) {
-            // 一部追加
-            DWORD relTime = timeMs - tl.startTimelineMs;
-            std::vector<StrokePoint> pts;
-            for (auto p : s.points) {
-                if (p.timeMs <= relTime) {
-                    p.paperX = rPaper.left + static_cast<int>(p.normX * pw);
-                    p.paperY = rPaper.top + static_cast<int>(p.normY * ph);
-                    pts.push_back(p);
-                } else {
-                    break;
-                }
-            }
-            // 最後の補間点を追加して滑らかに繋ぐ
-            ReplaySample curSample;
-            if (GetReplaySample(timeMs, rPaper, curSample) && curSample.isPenDown && curSample.strokeIndex == static_cast<int>(i)) {
-                pts.push_back(curSample.point);
-            }
-            if (!pts.empty()) {
-                outStrokes.push_back(pts);
-            }
-            break;
-        } else {
-            break;
-        }
-    }
 }
 

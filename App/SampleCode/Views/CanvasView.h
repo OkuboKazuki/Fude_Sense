@@ -22,8 +22,10 @@ public:
 
     // リプレイ用半紙描画
     static void DrawReplayCanvas(HDC dc, const AppState& state);
-    static void DrawReplayGhostStrokes(HDC dc, const AppState& state);
-    static void DrawReplayActiveStrokes(HDC dc, const AppState& state);
+
+    // リプレイ描画用のオフスクリーンレイヤを破棄する（終了時）
+    static void ReleaseReplayCache();
+
     static void Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoint& pose, bool isPenDown);
 
 private:

@@ -41,6 +41,19 @@ void GetGridDivision(GridPattern pattern, int borderW, int borderH, int& cols, i
 
 } // namespace
 
+// シークバーのツマミだけを再生時刻から置き直す。
+// 再生中は毎フレーム動くが、他のレイアウトは変わらないため、
+// Layout() 全体を呼び直す必要は無い。
+void AppState::UpdateReplaySeekThumb() {
+    double prog = (replay.totalDurationMs > 0) ? (static_cast<double>(replay.currentTimeMs) / static_cast<double>(replay.totalDurationMs)) : 0.0;
+    prog = RenderUtils::Clamp(prog, 0.0, 1.0);
+    int trackW = ui.rReplaySeekTrack.right - ui.rReplaySeekTrack.left;
+    int thumbX = ui.rReplaySeekTrack.left + static_cast<int>(trackW * prog);
+    int thumbCy = (ui.rReplaySeekTrack.top + ui.rReplaySeekTrack.bottom) / 2;
+    int thumbR = 8;
+    ui.rReplaySeekThumb = { thumbX - thumbR, thumbCy - thumbR, thumbX + thumbR, thumbCy + thumbR };
+}
+
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
@@ -139,12 +152,7 @@ void AppState::Layout(int w, int h) {
         int seekH = 12;
         ui.rReplaySeekTrack = { repLeft + 16, seekY, repRight - 16, seekY + seekH };
 
-        double prog = (replay.totalDurationMs > 0) ? (static_cast<double>(replay.currentTimeMs) / static_cast<double>(replay.totalDurationMs)) : 0.0;
-        prog = RenderUtils::Clamp(prog, 0.0, 1.0);
-        int trackW = ui.rReplaySeekTrack.right - ui.rReplaySeekTrack.left;
-        int thumbX = ui.rReplaySeekTrack.left + static_cast<int>(trackW * prog);
-        int thumbR = 8;
-        ui.rReplaySeekThumb = { thumbX - thumbR, seekY + seekH / 2 - thumbR, thumbX + thumbR, seekY + seekH / 2 + thumbR };
+        UpdateReplaySeekThumb();
 
         int btnY = repTop + 62;
         int btnH = 46;

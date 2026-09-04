@@ -166,8 +166,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) {
                     state.replay.currentTimeMs = 0;
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
-                    state.Layout(w, h);
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    state.UpdateReplaySeekThumb();
+                    InvalidateRect(hWnd, &ui.rPaper, FALSE);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
                 // 2. 前画 (⏮)
@@ -182,8 +183,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         state.replay.currentTimeMs = 0;
                     }
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.Layout(w, h);
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    state.UpdateReplaySeekThumb();
+                    InvalidateRect(hWnd, &ui.rPaper, FALSE);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
                 // 3. 再生 / 一時停止 (▶ / ❚❚)
@@ -194,15 +196,19 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     }
                     if (state.replay.state == ReplayState::Playing) {
                         state.replay.state = ReplayState::Paused;
+                        KillTimer(hWnd, REPLAY_TIMER_ID);
                     } else {
                         if (state.replay.currentTimeMs >= state.replay.totalDurationMs) {
                             state.replay.currentTimeMs = 0;
                         }
                         state.replay.state = ReplayState::Playing;
+                        // 再生中だけタイマを回す。停めるのは WM_TIMER 側。
+                        SetTimer(hWnd, REPLAY_TIMER_ID, 16, NULL);
                     }
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.Layout(w, h);
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    state.UpdateReplaySeekThumb();
+                    InvalidateRect(hWnd, &ui.rPaper, FALSE);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
                 // 4. 次画 (⏭)
@@ -214,8 +220,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         state.replay.currentTimeMs = state.replay.totalDurationMs;
                     }
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.Layout(w, h);
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    state.UpdateReplaySeekThumb();
+                    InvalidateRect(hWnd, &ui.rPaper, FALSE);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
                 // 5. 再生速度切替 (0.5x, 1.0x, 2.0x)
@@ -243,8 +250,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.Layout(w, h);
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    state.UpdateReplaySeekThumb();
+                    InvalidateRect(hWnd, &ui.rPaper, FALSE);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
                 // 7. 波形グラフのクリック・ドラッグによるシーク
@@ -257,8 +265,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.Layout(w, h);
-                    InvalidateRect(hWnd, NULL, FALSE);
+                    state.UpdateReplaySeekThumb();
+                    InvalidateRect(hWnd, &ui.rPaper, FALSE);
+                    InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
             } else if (ui.leftTab == LeftTab::Brush) {
@@ -525,8 +534,9 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
         state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        state.Layout(w, h);
-        InvalidateRect(hWnd, NULL, FALSE);
+        state.UpdateReplaySeekThumb();
+        InvalidateRect(hWnd, &ui.rPaper, FALSE);
+        InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;
     }
 
@@ -537,8 +547,9 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
         state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        state.Layout(w, h);
-        InvalidateRect(hWnd, NULL, FALSE);
+        state.UpdateReplaySeekThumb();
+        InvalidateRect(hWnd, &ui.rPaper, FALSE);
+        InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;
     }
 

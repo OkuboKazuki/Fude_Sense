@@ -2,6 +2,8 @@
 #include "CanvasView.h"
 #include "RenderUtils.h"
 #include <algorithm>
+#include <unordered_map>
+#include <vector>
 
 namespace {
 
@@ -296,104 +298,259 @@ void CanvasView::RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state) {
     gpuInk.Render(dc, state.ui.rPaper.left, state.ui.rPaper.top);
 }
 
+// ---------------------------------------------------------------------------
+// リプレイ描画のオフスクリーンキャッシュ
+//
+// 再生中は毎フレーム半紙を描き直すことになるが、記録済みの運筆は時刻が進んでも
+// 変わらない。そこで半紙と同じ大きさの2枚のレイヤへ焼き込み、画面へは BitBlt
+// だけを行う。
+//   ghost  : 全画の薄いゴースト線。記録が変わった時だけ焼き直す
+//   active : 再生済みの墨。時刻が進んだ分だけ描き足し、巻き戻した時だけ焼き直す
+// どちらも白地に描いて SRCAND で重ねる（GpuInk の墨テクスチャと同じ合成）。
+// ---------------------------------------------------------------------------
+namespace {
+
+// 線幅ごとにペンを使い回すプール。点ごとに CreatePen / DeleteObject を繰り返すと
+// 1画あたり数百個のGDIオブジェクトが生き死にするため、幅をキーにして持ち回る。
+class PenPool {
+public:
+    explicit PenPool(COLORREF color) : m_color(color) {}
+    ~PenPool() {
+        for (auto& kv : m_pens) DeleteObject(kv.second);
+    }
+    HPEN Get(int width) {
+        if (width < 1) width = 1;
+        auto it = m_pens.find(width);
+        if (it != m_pens.end()) return it->second;
+        HPEN pen = CreatePen(PS_SOLID, width, m_color);
+        m_pens[width] = pen;
+        return pen;
+    }
+private:
+    COLORREF m_color;
+    std::unordered_map<int, HPEN> m_pens;
+};
+
+struct ReplayLayer {
+    HDC dc = nullptr;
+    HBITMAP bmp = nullptr;
+    HBITMAP oldBmp = nullptr;
+    int w = 0;
+    int h = 0;
+
+    bool Ensure(HDC ref, int W, int H) {
+        if (dc && w == W && h == H) return true;
+        Release();
+        dc = CreateCompatibleDC(ref);
+        if (!dc) return false;
+        bmp = CreateCompatibleBitmap(ref, W, H);
+        if (!bmp) {
+            DeleteDC(dc);
+            dc = nullptr;
+            return false;
+        }
+        oldBmp = (HBITMAP)SelectObject(dc, bmp);
+        w = W;
+        h = H;
+        FillWhite();
+        return true;
+    }
+    void FillWhite() {
+        if (!dc) return;
+        RECT r = { 0, 0, w, h };
+        FillRect(dc, &r, (HBRUSH)GetStockObject(WHITE_BRUSH));
+    }
+    void Release() {
+        if (dc) {
+            SelectObject(dc, oldBmp);
+            DeleteDC(dc);
+            dc = nullptr;
+        }
+        if (bmp) {
+            DeleteObject(bmp);
+            bmp = nullptr;
+        }
+        oldBmp = nullptr;
+        w = 0;
+        h = 0;
+    }
+};
+
+struct ReplayCacheState {
+    ReplayLayer ghost;
+    ReplayLayer active;
+    unsigned revision = 0;              // 焼き込み済みの記録リビジョン
+    int paperW = 0;
+    int paperH = 0;
+    bool valid = false;                 // ghost / bakedCount が現在の記録と一致しているか
+    DWORD activeTimeMs = 0;             // active レイヤへ焼き込み済みの時刻
+    std::vector<size_t> bakedCount;     // 画ごとの、焼き込み済み記録点数
+};
+
+ReplayCacheState g_replayCache;
+
+const COLORREF kGhostColor = RGB(218, 222, 228);
+const COLORREF kReplayInkColor = RGB(22, 24, 28);
+
+// 記録点の丸。線分用の太いペンを選んだまま描くと丸まで太るので、必ず1pxへ戻す。
+void DrawReplayDot(HDC dc, PenPool& pens, int px, int py, int radius) {
+    SelectObject(dc, pens.Get(1));
+    Ellipse(dc, px - radius, py - radius, px + radius, py + radius);
+}
+
+void DrawReplaySegment(HDC dc, PenPool& pens, int fromX, int fromY, int toX, int toY, int width) {
+    SelectObject(dc, pens.Get(width));
+    MoveToEx(dc, fromX, fromY, nullptr);
+    LineTo(dc, toX, toY);
+}
+
+// 全画のゴースト線を ghost レイヤへ焼き込む
+void BakeGhostLayer(const AppState& state, int pw, int ph) {
+    ReplayLayer& layer = g_replayCache.ghost;
+    layer.FillWhite();
+
+    HDC dc = layer.dc;
+    PenPool pens(kGhostColor);
+    HBRUSH brush = CreateSolidBrush(kGhostColor);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
+    HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
+
+    for (const auto& s : state.trajectory.GetStrokes()) {
+        for (size_t i = 0; i < s.points.size(); ++i) {
+            const auto& p = s.points[i];
+            int px = static_cast<int>(p.normX * pw);
+            int py = static_cast<int>(p.normY * ph);
+            DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(p.width * 0.45)));
+
+            if (i > 0) {
+                const auto& q = s.points[i - 1];
+                DrawReplaySegment(dc, pens,
+                    static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
+                    (std::max)(2, static_cast<int>((p.width + q.width) * 0.45)));
+            }
+        }
+    }
+
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    DeleteObject(brush);
+}
+
+// 再生済みの墨を active レイヤへ描き足す。fromScratch なら白紙から焼き直す。
+void BakeActiveLayer(const AppState& state, int pw, int ph, bool fromScratch) {
+    ReplayLayer& layer = g_replayCache.active;
+    const auto& strokes = state.trajectory.GetStrokes();
+
+    if (fromScratch || g_replayCache.bakedCount.size() != strokes.size()) {
+        layer.FillWhite();
+        g_replayCache.bakedCount.assign(strokes.size(), 0);
+    }
+
+    DWORD timeMs = state.replay.currentTimeMs;
+    HDC dc = layer.dc;
+    PenPool pens(kReplayInkColor);
+    HBRUSH brush = CreateSolidBrush(kReplayInkColor);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
+    HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
+
+    for (size_t si = 0; si < strokes.size(); ++si) {
+        const auto& pts = strokes[si].points;
+        if (pts.empty()) continue;
+
+        DWORD start = state.trajectory.GetStrokeTimelineStart(si);
+        if (timeMs < start) break;  // これ以降の画はまだ始まっていない
+        DWORD rel = timeMs - start;
+
+        // 画内の相対時刻が現在時刻に届いている記録点までが表示対象
+        size_t visible = 0;
+        while (visible < pts.size() && pts[visible].timeMs <= rel) ++visible;
+
+        for (size_t i = g_replayCache.bakedCount[si]; i < visible; ++i) {
+            const auto& p = pts[i];
+            int px = static_cast<int>(p.normX * pw);
+            int py = static_cast<int>(p.normY * ph);
+            DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(p.width * 0.5)));
+
+            if (i > 0) {
+                const auto& q = pts[i - 1];
+                DrawReplaySegment(dc, pens,
+                    static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
+                    (std::max)(2, static_cast<int>((p.width + q.width) * 0.5)));
+            }
+        }
+        if (visible > g_replayCache.bakedCount[si]) {
+            g_replayCache.bakedCount[si] = visible;
+        }
+    }
+
+    // 走っている最中の画は、補間した先端まで線を伸ばして滑らかに繋ぐ。
+    // 先端は次のフレームで記録点に追い越されるので、焼き込んだままで構わない。
+    const auto& sample = state.replay.currentSample;
+    if (state.replay.hasValidSample && sample.isPenDown &&
+        sample.strokeIndex >= 0 && sample.strokeIndex < static_cast<int>(strokes.size())) {
+        const auto& pts = strokes[sample.strokeIndex].points;
+        size_t baked = g_replayCache.bakedCount[sample.strokeIndex];
+        int px = static_cast<int>(sample.point.normX * pw);
+        int py = static_cast<int>(sample.point.normY * ph);
+        DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(sample.point.width * 0.5)));
+        if (baked > 0 && baked <= pts.size()) {
+            const auto& q = pts[baked - 1];
+            DrawReplaySegment(dc, pens,
+                static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
+                (std::max)(2, static_cast<int>((sample.point.width + q.width) * 0.5)));
+        }
+    }
+
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    DeleteObject(brush);
+    g_replayCache.activeTimeMs = timeMs;
+}
+
+} // namespace
+
+void CanvasView::ReleaseReplayCache() {
+    g_replayCache.ghost.Release();
+    g_replayCache.active.Release();
+    g_replayCache.bakedCount.clear();
+    g_replayCache.valid = false;
+    g_replayCache.revision = 0;
+    g_replayCache.paperW = 0;
+    g_replayCache.paperH = 0;
+    g_replayCache.activeTimeMs = 0;
+}
+
 void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
-    DrawReplayGhostStrokes(dc, state);
-    DrawReplayActiveStrokes(dc, state);
+    const RECT& rPaper = state.ui.rPaper;
+    int pw = RenderUtils::RW(rPaper);
+    int ph = RenderUtils::RH(rPaper);
+    if (pw <= 0 || ph <= 0) return;
+
+    if (!state.trajectory.GetStrokes().empty()) {
+        unsigned rev = state.trajectory.GetRevision();
+        bool keyChanged = (!g_replayCache.valid || g_replayCache.revision != rev
+            || g_replayCache.paperW != pw || g_replayCache.paperH != ph);
+
+        if (g_replayCache.ghost.Ensure(dc, pw, ph) && g_replayCache.active.Ensure(dc, pw, ph)) {
+            if (keyChanged) {
+                BakeGhostLayer(state, pw, ph);
+                g_replayCache.revision = rev;
+                g_replayCache.paperW = pw;
+                g_replayCache.paperH = ph;
+                g_replayCache.valid = true;
+            }
+            // 巻き戻した時だけ白紙から焼き直す。進んだ時は差分を描き足すだけ。
+            bool rewound = (state.replay.currentTimeMs < g_replayCache.activeTimeMs);
+            BakeActiveLayer(state, pw, ph, keyChanged || rewound);
+
+            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghost.dc, 0, 0, SRCAND);
+            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.active.dc, 0, 0, SRCAND);
+        }
+    }
+
     if (state.replay.hasValidSample) {
         Draw3DBrushPose(dc, state, state.replay.currentSample.point, state.replay.currentSample.isPenDown);
     }
-}
-
-void CanvasView::DrawReplayGhostStrokes(HDC dc, const AppState& state) {
-    const auto& strokes = state.trajectory.GetStrokes();
-    if (strokes.empty()) return;
-
-    int pw = RenderUtils::RW(state.ui.rPaper);
-    int ph = RenderUtils::RH(state.ui.rPaper);
-    if (pw <= 0 || ph <= 0) return;
-
-    COLORREF ghostColor = RGB(218, 222, 228);
-    HBRUSH gBrush = CreateSolidBrush(ghostColor);
-    HPEN gPen = CreatePen(PS_SOLID, 1, ghostColor);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, gBrush);
-    HPEN oldPen = (HPEN)SelectObject(dc, gPen);
-
-    for (const auto& s : strokes) {
-        if (s.points.empty()) continue;
-
-        for (size_t i = 0; i < s.points.size(); ++i) {
-            const auto& pt = s.points[i];
-            int px = state.ui.rPaper.left + static_cast<int>(pt.normX * pw);
-            int py = state.ui.rPaper.top + static_cast<int>(pt.normY * ph);
-            int r = (std::max)(2, static_cast<int>(pt.width * 0.45));
-
-            Ellipse(dc, px - r, py - r, px + r, py + r);
-
-            if (i > 0) {
-                const auto& prevPt = s.points[i - 1];
-                int prevX = state.ui.rPaper.left + static_cast<int>(prevPt.normX * pw);
-                int prevY = state.ui.rPaper.top + static_cast<int>(prevPt.normY * ph);
-
-                // 線分接続
-                int segWidth = (std::max)(2, static_cast<int>((pt.width + prevPt.width) * 0.45));
-                HPEN thickPen = CreatePen(PS_SOLID, segWidth, ghostColor);
-                HPEN prevThick = (HPEN)SelectObject(dc, thickPen);
-                MoveToEx(dc, prevX, prevY, nullptr);
-                LineTo(dc, px, py);
-                SelectObject(dc, prevThick);
-                DeleteObject(thickPen);
-            }
-        }
-    }
-
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    DeleteObject(gPen);
-    DeleteObject(gBrush);
-}
-
-void CanvasView::DrawReplayActiveStrokes(HDC dc, const AppState& state) {
-    std::vector<std::vector<StrokePoint>> visibleStrokes;
-    state.trajectory.GetReplayVisiblePoints(state.replay.currentTimeMs, state.ui.rPaper, visibleStrokes);
-    if (visibleStrokes.empty()) return;
-
-    COLORREF inkColor = RGB(22, 24, 28);
-    HBRUSH iBrush = CreateSolidBrush(inkColor);
-    HPEN iPen = CreatePen(PS_SOLID, 1, inkColor);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, iBrush);
-    HPEN oldPen = (HPEN)SelectObject(dc, iPen);
-
-    for (const auto& s : visibleStrokes) {
-        if (s.empty()) continue;
-
-        for (size_t i = 0; i < s.size(); ++i) {
-            const auto& pt = s[i];
-            int px = pt.paperX;
-            int py = pt.paperY;
-            int r = (std::max)(2, static_cast<int>(pt.width * 0.5));
-
-            Ellipse(dc, px - r, py - r, px + r, py + r);
-
-            if (i > 0) {
-                const auto& prevPt = s[i - 1];
-                int prevX = prevPt.paperX;
-                int prevY = prevPt.paperY;
-
-                int segWidth = (std::max)(2, static_cast<int>((pt.width + prevPt.width) * 0.5));
-                HPEN thickPen = CreatePen(PS_SOLID, segWidth, inkColor);
-                HPEN prevThick = (HPEN)SelectObject(dc, thickPen);
-                MoveToEx(dc, prevX, prevY, nullptr);
-                LineTo(dc, px, py);
-                SelectObject(dc, prevThick);
-                DeleteObject(thickPen);
-            }
-        }
-    }
-
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    DeleteObject(iPen);
-    DeleteObject(iBrush);
 }
 
 void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoint& pose, bool isPenDown) {

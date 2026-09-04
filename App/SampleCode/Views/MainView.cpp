@@ -8,13 +8,64 @@
 #include "CalibrationView.h"
 #include "StatusBarView.h"
 
+namespace {
+
+// 画面と同じ大きさの裏画面。WM_PAINT ごとに作り直すと、再生中は毎フレーム
+// 数MBのビットマップを確保・破棄することになるため、大きさが変わった時だけ
+// 作り直して使い回す。
+struct BackBuffer {
+    HDC dc = nullptr;
+    HBITMAP bmp = nullptr;
+    HBITMAP oldBmp = nullptr;
+    int w = 0;
+    int h = 0;
+
+    bool Ensure(HDC ref, int W, int H) {
+        if (dc && w == W && h == H) return true;
+        Release();
+        dc = CreateCompatibleDC(ref);
+        if (!dc) return false;
+        bmp = CreateCompatibleBitmap(ref, W, H);
+        if (!bmp) {
+            DeleteDC(dc);
+            dc = nullptr;
+            return false;
+        }
+        oldBmp = (HBITMAP)SelectObject(dc, bmp);
+        w = W;
+        h = H;
+        return true;
+    }
+    void Release() {
+        if (dc) {
+            SelectObject(dc, oldBmp);
+            DeleteDC(dc);
+            dc = nullptr;
+        }
+        if (bmp) {
+            DeleteObject(bmp);
+            bmp = nullptr;
+        }
+        oldBmp = nullptr;
+        w = 0;
+        h = 0;
+    }
+};
+
+BackBuffer g_backBuffer;
+
+} // namespace
+
+void MainView::ReleaseBackBuffer() {
+    g_backBuffer.Release();
+}
+
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
     if (width <= 0 || height <= 0) return;
 
-    // メモリDCによるダブルバッファリング描画
-    HDC memDC = CreateCompatibleDC(hdc);
-    HBITMAP memBmp = CreateCompatibleBitmap(hdc, width, height);
-    HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+    // 裏画面へ一括描画してから転送する（フリッカー防止）
+    if (!g_backBuffer.Ensure(hdc, width, height)) return;
+    HDC memDC = g_backBuffer.dc;
 
     // 1. 和風木製机（文机）の背景描画
     RenderUtils::DrawWoodDesk(memDC, width, height);
@@ -55,8 +106,4 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
     // 画面へ一括転送 (フリッカーフリー)
     BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
-
-    SelectObject(memDC, oldBmp);
-    DeleteObject(memBmp);
-    DeleteDC(memDC);
 }

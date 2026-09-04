@@ -102,11 +102,14 @@ public:
     size_t GetTotalStrokeCount() const { return m_strokes.size(); }
     bool IsRecordingStroke() const { return m_isRecordingStroke; }
 
+    // 記録が変わるたびに進む通し番号。リプレイ描画のキャッシュが
+    // 古くなったかをこれで判定する。
+    unsigned GetRevision() const { return m_revision; }
+
     // リプレイ用タイムライン＆サンプリング機能
     void BuildReplayTimeline();
     DWORD GetReplayTotalDurationMs() const { return m_totalReplayDurationMs; }
     bool GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const;
-    void GetReplayVisiblePoints(DWORD timeMs, const RECT& rPaper, std::vector<std::vector<StrokePoint>>& outStrokes) const;
     DWORD GetStrokeTimelineStart(size_t strokeIdx) const;
     int FindStrokeIndexAtTimeline(DWORD timeMs) const;
 
@@ -124,6 +127,7 @@ private:
     bool m_isRecordingStroke = false;
     DWORD m_sessionStartTime = 0;
     RealtimeMetrics m_realtime;
+    unsigned m_revision = 0;
 
     // リプレイ用内部タイムライン情報
     struct StrokeTimelineInfo {

@@ -263,6 +263,9 @@ public:
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);
 
+    // シークバーのツマミ位置だけを再計算する
+    void UpdateReplaySeekThumb();
+
     // お手本を出す升目。追従先が無効なら半紙全体を返す
     RECT GetOtehonCell() const {
         if (otehon.activeCell >= 0 && otehon.activeCell < ui.gridCellCount) {
