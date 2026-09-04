@@ -359,6 +359,13 @@ DWORD TrajectorySession::GetStrokeTimelineStart(size_t strokeIdx) const {
     return 0;
 }
 
+DWORD TrajectorySession::GetStrokeTimelineEnd(size_t strokeIdx) const {
+    if (strokeIdx < m_strokeTimelines.size()) {
+        return m_strokeTimelines[strokeIdx].endTimelineMs;
+    }
+    return 0;
+}
+
 int TrajectorySession::FindStrokeIndexAtTimeline(DWORD timeMs) const {
     if (m_strokeTimelines.empty()) return -1;
     for (size_t i = 0; i < m_strokeTimelines.size(); ++i) {

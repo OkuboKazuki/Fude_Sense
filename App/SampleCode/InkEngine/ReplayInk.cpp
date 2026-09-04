@@ -14,6 +14,10 @@ constexpr int kMaxDiffusionStepsPerFrame = 4;
 // 引き直した直後にまとめて進める段数。
 // シークで飛んだ先でにじみが全く乗っていないのを避ける。
 constexpr int kRebuildDiffusionSteps = 12;
+// 画と画の間でまとめて進める段数の上限。長く考え込んだ場合でも、そこで
+// 再生が止まらないようにする。拡散は落ち着くと StepPropagation が false を
+// 返すので、通常はその手前で打ち切れる。
+constexpr int kMaxGapDiffusionSteps = 60;
 }
 
 ReplayInk::~ReplayInk() {
@@ -79,13 +83,47 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
         if (steps > kMaxDiffusionStepsPerFrame) steps = kMaxDiffusionStepsPerFrame;
     }
 
-    FeedForward(session, timeMs);
+    // 引き直しの最中は全画を一気に流し込むため、画ごとの間の拡散を積むと
+    // 1フレームで数百段走ることになる。そこでは補わない。
+    FeedForward(session, timeMs, rebuilt);
     AdvanceDiffusion(steps);
     m_timeMs = timeMs;
     return true;
 }
 
-void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs) {
+// 画と画の間（空中移動）は、再生では 250〜700ms に丸められている
+// （BuildReplayTimeline）。長く間を置いて書いていた場合、その間に紙の上で
+// 進んだにじみが再生では足りない。テンポは丸めたままにして、にじみだけ
+// 実際の間隔ぶん先へ進める。
+//
+// 実際の間隔は、両画の startTime の差から前の画の所要時間を引いて求める。
+// endTime は GetTickCount 由来、startTime は Wintab のパケット時刻由来で
+// 時計が違う可能性があるため、引き算は startTime 同士で閉じる。
+int ReplayInk::GapDiffusionSteps(const TrajectorySession& session, size_t strokeIdx) const {
+    const auto& strokes = session.GetStrokes();
+    if (strokeIdx == 0 || strokeIdx >= strokes.size()) return 0;
+
+    const StrokeData& prev = strokes[strokeIdx - 1];
+    const StrokeData& cur = strokes[strokeIdx];
+    if (prev.points.empty() || cur.startTime <= prev.startTime) return 0;
+
+    DWORD prevDuration = prev.points.back().timeMs;
+    DWORD elapsed = cur.startTime - prev.startTime;
+    if (elapsed <= prevDuration) return 0;
+    DWORD realGap = elapsed - prevDuration;
+
+    // 再生側はこの間を既に通過しているので、その分は差し引く
+    DWORD startCur = session.GetStrokeTimelineStart(strokeIdx);
+    DWORD endPrev = session.GetStrokeTimelineEnd(strokeIdx - 1);
+    DWORD playedGap = (startCur > endPrev) ? (startCur - endPrev) : 0;
+    if (realGap <= playedGap) return 0;
+
+    int steps = static_cast<int>((realGap - playedGap) / kDiffusionStepMs);
+    if (steps > kMaxGapDiffusionSteps) steps = kMaxGapDiffusionSteps;
+    return steps;
+}
+
+void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool skipGapDiffusion) {
     const auto& strokes = session.GetStrokes();
 
     for (size_t si = 0; si < strokes.size(); ++si) {
@@ -99,6 +137,11 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs) {
         // 次のフレームで本来の記録点に打ち直されると濃さが狂うため。
         size_t visible = session.GetVisiblePointCount(si, timeMs);
         if (visible <= m_fedCount[si]) continue;
+
+        // この画の1点目を置く前に、手前の空中移動のにじみを補う
+        if (!skipGapDiffusion && m_fedCount[si] == 0) {
+            AdvanceDiffusion(GapDiffusionSteps(session, si));
+        }
 
         if (m_openStroke != static_cast<int>(si)) {
             if (m_openStroke >= 0) m_ink->EndStroke();

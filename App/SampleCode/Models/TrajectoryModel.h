@@ -128,6 +128,7 @@ public:
     DWORD GetReplayTotalDurationMs() const { return m_totalReplayDurationMs; }
     bool GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const;
     DWORD GetStrokeTimelineStart(size_t strokeIdx) const;
+    DWORD GetStrokeTimelineEnd(size_t strokeIdx) const;
     int FindStrokeIndexAtTimeline(DWORD timeMs) const;
     // 指定時刻までに打ち終えている記録点の数。
     // まだ始まっていない画は 0、書き終わった画は全点数。

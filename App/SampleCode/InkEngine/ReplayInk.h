@@ -36,8 +36,10 @@ public:
     void Release();
 
 private:
-    void FeedForward(const TrajectorySession& session, DWORD timeMs);
+    void FeedForward(const TrajectorySession& session, DWORD timeMs, bool skipGapDiffusion);
     void AdvanceDiffusion(int steps);
+    // 画の手前の空中移動で、足りていないにじみの段数
+    int GapDiffusionSteps(const TrajectorySession& session, size_t strokeIdx) const;
 
     std::unique_ptr<GpuInk> m_ink;
     unsigned m_revision = 0;            // 流し込み済みの記録リビジョン
