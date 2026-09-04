@@ -22,6 +22,14 @@ struct StrokePoint {
     double azimuthDeg = 0.0;       // 筆先方位角 (0° ~ 360°)
     double speedPxPerSec = 0.0;    // 運筆速度 (px/sec)
     double width = 0.0;            // 計算線幅 (px)
+
+    // 以下は描画時に GpuInk へ渡した値そのもの。
+    // 筆圧の平滑や墨量の消費は経路依存で、記録から計算し直しても
+    // 同じ値にはならない（筆の太さや硬さを後から変えられるため）。
+    // リプレイを実物と一致させるため、結果をそのまま控える。
+    double pressureFactor = 0.0;   // 筆の硬さ補正後の筆圧 (0.0 ~ 1.0)
+    double dryness = 0.0;          // この点を打った時点の筆の乾き具合
+    double moveAngleRad = 0.0;     // 平滑済みの運筆方向（かすれの筋の軸）
 };
 
 // 1画（ストローク）データ
@@ -90,7 +98,10 @@ public:
 
     // 運筆イベントの記録
     void OnStrokeBegin(DWORD time);
-    void AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed);
+    // width / pressureFactor / dryness / moveAngleRad は、呼び出し側が GpuInk へ
+    // 渡すのと同じ値を渡す。リプレイはこれをそのまま流し込む。
+    void AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed,
+                  double pressureFactor, double dryness, double moveAngleRad);
     void OnStrokeEnd();
     // 直前の1画を記録から取り消す（「一画戻す」で画面と揃えるため）。
     // 取り消した1画を outRemoved へ返す（「一画復元」で積み直すのに使う）。

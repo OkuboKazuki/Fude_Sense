@@ -158,7 +158,8 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         state.ink.Consume(consumeAmount);
 
         // 運筆データアーカイブへ記録
-        state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed);
+        state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed,
+            pressureFactor, state.ink.GetDryness(), m_lastMoveAngle);
 
         // 墨の描画（常に高品位な墨汁濃度255で描画）
         // 運筆方向はセグメントの a→b ではなく平滑化済みの m_lastMoveAngle を渡す。

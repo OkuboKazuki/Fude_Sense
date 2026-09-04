@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "CanvasView.h"
 #include "RenderUtils.h"
+#include "ReplayInk.h"
 #include <algorithm>
 #include <unordered_map>
 #include <vector>
@@ -418,20 +419,19 @@ struct ReplayLayer {
 };
 
 struct ReplayCacheState {
-    ReplayLayer ghost;
-    ReplayLayer active;
+    ReplayLayer ghost;                  // 全画の薄いゴースト筆跡
     unsigned revision = 0;              // 焼き込み済みの記録リビジョン
     int paperW = 0;
     int paperH = 0;
-    bool valid = false;                 // ghost / bakedCount が現在の記録と一致しているか
-    DWORD activeTimeMs = 0;             // active レイヤへ焼き込み済みの時刻
-    std::vector<size_t> bakedCount;     // 画ごとの、焼き込み済み記録点数
+    bool valid = false;                 // ghost が現在の記録と一致しているか
 };
 
 ReplayCacheState g_replayCache;
 
+// 再生済みの墨。実際に書いたときと同じ GpuInk で描く。
+ReplayInk g_replayInk;
+
 const COLORREF kGhostColor = RGB(218, 222, 228);
-const COLORREF kReplayInkColor = RGB(22, 24, 28);
 
 // 記録点の丸。線分用の太いペンを選んだまま描くと丸まで太るので、必ず1pxへ戻す。
 void DrawReplayDot(HDC dc, PenPool& pens, int px, int py, int radius) {
@@ -477,88 +477,15 @@ void BakeGhostLayer(const AppState& state, int pw, int ph) {
     DeleteObject(brush);
 }
 
-// 再生済みの墨を active レイヤへ描き足す。fromScratch なら白紙から焼き直す。
-void BakeActiveLayer(const AppState& state, int pw, int ph, bool fromScratch) {
-    ReplayLayer& layer = g_replayCache.active;
-    const auto& strokes = state.trajectory.GetStrokes();
-
-    if (fromScratch || g_replayCache.bakedCount.size() != strokes.size()) {
-        layer.FillWhite();
-        g_replayCache.bakedCount.assign(strokes.size(), 0);
-    }
-
-    DWORD timeMs = state.replay.currentTimeMs;
-    HDC dc = layer.dc;
-    PenPool pens(kReplayInkColor);
-    HBRUSH brush = CreateSolidBrush(kReplayInkColor);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
-    HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
-
-    for (size_t si = 0; si < strokes.size(); ++si) {
-        const auto& pts = strokes[si].points;
-        if (pts.empty()) continue;
-
-        DWORD start = state.trajectory.GetStrokeTimelineStart(si);
-        if (timeMs < start) break;  // これ以降の画はまだ始まっていない
-        DWORD rel = timeMs - start;
-
-        // 画内の相対時刻が現在時刻に届いている記録点までが表示対象
-        size_t visible = 0;
-        while (visible < pts.size() && pts[visible].timeMs <= rel) ++visible;
-
-        for (size_t i = g_replayCache.bakedCount[si]; i < visible; ++i) {
-            const auto& p = pts[i];
-            int px = static_cast<int>(p.normX * pw);
-            int py = static_cast<int>(p.normY * ph);
-            DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(p.width * 0.5)));
-
-            if (i > 0) {
-                const auto& q = pts[i - 1];
-                DrawReplaySegment(dc, pens,
-                    static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
-                    (std::max)(2, static_cast<int>((p.width + q.width) * 0.5)));
-            }
-        }
-        if (visible > g_replayCache.bakedCount[si]) {
-            g_replayCache.bakedCount[si] = visible;
-        }
-    }
-
-    // 走っている最中の画は、補間した先端まで線を伸ばして滑らかに繋ぐ。
-    // 先端は次のフレームで記録点に追い越されるので、焼き込んだままで構わない。
-    const auto& sample = state.replay.currentSample;
-    if (state.replay.hasValidSample && sample.isPenDown &&
-        sample.strokeIndex >= 0 && sample.strokeIndex < static_cast<int>(strokes.size())) {
-        const auto& pts = strokes[sample.strokeIndex].points;
-        size_t baked = g_replayCache.bakedCount[sample.strokeIndex];
-        int px = static_cast<int>(sample.point.normX * pw);
-        int py = static_cast<int>(sample.point.normY * ph);
-        DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(sample.point.width * 0.5)));
-        if (baked > 0 && baked <= pts.size()) {
-            const auto& q = pts[baked - 1];
-            DrawReplaySegment(dc, pens,
-                static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
-                (std::max)(2, static_cast<int>((sample.point.width + q.width) * 0.5)));
-        }
-    }
-
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    DeleteObject(brush);
-    g_replayCache.activeTimeMs = timeMs;
-}
-
 } // namespace
 
 void CanvasView::ReleaseReplayCache() {
     g_replayCache.ghost.Release();
-    g_replayCache.active.Release();
-    g_replayCache.bakedCount.clear();
     g_replayCache.valid = false;
     g_replayCache.revision = 0;
     g_replayCache.paperW = 0;
     g_replayCache.paperH = 0;
-    g_replayCache.activeTimeMs = 0;
+    g_replayInk.Release();
 }
 
 void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
@@ -568,11 +495,19 @@ void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
     if (pw <= 0 || ph <= 0) return;
 
     if (!state.trajectory.GetStrokes().empty()) {
+        // 1. 再生済みの墨。GpuInk の墨テクスチャは不透明で半紙全面を覆うため、
+        //    ゴースト筆跡より先に置く。
+        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph)) {
+            g_replayInk.Render(dc, rPaper.left, rPaper.top);
+        }
+
+        // 2. まだ書かれていない部分も含めた全画のゴースト筆跡。
+        //    記録が変わった時だけ焼き直し、画面へは SRCAND で重ねるだけ。
         unsigned rev = state.trajectory.GetRevision();
         bool keyChanged = (!g_replayCache.valid || g_replayCache.revision != rev
             || g_replayCache.paperW != pw || g_replayCache.paperH != ph);
 
-        if (g_replayCache.ghost.Ensure(dc, pw, ph) && g_replayCache.active.Ensure(dc, pw, ph)) {
+        if (g_replayCache.ghost.Ensure(dc, pw, ph)) {
             if (keyChanged) {
                 BakeGhostLayer(state, pw, ph);
                 g_replayCache.revision = rev;
@@ -580,12 +515,7 @@ void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
                 g_replayCache.paperH = ph;
                 g_replayCache.valid = true;
             }
-            // 巻き戻した時だけ白紙から焼き直す。進んだ時は差分を描き足すだけ。
-            bool rewound = (state.replay.currentTimeMs < g_replayCache.activeTimeMs);
-            BakeActiveLayer(state, pw, ph, keyChanged || rewound);
-
             BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghost.dc, 0, 0, SRCAND);
-            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.active.dc, 0, 0, SRCAND);
         }
     }
 

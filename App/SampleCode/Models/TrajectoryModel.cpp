@@ -58,7 +58,8 @@ void TrajectorySession::OnStrokeBegin(DWORD time) {
     m_realtime.peakPressureInStroke = 0.0;
 }
 
-void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed) {
+void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed,
+                                double pressureFactor, double dryness, double moveAngleRad) {
     ++m_revision;
     if (!m_isRecordingStroke) {
         OnStrokeBegin(event.time);
@@ -95,6 +96,9 @@ void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper,
     pt.azimuthDeg = azimuthDeg;
     pt.speedPxPerSec = speed;
     pt.width = width;
+    pt.pressureFactor = pressureFactor;
+    pt.dryness = dryness;
+    pt.moveAngleRad = moveAngleRad;
 
     m_currentStroke.points.push_back(pt);
     if (pt.pressure > m_currentStroke.maxPressure) m_currentStroke.maxPressure = pt.pressure;
@@ -183,7 +187,7 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
     ofs << std::fixed << std::setprecision(4);
     ofs << "{\n";
     ofs << "  \"format\": \"FudesenceStrokeArchive\",\n";
-    ofs << "  \"version\": \"1.0\",\n";
+    ofs << "  \"version\": \"1.1\",\n";
     ofs << "  \"metadata\": {\n";
     ofs << "    \"application\": \"SHUJI STUDIO (Fudesence)\",\n";
     ofs << "    \"recordedAt\": \"" << GetCurrentISOTimestamp() << "\",\n";
@@ -215,6 +219,9 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
                 << ", \"azm\": " << p.azimuthDeg
                 << ", \"spd\": " << p.speedPxPerSec
                 << ", \"w\": " << p.width
+                << ", \"pf\": " << p.pressureFactor
+                << ", \"dry\": " << p.dryness
+                << ", \"dir\": " << p.moveAngleRad
                 << " }" << (pIdx + 1 < s.points.size() ? "," : "") << "\n";
         }
 
@@ -232,7 +239,7 @@ bool TrajectorySession::ExportToCsv(const std::wstring& filePath) const {
     std::ofstream ofs(filePath);
     if (!ofs.is_open()) return false;
 
-    ofs << "stroke_id,time_ms,norm_x,norm_y,paper_x,paper_y,pressure,altitude_deg,azimuth_deg,speed_px_sec,width\n";
+    ofs << "stroke_id,time_ms,norm_x,norm_y,paper_x,paper_y,pressure,altitude_deg,azimuth_deg,speed_px_sec,width,pressure_factor,dryness,move_angle_rad\n";
     ofs << std::fixed << std::setprecision(4);
 
     for (const auto& s : m_strokes) {
@@ -247,7 +254,10 @@ bool TrajectorySession::ExportToCsv(const std::wstring& filePath) const {
                 << p.altitudeDeg << ","
                 << p.azimuthDeg << ","
                 << p.speedPxPerSec << ","
-                << p.width << "\n";
+                << p.width << ","
+                << p.pressureFactor << ","
+                << p.dryness << ","
+                << p.moveAngleRad << "\n";
         }
     }
 
