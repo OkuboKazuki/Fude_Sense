@@ -21,19 +21,25 @@ void TrajectorySession::Clear() {
     m_sessionStartTime = GetTickCount();
 }
 
-void TrajectorySession::UndoLastStroke() {
+bool TrajectorySession::UndoLastStroke(StrokeData* outRemoved) {
     if (m_isRecordingStroke) {
         // まだ書いている途中の画は、記録に積む前に破棄する。
         // 画素側も同じ時点（この画を書き始める前）へ戻る。
+        // 記録に載っていない画なので、復元のときに積み直すものは無い。
         m_currentStroke = StrokeData();
         m_isRecordingStroke = false;
         m_realtime.isPenDown = false;
         m_realtime.peakPressureInStroke = 0.0;
-        return;
+        return false;
     }
-    if (!m_strokes.empty()) {
-        m_strokes.pop_back();
-    }
+    if (m_strokes.empty()) return false;
+    if (outRemoved) *outRemoved = m_strokes.back();
+    m_strokes.pop_back();
+    return true;
+}
+
+void TrajectorySession::RedoStroke(const StrokeData& stroke) {
+    m_strokes.push_back(stroke);
 }
 
 void TrajectorySession::OnStrokeBegin(DWORD time) {

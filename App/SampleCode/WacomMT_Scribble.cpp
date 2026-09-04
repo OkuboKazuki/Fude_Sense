@@ -517,10 +517,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case 'Z':
 		case 'z':
 		{
-			// Ctrl+Z で一画戻す
+			// Ctrl+Z で一画戻す、Ctrl+Shift+Z で一画復元
 			if (GetKeyState(VK_CONTROL) < 0)
 			{
-				AppController::UndoStroke(hWnd, g_appState, g_gpuInk);
+				if (GetKeyState(VK_SHIFT) < 0)
+				{
+					AppController::RedoStroke(hWnd, g_appState, g_gpuInk);
+				}
+				else
+				{
+					AppController::UndoStroke(hWnd, g_appState, g_gpuInk);
+				}
+			}
+			break;
+		}
+		case 'Y':
+		case 'y':
+		{
+			// Ctrl+Y でも一画復元
+			if (GetKeyState(VK_CONTROL) < 0)
+			{
+				AppController::RedoStroke(hWnd, g_appState, g_gpuInk);
 			}
 			break;
 		}

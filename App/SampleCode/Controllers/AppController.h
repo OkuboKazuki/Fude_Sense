@@ -21,4 +21,6 @@ public:
     static void ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 直前の1画を取り消す（墨・墨残量・運筆アーカイブをまとめて戻す）
     static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
+    // 戻しすぎた1画を復元する
+    static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
 };

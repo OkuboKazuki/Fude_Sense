@@ -49,14 +49,21 @@ void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, Gp
 // 描き直しても同じ絵にはならない。画を書き始める直前に控えておいた状態
 // （UndoHistory）を書き戻す。
 bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
-    size_t strokeCount = 0;
-    if (!state.undo.Undo(gpuInk, state.ink, strokeCount)) return false;
-
-    // 画素を戻した時点に合わせて、運筆アーカイブ（解析グラフ・JSON/CSV）も1画戻す
-    state.trajectory.UndoLastStroke();
+    // 墨・墨残量・運筆アーカイブ（解析グラフ・JSON/CSV）をまとめて1画戻す
+    if (!state.undo.Undo(gpuInk, state.ink, state.trajectory)) return false;
 
     // 戻した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする（全消しと同じ扱い）。
+    state.ui.suppressPenUntilLift = true;
+    InvalidateRect(hWnd, NULL, FALSE);
+    return true;
+}
+
+// 戻しすぎた1画を復元する。戻したときに控えておいた状態を書き戻すだけなので、
+// 取り消しと同じ経路を逆向きに辿る。
+bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
+    if (!state.undo.Redo(gpuInk, state.ink, state.trajectory)) return false;
+
     state.ui.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
     return true;
@@ -320,7 +327,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         }
     }
 
-    // 4. 右側 硯・墨補充・一画戻す・全消し
+    // 4. 右側 硯・墨補充・一画戻す・一画復元・全消し
     if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
         state.ink.Refill();
         InvalidateRect(hWnd, &ui.rRight, FALSE);
@@ -328,6 +335,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         return true;
     } else if (PtIn(ui.rUndoBtn, pt)) {
         UndoStroke(hWnd, state, gpuInk);
+        return true;
+    } else if (PtIn(ui.rRedoBtn, pt)) {
+        RedoStroke(hWnd, state, gpuInk);
         return true;
     } else if (PtIn(ui.rClearAllBtn, pt)) {
         ui.showClearConfirm = true;
@@ -456,6 +466,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverInkStone = 2;
         else if (PtIn(ui.rClearAllBtn, pt)) ui.hoverInkStone = 3;
         else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = 4;
+        else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 

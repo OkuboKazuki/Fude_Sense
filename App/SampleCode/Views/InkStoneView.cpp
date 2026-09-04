@@ -2,6 +2,32 @@
 #include "InkStoneView.h"
 #include "RenderUtils.h"
 
+namespace {
+
+// 「一画戻す」「一画復元」は見た目が同じなので1か所で描く。
+// 控えが無いときは押せないことが分かるよう沈める。
+void DrawHistoryButton(HDC dc, const RECT& r, const wchar_t* label, int count,
+                       bool enabled, bool hovered) {
+    using namespace RenderUtils;
+    const bool hov = enabled && hovered;
+    Box(dc, r,
+        enabled ? (hov ? RGB(44, 62, 92) : RGB(30, 36, 46)) : RGB(24, 26, 32),
+        enabled ? (hov ? RGB(120, 165, 240) : RGB(54, 62, 78)) : RGB(40, 44, 54), 1, 8);
+
+    wchar_t buf[64];
+    if (enabled) {
+        wsprintfW(buf, L"%s (%d)", label, count);
+    } else {
+        wsprintfW(buf, L"%s", label);
+    }
+    HFONT f = CreateCustomFont(17, FW_BOLD);
+    Center(dc, r, buf, f,
+        enabled ? (hov ? RGB(255, 255, 255) : RGB(215, 226, 245)) : RGB(96, 102, 116));
+    DeleteObject(f);
+}
+
+} // namespace
+
 void InkStoneView::Draw(HDC dc, const AppState& state) {
     using namespace RenderUtils;
     const UIState& ui = state.ui;
@@ -62,22 +88,11 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     Center(dc, ui.rInkRefillBtn, L"💧 墨を補充", fBtn, hovRefill ? RGB(255, 255, 255) : RGB(220, 230, 245));
     DeleteObject(fBtn);
 
-    // 6. 「↩ 一画戻す」ボタン。控えが無いときは押せないことが分かるよう沈める
-    bool canUndo = state.undo.CanUndo();
-    bool hovUndo = (ui.hoverInkStone == 4) && canUndo;
-    Box(dc, ui.rUndoBtn,
-        canUndo ? (hovUndo ? RGB(44, 62, 92) : RGB(30, 36, 46)) : RGB(24, 26, 32),
-        canUndo ? (hovUndo ? RGB(120, 165, 240) : RGB(54, 62, 78)) : RGB(40, 44, 54), 1, 8);
-    HFONT fUndo = CreateCustomFont(17, FW_BOLD);
-    wchar_t undoBuf[48];
-    if (canUndo) {
-        wsprintfW(undoBuf, L"↩ 一画戻す (%d)", state.undo.Depth());
-    } else {
-        wsprintfW(undoBuf, L"↩ 一画戻す");
-    }
-    Center(dc, ui.rUndoBtn, undoBuf, fUndo,
-        canUndo ? (hovUndo ? RGB(255, 255, 255) : RGB(215, 226, 245)) : RGB(96, 102, 116));
-    DeleteObject(fUndo);
+    // 6. 「↩ 一画戻す」「↪ 一画復元」ボタン
+    DrawHistoryButton(dc, ui.rUndoBtn, L"↩ 一画戻す", state.undo.Depth(),
+        state.undo.CanUndo(), ui.hoverInkStone == 4);
+    DrawHistoryButton(dc, ui.rRedoBtn, L"↪ 一画復元", state.undo.RedoDepth(),
+        state.undo.CanRedo(), ui.hoverInkStone == 5);
 
     // 7. 「🗑️ 筆跡をすべて消す」ボタン（シャドウなし・スッキリ配置）
     bool hovClear = (ui.hoverInkStone == 3);

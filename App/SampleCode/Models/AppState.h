@@ -196,7 +196,7 @@ struct UIState {
     RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
     RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};
-    RECT rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rClearAllBtn{};
+    RECT rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
     RECT rHardnessTrack{};
     RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
     RECT rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
