@@ -5,18 +5,47 @@
 
 namespace {
 
-// お手本の書体。なぞる手本なので毛筆の楷書を第一候補とし、無い環境では
-// 教科書体 → 明朝へ落とす。明朝は縦画が太く横画が細い印刷用の書体で、
-// なぞっても筆の運びとは合わないため最終手段。
+// お手本の書体候補。各書体とも先頭から順に実在するものを使う。
 // HG 系は Office 同梱で他環境には無いことがあるため、Windows 標準の
-// 教科書体、さらに明朝へと落とす。書体名は GDI での実在を確認済み
+// UD デジタル教科書体、さらに明朝へと落とす。明朝は縦画が太く横画が細い
+// 印刷用の書体で、なぞっても筆の運びとは合わないため最終手段。
+// 書体名は GDI での実在を確認済み
 // （和名は "HG正楷書体-PRO" とハイフンが入る点に注意）。
-const wchar_t* const kOtehonFontFaces[] = {
+const wchar_t* const kSeikaishoFaces[] = {
     L"HGSeikaishotaiPRO",   // HG正楷書体-PRO（毛筆楷書）
     L"HG正楷書体-PRO",
     L"UD Digi Kyokasho N",  // UD デジタル教科書体（Windows 標準）
     L"Yu Mincho"
 };
+const wchar_t* const kKyokashoFaces[] = {
+    L"HGKyokashotai",       // HG教科書体（学校書写の字形）
+    L"HG教科書体",
+    L"UD Digi Kyokasho N",
+    L"Yu Mincho"
+};
+const wchar_t* const kGyoshoFaces[] = {
+    L"HGGyoshotai",         // HG行書体
+    L"HG行書体",
+    // 行書が無い環境で明朝まで落とすと別物になるので、まず楷書を試す
+    L"HGSeikaishotaiPRO",
+    L"HG正楷書体-PRO",
+    L"UD Digi Kyokasho N",
+    L"Yu Mincho"
+};
+
+struct OtehonFaceList {
+    const wchar_t* const* faces;
+    int count;
+};
+
+OtehonFaceList GetOtehonFaces(OtehonFontStyle style) {
+    switch (style) {
+    case OtehonFontStyle::Kyokasho: return { kKyokashoFaces, _countof(kKyokashoFaces) };
+    case OtehonFontStyle::Gyosho:   return { kGyoshoFaces,   _countof(kGyoshoFaces) };
+    case OtehonFontStyle::Seikaisho:
+    default:                        return { kSeikaishoFaces, _countof(kSeikaishoFaces) };
+    }
+}
 
 int CALLBACK FontFoundProc(const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM lParam) {
     *reinterpret_cast<bool*>(lParam) = true;
@@ -37,12 +66,15 @@ bool FontExists(HDC dc, const wchar_t* face) {
 struct OtehonFontCache {
     HFONT font = nullptr;
     int emSize = 0;
+    OtehonFontStyle style = OtehonFontStyle::Seikaisho;
     ~OtehonFontCache() { if (font) DeleteObject(font); }
 };
 OtehonFontCache g_otehonFont;
 
-HFONT GetOtehonFont(HDC dc, int emSize) {
-    if (g_otehonFont.font && g_otehonFont.emSize == emSize) return g_otehonFont.font;
+HFONT GetOtehonFont(HDC dc, int emSize, OtehonFontStyle style) {
+    if (g_otehonFont.font && g_otehonFont.emSize == emSize && g_otehonFont.style == style) {
+        return g_otehonFont.font;
+    }
     if (g_otehonFont.font) {
         DeleteObject(g_otehonFont.font);
         g_otehonFont.font = nullptr;
@@ -50,10 +82,11 @@ HFONT GetOtehonFont(HDC dc, int emSize) {
 
     // CreateFontW は存在しない書体名を渡しても無警告で別の書体に置換するため、
     // 実在するものを先に選ぶ。
-    const wchar_t* face = kOtehonFontFaces[0];
-    for (const wchar_t* candidate : kOtehonFontFaces) {
-        if (FontExists(dc, candidate)) {
-            face = candidate;
+    OtehonFaceList list = GetOtehonFaces(style);
+    const wchar_t* face = list.faces[0];
+    for (int i = 0; i < list.count; ++i) {
+        if (FontExists(dc, list.faces[i])) {
+            face = list.faces[i];
             break;
         }
     }
@@ -64,6 +97,7 @@ HFONT GetOtehonFont(HDC dc, int emSize) {
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, face);
     g_otehonFont.emSize = emSize;
+    g_otehonFont.style = style;
     return g_otehonFont.font;
 }
 
@@ -101,7 +135,19 @@ void CanvasView::DrawBackground(HDC dc, const AppState& state) {
     DeleteObject(pb);
 }
 
-void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity) {
+// その書体の本来のフォント（フォールバック用の代替は含まない）が入っているか。
+bool CanvasView::HasOtehonFont(HDC dc, OtehonFontStyle style) {
+    OtehonFaceList list = GetOtehonFaces(style);
+    // 候補の先頭2つが欧文名・和名の対で、その書体そのものを指す。
+    // 3つ目以降は別書体への代替なので、実在しても「入っている」とは言えない。
+    for (int i = 0; i < list.count && i < 2; ++i) {
+        if (FontExists(dc, list.faces[i])) return true;
+    }
+    return false;
+}
+
+void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity,
+                                 OtehonFontStyle style) {
     using namespace RenderUtils;
     if (text.empty()) return;
     const wchar_t* ch = text.c_str();
@@ -117,7 +163,7 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
     int emSize = (int)((std::min)(cellW * 0.85, cellH * 0.95));
     if (emSize <= 0) return;
 
-    HFONT font = GetOtehonFont(dc, emSize);
+    HFONT font = GetOtehonFont(dc, emSize, style);
     if (!font) return;
 
     // 墨のテクスチャは不透明な白ビットマップで半紙全面を覆うため（GpuInk::Render）、
@@ -176,7 +222,7 @@ void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
 
     // マスごとに置いた字をすべて出す
     for (int i = 0; i < ui.gridCellCount; ++i) {
-        DrawOtehonGlyph(dc, ui.rGridCell[i], state.otehon.GetCellText(i), opacity);
+        DrawOtehonGlyph(dc, ui.rGridCell[i], state.otehon.GetCellText(i), opacity, state.otehon.fontStyle);
     }
 }
 

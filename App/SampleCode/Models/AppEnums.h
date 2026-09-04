@@ -39,6 +39,14 @@ enum class GridPattern {
     StarGrid        // 米字格 (対角線入り)
 };
 
+// お手本の書体。練習する書きぶりに合わせて切り替える
+enum class OtehonFontStyle {
+    Seikaisho,  // 毛筆楷書（HG正楷書体-PRO）
+    Kyokasho,   // 教科書体（HG教科書体）
+    Gyosho      // 行書（HG行書体）
+};
+constexpr int OTEHON_FONT_COUNT = 3;
+
 // 下敷き・罫線の配色テーマ
 enum class GridColorTheme {
     RedLine,        // 定番朱赤線

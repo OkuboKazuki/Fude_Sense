@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "FloatingMenuView.h"
 #include "AnalysisView.h"
+#include "CanvasView.h"
 #include "RenderUtils.h"
 #include <cwchar>
 
@@ -188,9 +189,27 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         }
         if (fCellNo) DeleteObject(fCellNo);
 
-        // ミニマップの右側へ操作の説明を出す
+        // 書体の切り替え。この PC に入っていない書体は、選んでも GDI が別の書体へ
+        // 置き換えてしまい見た目が変わらないため、文字色を沈めて区別する。
+        static const wchar_t* const kFontLabels[OTEHON_FONT_COUNT] = { L"楷書", L"教科書体", L"行書" };
+        HFONT fFontBtn = CreateCustomFont(17, FW_BOLD);
+        for (int i = 0; i < OTEHON_FONT_COUNT; ++i) {
+            const RECT& rf = ui.rOtehonFontBtn[i];
+            OtehonFontStyle style = static_cast<OtehonFontStyle>(i);
+            bool selFont = (state.otehon.fontStyle == style);
+            bool hovFont = (ui.hoverSub == 74 + i);
+            Box(dc, rf, selFont ? RGB(36, 68, 105) : (hovFont ? RGB(42, 46, 56) : RGB(30, 33, 40)),
+                selFont ? RGB(70, 135, 220) : (hovFont ? RGB(66, 72, 86) : RGB(46, 50, 62)), 1, 6);
+            COLORREF fg = selFont ? RGB(255, 255, 255)
+                                  : (CanvasView::HasOtehonFont(dc, style) ? RGB(200, 205, 218)
+                                                                          : RGB(108, 114, 128));
+            Center(dc, rf, kFontLabels[i], fFontBtn, fg);
+        }
+        DeleteObject(fFontBtn);
+
+        // 書体ボタンの下へ操作の説明を出す
         HFONT fHint = CreateCustomFont(15);
-        RECT rHint = { ui.rOtehonCellMapBox.right + 14, ui.rOtehonCellMapBox.top,
+        RECT rHint = { ui.rOtehonFontBtn[0].left, ui.rOtehonFontBtn[0].bottom + 8,
                        ui.rSub.right - 20, ui.rOtehonCellMapBox.bottom };
         DrawTextCustom(dc, rHint, L"下の文字を選び、左の升目を\n押すと配置します（複数可）。\n同じ字をもう一度押すと消去", fHint,
             RGB(140, 148, 162), DT_LEFT | DT_TOP | DT_WORDBREAK);

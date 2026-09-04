@@ -16,7 +16,12 @@ public:
 
     // 指定した矩形にお手本を1字、em ボックス基準で内接描画する
     // （画像エクスポートからも使う）
-    static void DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity);
+    static void DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity,
+                                OtehonFontStyle style);
+
+    // 書体がこの PC に入っているか。無い書体を選ぶと GDI が黙って別の書体へ
+    // 置き換えるため、UI 側で選べないことを示すのに使う。
+    static bool HasOtehonFont(HDC dc, OtehonFontStyle style);
     static void DrawGrid(HDC dc, const AppState& state);
     static void RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state);
 

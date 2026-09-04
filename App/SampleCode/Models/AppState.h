@@ -60,6 +60,9 @@ struct OtehonModel {
     bool isTyping = false;
     std::vector<std::wstring> palette;
 
+    // 手本の書体。楷書・教科書体・行書を練習内容で切り替える。
+    OtehonFontStyle fontStyle = OtehonFontStyle::Seikaisho;
+
     // マスへ置いたお手本文字。空文字は未配置。
     // 候補の番号ではなく文字そのものを持つ。番号だと、入力を変えて候補が
     // 入れ替わったときに、置いてある字まで別の字に化けてしまう。
@@ -188,6 +191,7 @@ struct UIState {
     RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
     RECT rOtehonInputBox{};                  // 書きたい文字の入力欄
     RECT rOtehonCellMapBox{};                // 配置先を選ぶ升目ミニマップの配置枠
+    RECT rOtehonFontBtn[OTEHON_FONT_COUNT]{}; // 書体の切り替え（楷書 / 教科書体 / 行書）
     RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
     RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{};

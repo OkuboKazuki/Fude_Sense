@@ -138,10 +138,18 @@ void AppState::Layout(int w, int h) {
         // お手本タブ
         ui.rOtehonToggleBtn = { ui.rSub.left + 20, topOff, ui.rSub.right - 20, topOff + 60 };
 
-        // 配置: 左に升目のミニマップ（配置先の選択）、右に操作の説明を出す。
+        // 配置: 左に升目のミニマップ（配置先の選択）、右に書体の切り替えと操作の説明を出す。
         // ミニマップ内の各マスの矩形は、升目のセルが確定してから 2-2 で算出する。
         int mapTop = ui.rOtehonToggleBtn.bottom + 12;
         ui.rOtehonCellMapBox = { ui.rSub.left + 20, mapTop, ui.rSub.left + 20 + 240, mapTop + 110 };
+
+        // 書体の切り替え。ミニマップ右の余白へ横並びで置き、下に操作の説明を続ける
+        int fontBtnLeft = ui.rOtehonCellMapBox.right + 14;
+        int fontBtnW = (ui.rSub.right - 20 - fontBtnLeft - 2 * 8) / OTEHON_FONT_COUNT;
+        for (int i = 0; i < OTEHON_FONT_COUNT; ++i) {
+            int x = fontBtnLeft + i * (fontBtnW + 8);
+            ui.rOtehonFontBtn[i] = { x, mapTop, x + fontBtnW, mapTop + 34 };
+        }
 
         // 書きたい文字の入力欄
         ui.rOtehonInputBox = { ui.rSub.left + 20, ui.rOtehonCellMapBox.bottom + 28,

@@ -241,6 +241,15 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
 
+                // 書体の切り替え（楷書 / 教科書体 / 行書）
+                for (int i = 0; i < OTEHON_FONT_COUNT; ++i) {
+                    if (PtIn(ui.rOtehonFontBtn[i], pt)) {
+                        state.otehon.fontStyle = static_cast<OtehonFontStyle>(i);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        return true;
+                    }
+                }
+
                 // 配置: ミニマップのマスへ、選択中の文字を置く（同じ字なら取り消し）
                 for (int i = 0; i < ui.gridCellCount; ++i) {
                     if (PtIn(ui.rOtehonCellBtn[i], pt)) {
@@ -405,6 +414,9 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
                 } else if (ui.leftTab == LeftTab::Otehon) {
                     if (PtIn(ui.rOtehonToggleBtn, pt)) ui.hoverSub = 70;
                     if (PtIn(ui.rOtehonInputBox, pt)) ui.hoverSub = 73;
+                    for (int i = 0; i < OTEHON_FONT_COUNT; ++i) {
+                        if (PtIn(ui.rOtehonFontBtn[i], pt)) ui.hoverSub = 74 + i;
+                    }
                     for (int i = 0; i < ui.gridCellCount; ++i) if (PtIn(ui.rOtehonCellBtn[i], pt)) ui.hoverSub = 90 + i;
                     for (int i = 0; i < state.otehon.GetPaletteCount() && i < 8; ++i) {
                         if (PtIn(ui.rOtehonTile[i], pt)) ui.hoverSub = 80 + i;
