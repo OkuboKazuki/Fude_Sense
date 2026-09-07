@@ -92,7 +92,6 @@
     <ClInclude Include="InkEngine\GpuInk.h" />
     <ClInclude Include="InkEngine\InkModel.h" />
     <ClInclude Include="InkEngine\InkSnapshot.h" />
-    <ClInclude Include="InkEngine\ReplayInk.h" />
     <ClInclude Include="Inputs\MouseAdapter.h" />
     <ClInclude Include="Inputs\PenInputEvent.h" />
     <ClInclude Include="Inputs\WintabAdapter.h" />
@@ -124,7 +123,6 @@
     <ClCompile Include="Controllers\AppController.cpp" />
     <ClCompile Include="Controllers\StrokeController.cpp" />
     <ClCompile Include="InkEngine\GpuInk.cpp" />
-    <ClCompile Include="InkEngine\ReplayInk.cpp" />
     <ClCompile Include="Inputs\WintabAdapter.cpp" />
     <ClCompile Include="Models\AppState.cpp" />
     <ClCompile Include="Models\TrajectoryModel.cpp" />

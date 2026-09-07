@@ -347,13 +347,13 @@ bool GpuInk::Initialize(HWND /*hWnd*/, int width, int height)
 	return Initialize(width, height);
 }
 
-bool GpuInk::Initialize(int width, int height, bool runPropagationThread)
+bool GpuInk::Initialize(int width, int height)
 {
 	StopPropagationThread();
 
 	std::lock_guard<std::mutex> lock(m_mutex);
 	bool success = Initialize_NoLock(width, height);
-	if (success && runPropagationThread)
+	if (success)
 	{
 		try
 		{
@@ -366,13 +366,6 @@ bool GpuInk::Initialize(int width, int height, bool runPropagationThread)
 		}
 	}
 	return success;
-}
-
-bool GpuInk::StepPropagation()
-{
-	std::lock_guard<std::mutex> lock(m_mutex);
-	if (m_width <= 0 || m_height <= 0 || m_ink.empty()) return false;
-	return PropagateInk_NoLock();
 }
 
 void GpuInk::Resize(int width, int height)
