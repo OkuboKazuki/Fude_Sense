@@ -76,6 +76,53 @@ LRESULT CALLBACK MonitorWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 static bool CreateInkWindow();
 static void DestroyInkWindow();
 
+// ===== 全画面表示（F11 で切り替え） =====
+// 枠なしウィンドウをモニタいっぱいに広げる方式。元へ戻せるよう、切り替え前の
+// ウィンドウスタイルと配置（最大化状態を含む）を控えておく。
+static bool g_isFullscreen = false;
+static WINDOWPLACEMENT g_prevPlacement = { sizeof(WINDOWPLACEMENT) };
+static LONG_PTR g_prevStyle = 0;
+static LONG_PTR g_prevExStyle = 0;
+
+static void ToggleFullscreen(HWND hWnd)
+{
+	if (!g_isFullscreen)
+	{
+		// マルチモニタでは、いまウィンドウが載っているモニタいっぱいに広げる
+		MONITORINFO mi = { sizeof(MONITORINFO) };
+		if (!GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+
+		g_prevStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
+		g_prevExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+		g_prevPlacement.length = sizeof(WINDOWPLACEMENT);
+		GetWindowPlacement(hWnd, &g_prevPlacement);
+
+		SetWindowLongPtrW(hWnd, GWL_STYLE,
+			(g_prevStyle & ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU)) | WS_POPUP);
+		SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
+			g_prevExStyle & ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
+
+		// SWP_FRAMECHANGED でスタイル変更を反映させる。これが無いと枠が残る。
+		SetWindowPos(hWnd, HWND_TOP,
+			mi.rcMonitor.left, mi.rcMonitor.top,
+			mi.rcMonitor.right - mi.rcMonitor.left,
+			mi.rcMonitor.bottom - mi.rcMonitor.top,
+			SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+
+		g_isFullscreen = true;
+	}
+	else
+	{
+		SetWindowLongPtrW(hWnd, GWL_STYLE, g_prevStyle);
+		SetWindowLongPtrW(hWnd, GWL_EXSTYLE, g_prevExStyle);
+		SetWindowPlacement(hWnd, &g_prevPlacement);
+		SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+
+		g_isFullscreen = false;
+	}
+}
+
 LRESULT CALLBACK MonitorWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
@@ -549,6 +596,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_KEYDOWN:
 	{
+		// 全画面の切り替えだけは、お手本の文字入力中でも受け付ける
+		if (wParam == VK_F11)
+		{
+			ToggleFullscreen(hWnd);
+			break;
+		}
+
 		// 文字入力中はショートカット（Esc=全消し / I=インクウィンドウ）を止める。
 		// Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
 		if (g_appState.otehon.isTyping) break;
