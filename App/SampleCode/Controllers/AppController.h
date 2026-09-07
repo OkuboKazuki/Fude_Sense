@@ -23,7 +23,11 @@ public:
     static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 戻しすぎた1画を復元する
     static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
-
     // 記録が変わったときにリプレイのタイムラインを作り直す
     static void SyncReplayTimeline(HWND hWnd, AppState& state);
+
+    // 半紙だけ表示（集中モード）の出入りと、半紙の向き（縦／横）の切り替え。
+    // どちらも半紙の画素数が変わるので、墨の作り直しと控えの破棄までまとめて行う。
+    static void SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk);
+    static void TogglePaperOrientation(HWND hWnd, AppState& state, GpuInk& gpuInk);
 };

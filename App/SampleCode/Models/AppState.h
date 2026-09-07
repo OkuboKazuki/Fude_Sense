@@ -34,6 +34,10 @@ struct PaperModel {
     GridPattern gridPattern = GridPattern::Grid4;
     GridColorTheme gridColor = GridColorTheme::RedLine;
 
+    // 半紙を横向き（横長）に使う。縦横比を入れ替えるだけなので、
+    // 升目・お手本・書き出しはすべてこの向きに追従する。
+    bool isLandscape = false;
+
     void GetAspectRatio(double& outW, double& outH) const {
         switch (type) {
         case PaperType::Hanshi:   outW = 242.0; outH = 333.0; break;
@@ -41,6 +45,8 @@ struct PaperModel {
         case PaperType::Shikishi: outW = 242.0; outH = 272.0; break;
         case PaperType::Tanzaku:  outW = 60.0;  outH = 180.0; break;
         }
+
+        if (isLandscape) { double t = outW; outW = outH; outH = t; }
     }
 };
 
@@ -163,6 +169,11 @@ struct UIState {
     int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
     int hoverCalib = 0;      // 1: 適用, 2: 再計測, 3: キャンセル/閉じる
 
+    // 半紙だけを画面いっぱいに表示する集中モード。左メニュー・硯パネル・
+    // ステータスバーを畳み、半紙と最小限のボタンだけを描く。
+    bool paperOnly = false;
+    int hoverPaperOnly = 0;  // 1: 通常表示へ戻る, 2: 半紙の向き
+
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
     // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
     // 紙へ触れたままだと、そのまま墨が落ちてしまう。ペンが紙から離れる
@@ -186,6 +197,8 @@ struct UIState {
     RECT rPaper{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
     RECT rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
+    RECT rPaperOrientBtn{}, rPaperOnlyBtn{};         // 右パネル: 紙の向き / 半紙だけ表示
+    RECT rPaperOnlyExitBtn{}, rPaperOnlyOrientBtn{}; // 集中モード中の操作ボタン
     RECT rGridTile[9]{};
     RECT rColorBtn[3]{};
     RECT rPaperTile[4]{};
@@ -239,5 +252,11 @@ public:
         ui.saveFeedback = message;
         ui.saveFeedbackTime = GetTickCount();
     }
+
+private:
+    // 半紙だけ表示（集中モード）のレイアウト
+    void LayoutPaperOnly(int clientWidth, int clientHeight);
+    // 升目のジオメトリ。rPaper から算出するので通常表示と集中モードで共有する。
+    void LayoutGridGeometry();
 };
 

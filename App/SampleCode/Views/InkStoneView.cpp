@@ -100,4 +100,20 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     HFONT fClear = CreateCustomFont(17, FW_BOLD);
     Center(dc, ui.rClearAllBtn, L"🗑️ 筆跡をすべて消す", fClear, hovClear ? RGB(255, 225, 225) : RGB(230, 185, 185));
     DeleteObject(fClear);
+
+    // 8. 表示の切り替え（紙の向き / 半紙だけ表示）。
+    //    紙タブを開かなくても通常画面から直接切り替えられるようにここへ置く。
+    bool hovOrient = (ui.hoverInkStone == 6);
+    Box(dc, ui.rPaperOrientBtn, hovOrient ? RGB(42, 72, 110) : RGB(30, 36, 46), hovOrient ? RGB(85, 145, 235) : RGB(54, 62, 78), 1, 8);
+    HFONT fOrient = CreateCustomFont(17, FW_BOLD);
+    Center(dc, ui.rPaperOrientBtn,
+        state.paper.isLandscape ? L"↕ 紙を縦向きに" : L"↔ 紙を横向きに",
+        fOrient, hovOrient ? RGB(255, 255, 255) : RGB(220, 230, 245));
+    DeleteObject(fOrient);
+
+    bool hovPaperOnly = (ui.hoverInkStone == 7);
+    Box(dc, ui.rPaperOnlyBtn, hovPaperOnly ? RGB(42, 72, 110) : RGB(30, 36, 46), hovPaperOnly ? RGB(85, 145, 235) : RGB(54, 62, 78), 1, 8);
+    HFONT fPaperOnly = CreateCustomFont(17, FW_BOLD);
+    Center(dc, ui.rPaperOnlyBtn, L"📄 半紙だけ表示", fPaperOnly, hovPaperOnly ? RGB(255, 255, 255) : RGB(220, 230, 245));
+    DeleteObject(fPaperOnly);
 }

@@ -57,6 +57,12 @@ void AppState::UpdateReplaySeekThumb() {
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
+    // 半紙だけを画面いっぱいに出す集中モードは、通常のUIを組まない別レイアウト
+    if (ui.paperOnly) {
+        LayoutPaperOnly(w, h);
+        return;
+    }
+
     const int statusH = 28;
     const int rightW = 270;
 
@@ -219,6 +225,18 @@ void AppState::Layout(int w, int h) {
     int maxPaperW = (int)(w * 0.54);
     if (maxPaperW < 100) maxPaperW = 100;
 
+    // 横向きの紙は横へ広がるので、画面中央のままだと左のメニューへ潜り込む。
+    // 開いているメニューと右の硯パネルの間へ収め、その帯の中心へ置く。
+    int paperCenterX = w / 2;
+    if (paper.isLandscape) {
+        int bandLeft = ui.isSubPanelOpen ? (ui.rSub.right + 16) : 96;
+        int bandRight = w - (rightW - 30);
+        if (bandRight - bandLeft > 240) {
+            maxPaperW = bandRight - bandLeft;
+            paperCenterX = (bandLeft + bandRight) / 2;
+        }
+    }
+
     int paperH = maxPaperH;
     int paperW = (int)(paperH * (ratioW / ratioH));
     if (paperW > maxPaperW) {
@@ -226,8 +244,8 @@ void AppState::Layout(int w, int h) {
         paperH = (int)(paperW * (ratioH / ratioW));
     }
 
-    // ★ 画面全体の水平中央に固定配置 ★
-    int canvasCenterX = w / 2;
+    // ★ 縦向きは画面全体の水平中央に固定配置。横向きは上で求めた帯の中心 ★
+    int canvasCenterX = paperCenterX;
     int canvasCenterY = (h - statusH) / 2;
 
     ui.rPaper.left = canvasCenterX - paperW / 2;
@@ -235,9 +253,82 @@ void AppState::Layout(int w, int h) {
     ui.rPaper.top = canvasCenterY - paperH / 2;
     ui.rPaper.bottom = ui.rPaper.top + paperH;
 
-    // 2-2. 下敷き升目のジオメトリ
-    // 内側の罫線とセル境界を一致させるため、外枠のマージンからセル矩形まで
-    // ここで一括して算出する（CanvasView::DrawGrid と共有）。
+    // 2-2. 下敷き升目のジオメトリ（集中モードと共有）
+    LayoutGridGeometry();
+
+    // 3. 右側 硯・墨量・全消し（★ 半紙の右端と画面の右端との真ん中 ★）
+    int stoneW = 210;
+    int stoneH = (int)(stoneW * 1.34);
+    int refillBtnH = 46;
+    int undoBtnH = 46;
+    int redoBtnH = 46;
+    int clearBtnH = 46;
+    int viewBtnH = 44;   // 表示切り替え（紙の向き / 半紙だけ表示）
+    int spacing = 12;
+    int headerSpace = 32; // 墨残量ヘッダー用スペース
+
+    int viewGap = 20;    // 硯まわりの操作と表示切り替えの間の区切り
+    int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
+                    + spacing + redoBtnH + spacing + clearBtnH
+                    + viewGap + viewBtnH + spacing + viewBtnH;
+    int blockStartY = canvasCenterY - totalBlockH / 2;
+    if (blockStartY < 24) blockStartY = 24;
+
+    // 半紙の右端から画面右端までの中心X
+    int rightSpaceLeft = ui.rPaper.right;
+    int rightSpaceRight = w;
+    int stoneCenterX = (rightSpaceLeft + rightSpaceRight) / 2;
+    int stoneX = stoneCenterX - stoneW / 2;
+    if (stoneX + stoneW > w - 10) stoneX = w - stoneW - 10;
+    if (stoneX < ui.rPaper.right + 10) stoneX = ui.rPaper.right + 10;
+
+    int stoneY = blockStartY + headerSpace;
+
+    ui.rRight = { rightSpaceLeft, 0, w, h - statusH };
+    ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
+    ui.rInkRefillBtn  = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH };
+    ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
+    ui.rRedoBtn       = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + redoBtnH };
+    ui.rClearAllBtn   = { stoneX, ui.rRedoBtn.bottom + spacing, stoneX + stoneW, ui.rRedoBtn.bottom + spacing + clearBtnH };
+
+    // 表示の切り替え。墨や履歴の操作とは用途が違うので、少し間を空けて下へ置く。
+    int viewTop = ui.rClearAllBtn.bottom + viewGap;
+    ui.rPaperOrientBtn = { stoneX, viewTop, stoneX + stoneW, viewTop + viewBtnH };
+    ui.rPaperOnlyBtn   = { stoneX, ui.rPaperOrientBtn.bottom + spacing, stoneX + stoneW, ui.rPaperOrientBtn.bottom + spacing + viewBtnH };
+
+    // 4. 全消し確認モーダルダイアログ
+    int modalW = 660;
+    int modalH = 260;
+    ui.rClearModalBox = { w / 2 - modalW / 2, h / 2 - modalH / 2, w / 2 + modalW / 2, h / 2 + modalH / 2 };
+    int btnW = 140;
+    int btnH = 40;
+    int btnY = ui.rClearModalBox.bottom - 56;
+    ui.rModalCancelBtn = { ui.rClearModalBox.left + 40, btnY, ui.rClearModalBox.left + 40 + btnW, btnY + btnH };
+    ui.rModalClearBtn  = { ui.rClearModalBox.right - 40 - btnW, btnY, ui.rClearModalBox.right - 40, btnY + btnH };
+
+    // 5. 筆圧キャリブレーション結果モーダル
+    int calibModalW = 540;
+    int calibModalH = 340;
+    ui.rCalibModalBox = { w / 2 - calibModalW / 2, h / 2 - calibModalH / 2, w / 2 + calibModalW / 2, h / 2 + calibModalH / 2 };
+    int cBtnH = 42;
+    int cBtnY = ui.rCalibModalBox.bottom - 58;
+    int cApplyW = 200;
+    int cRetryW = 120;
+    int cCloseW = 110;
+    int cTotalW = cApplyW + cRetryW + cCloseW + 24;
+    int cStartX = ui.rCalibModalBox.left + (calibModalW - cTotalW) / 2;
+
+    ui.rCalibApplyBtn = { cStartX, cBtnY, cStartX + cApplyW, cBtnY + cBtnH };
+    ui.rCalibRetryBtn = { cStartX + cApplyW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW, cBtnY + cBtnH };
+    ui.rCalibCloseBtn = { cStartX + cApplyW + 12 + cRetryW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW + 12 + cCloseW, cBtnY + cBtnH };
+}
+
+// 下敷き升目のジオメトリ。半紙（rPaper）から罫線の外枠・各セル・お手本配置用の
+// ミニマップまでを一括で算出する。内側の罫線とセル境界を一致させるため、
+// 通常表示と集中モードのどちらからもここを通す（CanvasView::DrawGrid と共有）。
+void AppState::LayoutGridGeometry() {
+    using namespace RenderUtils;
+
     {
         int margin = (std::max)(6, RW(ui.rPaper) / 48);
         if (paper.gridPattern == GridPattern::None) {
@@ -295,62 +386,52 @@ void AppState::Layout(int w, int h) {
             ui.rOtehonCellBtn[i] = { 0, 0, 0, 0 };
         }
     }
+}
 
-    // 3. 右側 硯・墨量・全消し（★ 半紙の右端と画面の右端との真ん中 ★）
-    int stoneW = 210;
-    int stoneH = (int)(stoneW * 1.34);
-    int refillBtnH = 46;
-    int undoBtnH = 46;
-    int redoBtnH = 46;
-    int clearBtnH = 46;
-    int spacing = 12;
-    int headerSpace = 32; // 墨残量ヘッダー用スペース
+// 半紙だけを画面いっぱいに表示する集中モード。
+// 左メニュー・硯パネル・ステータスバーは描かないので、当たり判定が残って
+// 半紙への運筆を横取りしないよう、それらの矩形は畳んでおく。
+// 操作は右上の2つ（通常表示へ戻る / 半紙の向き）だけに絞る。
+void AppState::LayoutPaperOnly(int w, int h) {
+    using namespace RenderUtils;
 
-    int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
-                    + spacing + redoBtnH + spacing + clearBtnH;
-    int blockStartY = canvasCenterY - totalBlockH / 2;
-    if (blockStartY < 24) blockStartY = 24;
+    const RECT kNone = { 0, 0, 0, 0 };
+    ui.rSub = ui.rRight = ui.rStatus = kNone;
+    ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
+    ui.rInkStoneLarge = ui.rInkRefillBtn = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = kNone;
+    ui.rPaperOrientBtn = ui.rPaperOnlyBtn = kNone;
+    ui.rCanvasArea = { 0, 0, w, h };
 
-    // 半紙の右端から画面右端までの中心X
-    int rightSpaceLeft = ui.rPaper.right;
-    int rightSpaceRight = w;
-    int stoneCenterX = (rightSpaceLeft + rightSpaceRight) / 2;
-    int stoneX = stoneCenterX - stoneW / 2;
-    if (stoneX + stoneW > w - 10) stoneX = w - stoneW - 10;
-    if (stoneX < ui.rPaper.right + 10) stoneX = ui.rPaper.right + 10;
+    // 余白は短辺の3%（最低16px）。右上のボタンを紙の外へ逃がすためにも要る。
+    int margin = (std::max)(16, (std::min)(w, h) * 3 / 100);
+    int availW = (std::max)(100, w - margin * 2);
+    int availH = (std::max)(100, h - margin * 2);
 
-    int stoneY = blockStartY + headerSpace;
+    // 縦横比は PaperModel が持つ（横向きのときは入れ替わって返る）
+    double ratioW = 242.0, ratioH = 333.0;
+    paper.GetAspectRatio(ratioW, ratioH);
 
-    ui.rRight = { rightSpaceLeft, 0, w, h - statusH };
-    ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
-    ui.rInkRefillBtn  = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH };
-    ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
-    ui.rRedoBtn       = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + redoBtnH };
-    ui.rClearAllBtn   = { stoneX, ui.rRedoBtn.bottom + spacing, stoneX + stoneW, ui.rRedoBtn.bottom + spacing + clearBtnH };
+    int paperH = availH;
+    int paperW = (int)(paperH * (ratioW / ratioH));
+    if (paperW > availW) {
+        paperW = availW;
+        paperH = (int)(paperW * (ratioH / ratioW));
+    }
 
-    // 4. 全消し確認モーダルダイアログ
-    int modalW = 660;
-    int modalH = 260;
-    ui.rClearModalBox = { w / 2 - modalW / 2, h / 2 - modalH / 2, w / 2 + modalW / 2, h / 2 + modalH / 2 };
-    int btnW = 140;
-    int btnH = 40;
-    int btnY = ui.rClearModalBox.bottom - 56;
-    ui.rModalCancelBtn = { ui.rClearModalBox.left + 40, btnY, ui.rClearModalBox.left + 40 + btnW, btnY + btnH };
-    ui.rModalClearBtn  = { ui.rClearModalBox.right - 40 - btnW, btnY, ui.rClearModalBox.right - 40, btnY + btnH };
+    ui.rPaper.left = w / 2 - paperW / 2;
+    ui.rPaper.right = ui.rPaper.left + paperW;
+    ui.rPaper.top = h / 2 - paperH / 2;
+    ui.rPaper.bottom = ui.rPaper.top + paperH;
 
-    // 5. 筆圧キャリブレーション結果モーダル
-    int calibModalW = 540;
-    int calibModalH = 340;
-    ui.rCalibModalBox = { w / 2 - calibModalW / 2, h / 2 - calibModalH / 2, w / 2 + calibModalW / 2, h / 2 + calibModalH / 2 };
-    int cBtnH = 42;
-    int cBtnY = ui.rCalibModalBox.bottom - 58;
-    int cApplyW = 200;
-    int cRetryW = 120;
-    int cCloseW = 110;
-    int cTotalW = cApplyW + cRetryW + cCloseW + 24;
-    int cStartX = ui.rCalibModalBox.left + (calibModalW - cTotalW) / 2;
+    LayoutGridGeometry();
 
-    ui.rCalibApplyBtn = { cStartX, cBtnY, cStartX + cApplyW, cBtnY + cBtnH };
-    ui.rCalibRetryBtn = { cStartX + cApplyW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW, cBtnY + cBtnH };
-    ui.rCalibCloseBtn = { cStartX + cApplyW + 12 + cRetryW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW + 12 + cCloseW, cBtnY + cBtnH };
+    // 右上の操作ボタン。半紙は縦横比を保って収めるので、必ず机の余白側に載る。
+    const int btnW = 168;
+    const int btnH = 46;
+    const int pad = 14;
+    ui.rPaperOnlyExitBtn   = { w - pad - btnW, pad, w - pad, pad + btnH };
+    ui.rPaperOnlyOrientBtn = { ui.rPaperOnlyExitBtn.left - 10 - btnW, pad, ui.rPaperOnlyExitBtn.left - 10, pad + btnH };
+
+    // 集中モードでは通常表示のモーダルは使わない
+    ui.rClearModalBox = ui.rModalClearBtn = ui.rModalCancelBtn = kNone;
 }
