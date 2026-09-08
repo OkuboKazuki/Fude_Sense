@@ -18,13 +18,25 @@ struct BrushModel {
     double hardness = 0.5; // 0.1: 超極軟 ~ 2.0: 非常に硬い
     bool isDraggingHardness = false;
 
+    // 傾き非対応タブレットからの移行にともなう線幅の補正。
+    // 旧環境（Wacom One Creative Pen Display）は傾きを返さないので pkOrientation が
+    // 常に 0 になり、StrokeController の tiltFactor が 1.0 へ張り付いていた。
+    // その結果、線幅には常に最大の 1.52 倍が乗った状態で下の基準幅が追い込まれている。
+    // Cintiq 16 は傾きを返すため、実測したペン角（仰角の中央値 41 度 =
+    // tiltFactor 0.54）では同じ係数が 1.27 まで落ち、線が 16% 細くなる。
+    // 1.52 / 1.27 ぶんを基準幅側で打ち消し、旧環境の手応えへ揃える。
+    // 係数 0.6 側ではなく基準幅で補正するのは、係数を上げると傾きによる
+    // 線幅の振れ幅まで一緒に広がってしまうため。
+    static constexpr double TILT_WIDTH_COMPENSATION = 1.20;
+
     double GetBaseMaxWidth() const {
+        double base = 36.0;
         switch (type) {
-        case Brush::Small:  return 16.0;
-        case Brush::Medium: return 36.0;
-        case Brush::Large:  return 56.0;
+        case Brush::Small:  base = 16.0; break;
+        case Brush::Medium: base = 36.0; break;
+        case Brush::Large:  base = 56.0; break;
         }
-        return 36.0;
+        return base * TILT_WIDTH_COMPENSATION;
     }
 };
 
