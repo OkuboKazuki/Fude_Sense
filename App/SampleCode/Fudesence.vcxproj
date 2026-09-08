@@ -51,7 +51,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./Models;./InkEngine;./Views;./Controllers;./Inputs;./Services;./Wacom_Feel_SDK/inc;./Wintab_SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./Models;./InkEngine;./Evaluation;./Views;./Controllers;./Inputs;./Services;./Wacom_Feel_SDK/inc;./Wintab_SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -72,7 +72,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>.;./Models;./InkEngine;./Views;./Controllers;./Inputs;./Services;./Wacom_Feel_SDK/inc;./Wintab_SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./Models;./InkEngine;./Evaluation;./Views;./Controllers;./Inputs;./Services;./Wacom_Feel_SDK/inc;./Wintab_SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -89,6 +89,9 @@
   <ItemGroup>
     <ClInclude Include="Controllers\AppController.h" />
     <ClInclude Include="Controllers\StrokeController.h" />
+    <ClInclude Include="Evaluation\EvaluationResult.h" />
+    <ClInclude Include="Evaluation\EvaluationScore.h" />
+    <ClInclude Include="Evaluation\ShapeCompare.h" />
     <ClInclude Include="InkEngine\GpuInk.h" />
     <ClInclude Include="InkEngine\InkModel.h" />
     <ClInclude Include="InkEngine\InkSnapshot.h" />
@@ -109,6 +112,7 @@
     <ClInclude Include="Views\AnalysisView.h" />
     <ClInclude Include="Views\CalibrationView.h" />
     <ClInclude Include="Views\CanvasView.h" />
+    <ClInclude Include="Views\EvaluationView.h" />
     <ClInclude Include="Views\FloatingMenuView.h" />
     <ClInclude Include="Views\InkStoneView.h" />
     <ClInclude Include="Views\MainView.h" />
@@ -122,6 +126,8 @@
   <ItemGroup>
     <ClCompile Include="Controllers\AppController.cpp" />
     <ClCompile Include="Controllers\StrokeController.cpp" />
+    <ClCompile Include="Evaluation\EvaluationScore.cpp" />
+    <ClCompile Include="Evaluation\ShapeCompare.cpp" />
     <ClCompile Include="InkEngine\GpuInk.cpp" />
     <ClCompile Include="Inputs\WintabAdapter.cpp" />
     <ClCompile Include="Models\AppState.cpp" />
@@ -137,6 +143,7 @@
     <ClCompile Include="Views\AnalysisView.cpp" />
     <ClCompile Include="Views\CalibrationView.cpp" />
     <ClCompile Include="Views\CanvasView.cpp" />
+    <ClCompile Include="Views\EvaluationView.cpp" />
     <ClCompile Include="Views\FloatingMenuView.cpp" />
     <ClCompile Include="Views\InkStoneView.cpp" />
     <ClCompile Include="Views\MainView.cpp" />

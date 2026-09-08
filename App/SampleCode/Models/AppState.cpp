@@ -55,7 +55,8 @@ void AppState::Layout(int w, int h) {
     if (!ui.isSubPanelOpen) {
         ui.rTbNavToggle = { 20, 20, 84, 72 };
         ui.rSub = { 0, 0, 0, 0 };
-        ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = { 0, 0, 0, 0 };
+        ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbEvaluation
+            = ui.rTbSave = ui.rTbOtehon = { 0, 0, 0, 0 };
     } else {
         int menuW = 560;
         int menuH = (std::min)(h - statusH - 36, 840);
@@ -66,15 +67,16 @@ void AppState::Layout(int w, int h) {
 
         int tabStartX = ui.rTbNavToggle.right + 10;
         int tabAvailW = ui.rSub.right - 14 - tabStartX;
-        int tabW = (tabAvailW - 4 * 8) / 5;
+        int tabW = (tabAvailW - 5 * 8) / 6;
         int tabH = 52;
         int tabY = ui.rSub.top + 14;
 
         ui.rTbBrush    = { tabStartX + 0 * (tabW + 8), tabY, tabStartX + 0 * (tabW + 8) + tabW, tabY + tabH };
         ui.rTbPaper    = { tabStartX + 1 * (tabW + 8), tabY, tabStartX + 1 * (tabW + 8) + tabW, tabY + tabH };
-        ui.rTbAnalysis = { tabStartX + 2 * (tabW + 8), tabY, tabStartX + 2 * (tabW + 8) + tabW, tabY + tabH };
-        ui.rTbSave     = { tabStartX + 3 * (tabW + 8), tabY, tabStartX + 3 * (tabW + 8) + tabW, tabY + tabH };
-        ui.rTbOtehon   = { tabStartX + 4 * (tabW + 8), tabY, tabStartX + 4 * (tabW + 8) + tabW, tabY + tabH };
+        ui.rTbAnalysis   = { tabStartX + 2 * (tabW + 8), tabY, tabStartX + 2 * (tabW + 8) + tabW, tabY + tabH };
+        ui.rTbEvaluation = { tabStartX + 3 * (tabW + 8), tabY, tabStartX + 3 * (tabW + 8) + tabW, tabY + tabH };
+        ui.rTbSave       = { tabStartX + 4 * (tabW + 8), tabY, tabStartX + 4 * (tabW + 8) + tabW, tabY + tabH };
+        ui.rTbOtehon     = { tabStartX + 5 * (tabW + 8), tabY, tabStartX + 5 * (tabW + 8) + tabW, tabY + tabH };
 
         int topOff = ui.rSub.top + 84;
 
@@ -89,6 +91,35 @@ void AppState::Layout(int w, int h) {
         // 筆圧キャリブレーションボタン
         int calibBtnY = cardBottom + 138;
         ui.rSubCalibBtn = { ui.rSub.left + 18, calibBtnY, ui.rSub.right - 18, calibBtnY + 58 };
+
+        // 評価タブ。点数を主役にして、内訳は「詳細」を開いたときだけ出す。
+        {
+            const int left = ui.rSub.left + 18;
+            const int right = ui.rSub.right - 18;
+
+            ui.rEvalRunBtn = { left, topOff, right, topOff + 54 };
+
+            // 総合点の大枠。ここが一番目立つ。
+            int scoreTop = ui.rEvalRunBtn.bottom + 14;
+            const int scoreH = 150;
+
+            ui.rEvalDetailBtn  = { left, scoreTop + scoreH + 12, right, scoreTop + scoreH + 12 + 44 };
+            ui.rEvalOverlayBtn = { left, ui.rEvalDetailBtn.bottom + 8,
+                                   right, ui.rEvalDetailBtn.bottom + 8 + 44 };
+
+            // マスごとの明細。詳細を開いたときだけ描くが、
+            // 矩形は畳まず持っておく（開閉のたびに再計算しないため）。
+            int rowTop = ui.rEvalOverlayBtn.bottom + 14;
+            const int rowH = ui.showEvalDetail ? 76 : 46;
+            for (int i = 0; i < MAX_GRID_CELLS; ++i) {
+                int y = rowTop + i * (rowH + 8);
+                if (y + rowH > ui.rSub.bottom - 16) {
+                    ui.rEvalCellRow[i] = { 0, 0, 0, 0 }; // パネルに入らない行は畳む
+                    continue;
+                }
+                ui.rEvalCellRow[i] = { left, y, right, y + rowH };
+            }
+        }
 
         // 紙タブ
         int ptW = (menuW - 56) / 2;

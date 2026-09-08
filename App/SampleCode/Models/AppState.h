@@ -11,6 +11,7 @@
 #include <cmath>
 #include "AppEnums.h"
 #include "RenderUtils.h"
+#include "EvaluationResult.h"
 
 // 筆設定モデル
 struct BrushModel {
@@ -181,6 +182,9 @@ struct UIState {
     int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
     int hoverCalib = 0;      // 1: 適用, 2: 再計測, 3: キャンセル/閉じる
 
+    bool showEvalOverlay = false; // 半紙の上に一致／はみ出し／欠けを重ねる
+    bool showEvalDetail = false;  // 評価タブ: はみ出し率などの内訳を開く
+
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
     // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
     // 紙へ触れたままだと、そのまま墨が落ちてしまう。ペンが紙から離れる
@@ -200,6 +204,10 @@ struct UIState {
     RECT rRight{};
     RECT rStatus{};
     RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
+    RECT rTbEvaluation{};                        // 左メニュー: 評価タブ
+    RECT rEvalRunBtn{}, rEvalOverlayBtn{};       // 評価タブ: 実行 / 半紙上の表示
+    RECT rEvalDetailBtn{};                       // 評価タブ: 詳細の開閉
+    RECT rEvalCellRow[MAX_GRID_CELLS]{};         // 評価タブ: マスごとの行
     RECT rPaper{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
     RECT rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
@@ -241,6 +249,11 @@ public:
     CalibrationModel calibration;
     UndoHistory undo;   // 「一画戻す」用に、画を書き始める直前の状態を控える
     UIState ui;
+
+    // お手本との比較結果。評価タブの「お手本と比べる」で作り直す。
+    // 書くたびに測ると 1 マスごとにお手本のラスタライズが走るので、
+    // 明示的に押されたときだけ計算する。
+    CompareResult evaluation;
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);

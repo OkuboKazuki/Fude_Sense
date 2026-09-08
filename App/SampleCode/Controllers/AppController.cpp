@@ -2,6 +2,7 @@
 #include "AppController.h"
 #include "RenderUtils.h"
 #include "ImageExporter.h"
+#include "ShapeCompare.h"
 #include <imm.h>
 
 #pragma comment(lib, "imm32.lib")
@@ -178,6 +179,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             ui.leftTab = LeftTab::Analysis;
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
+        } else if (PtIn(ui.rTbEvaluation, pt)) {
+            ui.leftTab = LeftTab::Evaluation;
+            InvalidateRect(hWnd, NULL, FALSE);
+            return true;
         } else if (PtIn(ui.rTbSave, pt)) {
             ui.leftTab = LeftTab::Save;
             InvalidateRect(hWnd, NULL, FALSE);
@@ -271,6 +276,31 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }
+                }
+            } else if (ui.leftTab == LeftTab::Evaluation) {
+                if (PtIn(ui.rEvalRunBtn, pt)) {
+                    // 押されたときだけ測る。1 マスごとにお手本のラスタライズが
+                    // 走るので、書くたびに自動で計算することはしない。
+                    HDC dc = GetDC(hWnd);
+                    state.evaluation = ShapeCompare::Evaluate(dc, state, gpuInk);
+                    ReleaseDC(hWnd, dc);
+                    ui.suppressPenUntilLift = true;
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                if (PtIn(ui.rEvalOverlayBtn, pt)) {
+                    ui.showEvalOverlay = !ui.showEvalOverlay;
+                    ui.suppressPenUntilLift = true;
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
+                }
+                if (PtIn(ui.rEvalDetailBtn, pt)) {
+                    // 行の高さが変わるので、レイアウトを取り直してから描く
+                    ui.showEvalDetail = !ui.showEvalDetail;
+                    state.Layout(w, h);
+                    ui.suppressPenUntilLift = true;
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    return true;
                 }
             } else if (ui.leftTab == LeftTab::Save) {
                 if (PtIn(ui.rSaveBtnPng, pt)) {
@@ -463,11 +493,17 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
             if (PtIn(ui.rTbBrush, pt)) ui.hoverTb = TbButton::Brush;
             else if (PtIn(ui.rTbPaper, pt)) ui.hoverTb = TbButton::Paper;
             else if (PtIn(ui.rTbAnalysis, pt)) ui.hoverTb = TbButton::Analysis;
+            else if (PtIn(ui.rTbEvaluation, pt)) ui.hoverTb = TbButton::Evaluation;
             else if (PtIn(ui.rTbSave, pt)) ui.hoverTb = TbButton::Save;
             else if (PtIn(ui.rTbOtehon, pt)) ui.hoverTb = TbButton::Otehon;
 
             if (PtIn(ui.rSub, pt)) {
-                if (ui.leftTab == LeftTab::Brush) {
+                if (ui.leftTab == LeftTab::Evaluation) {
+                    if (PtIn(ui.rEvalRunBtn, pt)) ui.hoverSub = 100;
+                    else if (PtIn(ui.rEvalOverlayBtn, pt)) ui.hoverSub = 101;
+                    else if (PtIn(ui.rEvalDetailBtn, pt)) ui.hoverSub = 102;
+                }
+                else if (ui.leftTab == LeftTab::Brush) {
                     if (PtIn(ui.rSubSmall, pt)) ui.hoverSub = 1;
                     else if (PtIn(ui.rSubMedium, pt)) ui.hoverSub = 2;
                     else if (PtIn(ui.rSubLarge, pt)) ui.hoverSub = 3;

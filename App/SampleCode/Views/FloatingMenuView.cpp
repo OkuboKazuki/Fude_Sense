@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "FloatingMenuView.h"
 #include "AnalysisView.h"
+#include "EvaluationView.h"
 #include "CanvasView.h"
 #include "RenderUtils.h"
 #include <cwchar>
@@ -102,6 +103,9 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
     }
     else if (ui.leftTab == LeftTab::Analysis) {
         AnalysisView::Draw(dc, state);
+    }
+    else if (ui.leftTab == LeftTab::Evaluation) {
+        EvaluationView::Draw(dc, state);
     }
     else if (ui.leftTab == LeftTab::Save) {
         bool hovPng = (ui.hoverSub == 60);
@@ -327,8 +331,9 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
 
     DrawTab(ui.rTbBrush,    L"筆",   ui.leftTab == LeftTab::Brush,    ui.hoverTb == TbButton::Brush);
     DrawTab(ui.rTbPaper,    L"紙",   ui.leftTab == LeftTab::Paper,    ui.hoverTb == TbButton::Paper);
-    DrawTab(ui.rTbAnalysis, L"解析", ui.leftTab == LeftTab::Analysis, ui.hoverTb == TbButton::Analysis);
-    DrawTab(ui.rTbSave,     L"保存", ui.leftTab == LeftTab::Save,     ui.hoverTb == TbButton::Save);
+    DrawTab(ui.rTbAnalysis,   L"解析", ui.leftTab == LeftTab::Analysis,   ui.hoverTb == TbButton::Analysis);
+    DrawTab(ui.rTbEvaluation, L"評価", ui.leftTab == LeftTab::Evaluation, ui.hoverTb == TbButton::Evaluation);
+    DrawTab(ui.rTbSave,       L"保存", ui.leftTab == LeftTab::Save,       ui.hoverTb == TbButton::Save);
     DrawTab(ui.rTbOtehon,   L"手本", ui.leftTab == LeftTab::Otehon,   ui.hoverTb == TbButton::Otehon);
 
     DrawSub(dc, state);
