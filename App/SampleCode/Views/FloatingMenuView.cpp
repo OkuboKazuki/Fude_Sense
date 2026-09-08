@@ -333,29 +333,3 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
 
     DrawSub(dc, state);
 }
-
-// 半紙だけ表示（集中モード）中の操作ボタン。
-// 半紙は縦横比を保って画面に収めるので、右上の余白（机）の上に必ず載る。
-void FloatingMenuView::DrawPaperOnlyBar(HDC dc, const AppState& state) {
-    using namespace RenderUtils;
-    const UIState& ui = state.ui;
-
-    // 半紙の向きを縦／横で入れ替える
-    bool hovOrient = (ui.hoverPaperOnly == 2);
-    Box(dc, ui.rPaperOnlyOrientBtn, hovOrient ? RGB(48, 88, 145) : RGB(26, 30, 38),
-        hovOrient ? RGB(95, 165, 255) : RGB(72, 80, 98), 1, 8);
-    HFONT fOrient = CreateCustomFont(18, FW_BOLD);
-    Center(dc, ui.rPaperOnlyOrientBtn,
-        state.paper.isLandscape ? L"縦向きにする" : L"横向きにする",
-        fOrient, hovOrient ? RGB(255, 255, 255) : RGB(220, 230, 245));
-    DeleteObject(fOrient);
-
-    // 通常表示（メニュー・硯パネルあり）へ戻る
-    bool hovExit = (ui.hoverPaperOnly == 1);
-    Box(dc, ui.rPaperOnlyExitBtn, hovExit ? RGB(48, 88, 145) : RGB(26, 30, 38),
-        hovExit ? RGB(95, 165, 255) : RGB(72, 80, 98), 1, 8);
-    HFONT fExit = CreateCustomFont(18, FW_BOLD);
-    Center(dc, ui.rPaperOnlyExitBtn, L"通常表示に戻る", fExit,
-        hovExit ? RGB(255, 255, 255) : RGB(220, 230, 245));
-    DeleteObject(fExit);
-}

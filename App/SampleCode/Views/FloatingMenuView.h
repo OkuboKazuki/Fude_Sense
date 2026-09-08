@@ -10,8 +10,6 @@
 class FloatingMenuView {
 public:
     static void Draw(HDC dc, const AppState& state);
-    // 半紙だけ表示（集中モード）中の操作ボタン（右上の2つ）
-    static void DrawPaperOnlyBar(HDC dc, const AppState& state);
 
 private:
     static void DrawSub(HDC dc, const AppState& state);

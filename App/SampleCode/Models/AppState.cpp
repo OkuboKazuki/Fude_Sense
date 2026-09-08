@@ -44,12 +44,6 @@ void GetGridDivision(GridPattern pattern, int borderW, int borderH, int& cols, i
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
-    // 半紙だけを画面いっぱいに出す集中モードは、通常のUIを組まない別レイアウト
-    if (ui.paperOnly) {
-        LayoutPaperOnly(w, h);
-        return;
-    }
-
     const int statusH = 28;
     const int rightW = 270;
 
@@ -211,7 +205,7 @@ void AppState::Layout(int w, int h) {
     ui.rPaper.top = canvasCenterY - paperH / 2;
     ui.rPaper.bottom = ui.rPaper.top + paperH;
 
-    // 2-2. 下敷き升目のジオメトリ（集中モードと共有）
+    // 2-2. 下敷き升目のジオメトリ
     LayoutGridGeometry();
 
     // 3. 右側 硯・墨量・全消し（★ 半紙の右端と画面の右端との真ん中 ★）
@@ -221,14 +215,14 @@ void AppState::Layout(int w, int h) {
     int undoBtnH = 46;
     int redoBtnH = 46;
     int clearBtnH = 46;
-    int viewBtnH = 44;   // 表示切り替え（紙の向き / 半紙だけ表示）
+    int viewBtnH = 44;   // 表示切り替え（紙の向き）
     int spacing = 12;
     int headerSpace = 32; // 墨残量ヘッダー用スペース
 
     int viewGap = 20;    // 硯まわりの操作と表示切り替えの間の区切り
     int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
                     + spacing + redoBtnH + spacing + clearBtnH
-                    + viewGap + viewBtnH + spacing + viewBtnH;
+                    + viewGap + viewBtnH;
     int blockStartY = canvasCenterY - totalBlockH / 2;
     if (blockStartY < 24) blockStartY = 24;
 
@@ -252,7 +246,6 @@ void AppState::Layout(int w, int h) {
     // 表示の切り替え。墨や履歴の操作とは用途が違うので、少し間を空けて下へ置く。
     int viewTop = ui.rClearAllBtn.bottom + viewGap;
     ui.rPaperOrientBtn = { stoneX, viewTop, stoneX + stoneW, viewTop + viewBtnH };
-    ui.rPaperOnlyBtn   = { stoneX, ui.rPaperOrientBtn.bottom + spacing, stoneX + stoneW, ui.rPaperOrientBtn.bottom + spacing + viewBtnH };
 
     // 4. 全消し確認モーダルダイアログ
     int modalW = 660;
@@ -283,7 +276,7 @@ void AppState::Layout(int w, int h) {
 
 // 下敷き升目のジオメトリ。半紙（rPaper）から罫線の外枠・各セル・お手本配置用の
 // ミニマップまでを一括で算出する。内側の罫線とセル境界を一致させるため、
-// 通常表示と集中モードのどちらからもここを通す（CanvasView::DrawGrid と共有）。
+// CanvasView::DrawGrid と共有する。
 void AppState::LayoutGridGeometry() {
     using namespace RenderUtils;
 
@@ -344,52 +337,4 @@ void AppState::LayoutGridGeometry() {
             ui.rOtehonCellBtn[i] = { 0, 0, 0, 0 };
         }
     }
-}
-
-// 半紙だけを画面いっぱいに表示する集中モード。
-// 左メニュー・硯パネル・ステータスバーは描かないので、当たり判定が残って
-// 半紙への運筆を横取りしないよう、それらの矩形は畳んでおく。
-// 操作は右上の2つ（通常表示へ戻る / 半紙の向き）だけに絞る。
-void AppState::LayoutPaperOnly(int w, int h) {
-    using namespace RenderUtils;
-
-    const RECT kNone = { 0, 0, 0, 0 };
-    ui.rSub = ui.rRight = ui.rStatus = kNone;
-    ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
-    ui.rInkStoneLarge = ui.rInkRefillBtn = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = kNone;
-    ui.rPaperOrientBtn = ui.rPaperOnlyBtn = kNone;
-    ui.rCanvasArea = { 0, 0, w, h };
-
-    // 余白は短辺の3%（最低16px）。右上のボタンを紙の外へ逃がすためにも要る。
-    int margin = (std::max)(16, (std::min)(w, h) * 3 / 100);
-    int availW = (std::max)(100, w - margin * 2);
-    int availH = (std::max)(100, h - margin * 2);
-
-    // 縦横比は PaperModel が持つ（横向きのときは入れ替わって返る）
-    double ratioW = 242.0, ratioH = 333.0;
-    paper.GetAspectRatio(ratioW, ratioH);
-
-    int paperH = availH;
-    int paperW = (int)(paperH * (ratioW / ratioH));
-    if (paperW > availW) {
-        paperW = availW;
-        paperH = (int)(paperW * (ratioH / ratioW));
-    }
-
-    ui.rPaper.left = w / 2 - paperW / 2;
-    ui.rPaper.right = ui.rPaper.left + paperW;
-    ui.rPaper.top = h / 2 - paperH / 2;
-    ui.rPaper.bottom = ui.rPaper.top + paperH;
-
-    LayoutGridGeometry();
-
-    // 右上の操作ボタン。半紙は縦横比を保って収めるので、必ず机の余白側に載る。
-    const int btnW = 168;
-    const int btnH = 46;
-    const int pad = 14;
-    ui.rPaperOnlyExitBtn   = { w - pad - btnW, pad, w - pad, pad + btnH };
-    ui.rPaperOnlyOrientBtn = { ui.rPaperOnlyExitBtn.left - 10 - btnW, pad, ui.rPaperOnlyExitBtn.left - 10, pad + btnH };
-
-    // 集中モードでは通常表示のモーダルは使わない
-    ui.rClearModalBox = ui.rModalClearBtn = ui.rModalCancelBtn = kNone;
 }

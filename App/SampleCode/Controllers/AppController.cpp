@@ -90,17 +90,6 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
-// 半紙だけを画面いっぱいに表示する集中モードの出入り。
-void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk) {
-    if (state.ui.paperOnly == on) return;
-
-    state.ui.paperOnly = on;
-    // 集中モードでは描かないので、開いたままのモーダル・文字入力は閉じておく
-    state.ui.showClearConfirm = false;
-    state.otehon.isTyping = false;
-    RelayoutForPaper(hWnd, state, gpuInk);
-}
-
 // 半紙を縦向き／横向きに入れ替える。升目の割り付けが別物になるので、
 // 用紙種類の変更と同じく、配置済みのお手本は破棄する。
 void AppController::TogglePaperOrientation(HWND hWnd, AppState& state, GpuInk& gpuInk) {
@@ -114,20 +103,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     GetClientRect(hWnd, &clientRect);
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
-
-    // 半紙だけ表示（集中モード）中は右上の2ボタンだけを見る。
-    // それ以外は false を返して素通しし、半紙への運筆をそのまま通す。
-    if (ui.paperOnly) {
-        if (PtIn(ui.rPaperOnlyExitBtn, pt)) {
-            SetPaperOnly(hWnd, false, state, gpuInk);
-            return true;
-        }
-        if (PtIn(ui.rPaperOnlyOrientBtn, pt)) {
-            TogglePaperOrientation(hWnd, state, gpuInk);
-            return true;
-        }
-        return false;
-    }
 
     // 入力欄以外を押したら文字入力を終える
     if (state.otehon.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
@@ -396,9 +371,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         // 紙の縦向き／横向きを切り替える（硯や左メニューはそのまま）
         TogglePaperOrientation(hWnd, state, gpuInk);
         return true;
-    } else if (PtIn(ui.rPaperOnlyBtn, pt)) {
-        SetPaperOnly(hWnd, true, state, gpuInk);
-        return true;
     } else if (PtIn(ui.rClearAllBtn, pt)) {
         ui.showClearConfirm = true;
         InvalidateRect(hWnd, NULL, FALSE);
@@ -446,16 +418,6 @@ bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {
 
 bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state) {
     UIState& ui = state.ui;
-
-    // 集中モード中は右上の2ボタンだけがホバー対象
-    if (ui.paperOnly) {
-        int oldPaperOnly = ui.hoverPaperOnly;
-        ui.hoverPaperOnly = 0;
-        if (PtIn(ui.rPaperOnlyExitBtn, pt)) ui.hoverPaperOnly = 1;
-        else if (PtIn(ui.rPaperOnlyOrientBtn, pt)) ui.hoverPaperOnly = 2;
-        if (oldPaperOnly != ui.hoverPaperOnly) InvalidateRect(hWnd, NULL, FALSE);
-        return true;
-    }
 
     // スライダードラッグ中の更新
     if (state.brush.isDraggingHardness && (wParam & MK_LBUTTON)) {
@@ -538,7 +500,6 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = 4;
         else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
         else if (PtIn(ui.rPaperOrientBtn, pt)) ui.hoverInkStone = 6;
-        else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = 7;
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 
