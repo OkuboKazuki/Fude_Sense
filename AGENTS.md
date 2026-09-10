@@ -39,7 +39,6 @@ App/SampleCode/
 │   ├── FloatingMenuView.h / .cpp    # 左側フローティングパネル (筆/紙/保存/お手本)
 │   ├── InkStoneView.h / .cpp        # 右側 硯・墨残量・墨補充・全消し描画
 │   ├── ModalView.h / .cpp           # 全消し確認モーダル描画
-│   ├── StatusBarView.h / .cpp       # 下部ステータスバー描画
 │   └── MainView.h / .cpp            # ダブルバッファリングと描画統括
 │
 ├── Controllers/                     # [Controller] 運筆・UI制御ロジック

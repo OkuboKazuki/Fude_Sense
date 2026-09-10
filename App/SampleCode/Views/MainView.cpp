@@ -6,7 +6,6 @@
 #include "InkStoneView.h"
 #include "ModalView.h"
 #include "CalibrationView.h"
-#include "StatusBarView.h"
 
 namespace {
 
@@ -92,10 +91,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     // 5. 右側 硯パネル
     InkStoneView::Draw(memDC, state);
 
-    // 6. 下部 ステータスバー
-    StatusBarView::Draw(memDC, width, height, state);
-
-    // 7. 左側 フローティングメニュー
+    // 6. 左側 フローティングメニュー
     FloatingMenuView::Draw(memDC, state);
 
     // 8. 全消し確認モーダルオーバーレイ

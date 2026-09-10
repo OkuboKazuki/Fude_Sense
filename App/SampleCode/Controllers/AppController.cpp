@@ -368,17 +368,14 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 if (PtIn(ui.rSubSmall, pt)) {
                     state.brush.type = Brush::Small;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
-                    InvalidateRect(hWnd, &ui.rStatus, FALSE);
                     return true;
                 } else if (PtIn(ui.rSubMedium, pt)) {
                     state.brush.type = Brush::Medium;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
-                    InvalidateRect(hWnd, &ui.rStatus, FALSE);
                     return true;
                 } else if (PtIn(ui.rSubLarge, pt)) {
                     state.brush.type = Brush::Large;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
-                    InvalidateRect(hWnd, &ui.rStatus, FALSE);
                     return true;
                 } else if (PtIn(ui.rSubCalibBtn, pt)) {
                     gpuInk.Clear();
@@ -519,7 +516,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
         state.ink.Refill();
         InvalidateRect(hWnd, &ui.rRight, FALSE);
-        InvalidateRect(hWnd, &ui.rStatus, FALSE);
         return true;
     } else if (PtIn(ui.rUndoBtn, pt)) {
         UndoStroke(hWnd, state, gpuInk);

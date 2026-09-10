@@ -199,7 +199,6 @@ struct UIState {
     RECT rSub{};
     RECT rCanvasArea{};
     RECT rRight{};
-    RECT rStatus{};
     RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
     RECT rPaper{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};

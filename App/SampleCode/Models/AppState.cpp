@@ -57,12 +57,10 @@ void AppState::UpdateReplaySeekThumb() {
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
-    const int statusH = 28;
     const int rightW = 270;
 
-    ui.rRight = { w - rightW, 0, w, h - statusH };
-    ui.rCanvasArea = { 0, 0, ui.rRight.left, h - statusH };
-    ui.rStatus = { 0, h - statusH, w, h };
+    ui.rRight = { w - rightW, 0, w, h };
+    ui.rCanvasArea = { 0, 0, ui.rRight.left, h };
 
     // 1. フローティングメニュー & メニュー開閉ボタン（大きめサイズ・一回り拡大）
     if (!ui.isSubPanelOpen) {
@@ -71,7 +69,7 @@ void AppState::Layout(int w, int h) {
         ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = { 0, 0, 0, 0 };
     } else {
         int menuW = 560;
-        int menuH = (std::min)(h - statusH - 36, 840);
+        int menuH = (std::min)(h - 36, 840);
         if (menuH < 600) menuH = 600;
         ui.rSub = { 20, 20, 20 + menuW, 20 + menuH };
 
@@ -212,7 +210,7 @@ void AppState::Layout(int w, int h) {
     double ratioW = 242.0, ratioH = 333.0;
     paper.GetAspectRatio(ratioW, ratioH);
 
-    int maxPaperH = h - statusH - 56;
+    int maxPaperH = h - 56;
     if (maxPaperH < 100) maxPaperH = 100;
 
     // 画面中央に配置したときの最大幅（硯や左パネルとの干渉を防ぎつつ最大化）
@@ -240,7 +238,7 @@ void AppState::Layout(int w, int h) {
 
     // ★ 縦向きは画面全体の水平中央に固定配置。横向きは上で求めた帯の中心 ★
     int canvasCenterX = paperCenterX;
-    int canvasCenterY = (h - statusH) / 2;
+    int canvasCenterY = h / 2;
 
     ui.rPaper.left = canvasCenterX - paperW / 2;
     ui.rPaper.right = ui.rPaper.left + paperW;
@@ -278,7 +276,7 @@ void AppState::Layout(int w, int h) {
 
     int stoneY = blockStartY + headerSpace;
 
-    ui.rRight = { rightSpaceLeft, 0, w, h - statusH };
+    ui.rRight = { rightSpaceLeft, 0, w, h };
     ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
     ui.rInkRefillBtn  = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH };
     ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
