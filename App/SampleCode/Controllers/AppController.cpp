@@ -3,6 +3,7 @@
 #include "RenderUtils.h"
 #include "ImageExporter.h"
 #include "ShapeCompare.h"
+#include "Brushwork.h"
 #include <imm.h>
 
 #pragma comment(lib, "imm32.lib")
@@ -25,6 +26,7 @@ static void SetOtehonImePosition(HWND hWnd, const RECT& inputBox) {
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.trajectory.Clear();
+    state.brushwork.Clear(); // 記録を捨てたら運筆の評価も捨てる
     state.undo.Clear();
     state.ui.showClearConfirm = false;
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
@@ -53,6 +55,9 @@ bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     // 墨・墨残量・運筆アーカイブ（解析グラフ・JSON/CSV）をまとめて1画戻す
     if (!state.undo.Undo(gpuInk, state.ink, state.trajectory)) return false;
 
+    // 記録が1画減ったので、運筆の評価も測り直す
+    state.brushwork = Brushwork::Measure(state.trajectory);
+
     // 戻した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする（全消しと同じ扱い）。
     state.ui.suppressPenUntilLift = true;
@@ -64,6 +69,8 @@ bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 // 取り消しと同じ経路を逆向きに辿る。
 bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     if (!state.undo.Redo(gpuInk, state.ink, state.trajectory)) return false;
+
+    state.brushwork = Brushwork::Measure(state.trajectory);
 
     state.ui.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
@@ -135,6 +142,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             state.calibration.Reset();
             gpuInk.Clear();
             state.trajectory.Clear();
+            state.brushwork.Clear(); // 記録を捨てたら運筆の評価も捨てる
             state.ink.Refill();
             state.SetSaveFeedback(L"✓ 筆の硬さを自動調整しました");
             InvalidateRect(hWnd, NULL, FALSE);
@@ -142,6 +150,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         } else if (PtIn(ui.rCalibRetryBtn, pt)) {
             gpuInk.Clear();
             state.trajectory.Clear();
+            state.brushwork.Clear(); // 記録を捨てたら運筆の評価も捨てる
             state.ink.Refill();
             state.calibration.Start();
             InvalidateRect(hWnd, NULL, FALSE);
@@ -150,6 +159,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             state.calibration.Reset();
             gpuInk.Clear();
             state.trajectory.Clear();
+            state.brushwork.Clear(); // 記録を捨てたら運筆の評価も捨てる
             state.ink.Refill();
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
@@ -229,6 +239,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 } else if (PtIn(ui.rSubCalibBtn, pt)) {
                     gpuInk.Clear();
                     state.trajectory.Clear();
+                    state.brushwork.Clear(); // 記録を捨てたら運筆の評価も捨てる
                     state.ink.Refill();
                     state.calibration.Start();
                     ui.suppressPenUntilLift = true;
@@ -278,18 +289,28 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     }
                 }
             } else if (ui.leftTab == LeftTab::Evaluation) {
+                // 字形 / 運筆 の切り替え。以下のボタンは字形側の矩形と
+                // 重なっているので、切り替えの判定を先に済ませる。
+                for (int i = 0; i < 2; ++i) {
+                    if (PtIn(ui.rEvalSectionBtn[i], pt)) {
+                        ui.evalSection = (i == 0) ? EvalSection::Shape : EvalSection::Brushwork;
+                        ui.suppressPenUntilLift = true;
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        return true;
+                    }
+                }
+
+                if (ui.evalSection == EvalSection::Brushwork) {
+                    // 運筆は1画ごとに測り直しているので、押して動かすものが無い
+                    return true;
+                }
+
                 if (PtIn(ui.rEvalRunBtn, pt)) {
                     // 押されたときだけ測る。1 マスごとにお手本のラスタライズが
                     // 走るので、書くたびに自動で計算することはしない。
                     HDC dc = GetDC(hWnd);
                     state.evaluation = ShapeCompare::Evaluate(dc, state, gpuInk);
                     ReleaseDC(hWnd, dc);
-                    ui.suppressPenUntilLift = true;
-                    InvalidateRect(hWnd, NULL, FALSE);
-                    return true;
-                }
-                if (PtIn(ui.rEvalOverlayBtn, pt)) {
-                    ui.showEvalOverlay = !ui.showEvalOverlay;
                     ui.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, NULL, FALSE);
                     return true;
@@ -499,9 +520,13 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
 
             if (PtIn(ui.rSub, pt)) {
                 if (ui.leftTab == LeftTab::Evaluation) {
-                    if (PtIn(ui.rEvalRunBtn, pt)) ui.hoverSub = 100;
-                    else if (PtIn(ui.rEvalOverlayBtn, pt)) ui.hoverSub = 101;
-                    else if (PtIn(ui.rEvalDetailBtn, pt)) ui.hoverSub = 102;
+                    // 切り替えボタンは字形側のボタンと矩形が重なるので先に見る
+                    if (PtIn(ui.rEvalSectionBtn[0], pt)) ui.hoverSub = 103;
+                    else if (PtIn(ui.rEvalSectionBtn[1], pt)) ui.hoverSub = 104;
+                    else if (ui.evalSection == EvalSection::Shape) {
+                        if (PtIn(ui.rEvalRunBtn, pt)) ui.hoverSub = 100;
+                        else if (PtIn(ui.rEvalDetailBtn, pt)) ui.hoverSub = 102;
+                    }
                 }
                 else if (ui.leftTab == LeftTab::Brush) {
                     if (PtIn(ui.rSubSmall, pt)) ui.hoverSub = 1;

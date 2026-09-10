@@ -28,11 +28,6 @@ public:
     // refDC は互換 DC を作る元にするだけで、そこへは描かない。
     static CompareResult Evaluate(HDC refDC, const AppState& state, GpuInk& gpuInk);
 
-    // 一致=緑 / はみ出し=青 / 欠け=橙 で塗り分けた半紙上の確認表示。
-    // Evaluate が持ち帰ったマスクをそのまま使うので、描画のたびに
-    // お手本をラスタライズし直すことはない。
-    static void DrawOverlay(HDC dc, const AppState& state, const CompareResult& result);
-
     // --- 部品（単体で確かめられるよう公開しておく）---
 
     // お手本グリフを升目と同じ大きさのマスクにする。

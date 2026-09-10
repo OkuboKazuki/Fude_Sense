@@ -71,11 +71,6 @@ struct CellCompare {
     double posScore = 0.0;   // 升目の中の位置（重心のずれから）
     double sizeScore = 0.0;  // 大きさ（外接矩形の比から）
     double totalScore = 0.0; // 上記の重み付き合計
-
-    // 半紙上の確認表示が使う。描画のたびに作り直すとお手本の
-    // ラスタライズが走って重いので、比較時のものを持ち回す。
-    ShapeMask otehonMask;
-    ShapeMask inkMask;
 };
 
 struct CompareResult {

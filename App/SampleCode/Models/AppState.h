@@ -12,6 +12,7 @@
 #include "AppEnums.h"
 #include "RenderUtils.h"
 #include "EvaluationResult.h"
+#include "BrushworkResult.h"
 
 // 筆設定モデル
 struct BrushModel {
@@ -182,8 +183,10 @@ struct UIState {
     int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
     int hoverCalib = 0;      // 1: 適用, 2: 再計測, 3: キャンセル/閉じる
 
-    bool showEvalOverlay = false; // 半紙の上に一致／はみ出し／欠けを重ねる
     bool showEvalDetail = false;  // 評価タブ: はみ出し率などの内訳を開く
+
+    // 評価タブのどちらを見ているか。字形はお手本が要るが、運筆は要らない。
+    EvalSection evalSection = EvalSection::Shape;
 
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
     // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
@@ -205,9 +208,13 @@ struct UIState {
     RECT rStatus{};
     RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
     RECT rTbEvaluation{};                        // 左メニュー: 評価タブ
-    RECT rEvalRunBtn{}, rEvalOverlayBtn{};       // 評価タブ: 実行 / 半紙上の表示
+    RECT rEvalSectionBtn[2]{};                   // 評価タブ: 字形 / 運筆 の切り替え
+    RECT rEvalRunBtn{};                          // 評価タブ: お手本と比べる
     RECT rEvalDetailBtn{};                       // 評価タブ: 詳細の開閉
     RECT rEvalCellRow[MAX_GRID_CELLS]{};         // 評価タブ: マスごとの行
+    RECT rEvalWorkScoreBox{};                    // 運筆: 総合点
+    RECT rEvalWorkAxisRow[WORK_AXIS_COUNT]{};    // 運筆: 軸ごとの内訳
+    RECT rEvalStrokeRow[MAX_EVAL_STROKE_ROWS]{}; // 運筆: 画ごとの行
     RECT rPaper{};
     RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
     RECT rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
@@ -254,6 +261,10 @@ public:
     // 書くたびに測ると 1 マスごとにお手本のラスタライズが走るので、
     // 明示的に押されたときだけ計算する。
     CompareResult evaluation;
+
+    // お手本を使わない書きぶりの評価。画素を読まないので軽く、
+    // 1画書き終えるたびに測り直す（Brushwork::Measure の呼び出し側が更新する）。
+    BrushworkResult brushwork;
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);

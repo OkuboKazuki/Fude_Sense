@@ -89,6 +89,8 @@
   <ItemGroup>
     <ClInclude Include="Controllers\AppController.h" />
     <ClInclude Include="Controllers\StrokeController.h" />
+    <ClInclude Include="Evaluation\Brushwork.h" />
+    <ClInclude Include="Evaluation\BrushworkResult.h" />
     <ClInclude Include="Evaluation\EvaluationResult.h" />
     <ClInclude Include="Evaluation\EvaluationScore.h" />
     <ClInclude Include="Evaluation\ShapeCompare.h" />
@@ -126,6 +128,7 @@
   <ItemGroup>
     <ClCompile Include="Controllers\AppController.cpp" />
     <ClCompile Include="Controllers\StrokeController.cpp" />
+    <ClCompile Include="Evaluation\Brushwork.cpp" />
     <ClCompile Include="Evaluation\EvaluationScore.cpp" />
     <ClCompile Include="Evaluation\ShapeCompare.cpp" />
     <ClCompile Include="InkEngine\GpuInk.cpp" />

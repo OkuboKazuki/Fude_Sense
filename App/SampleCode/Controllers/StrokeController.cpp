@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "StrokeController.h"
+#include "Brushwork.h"
 #include "RenderUtils.h"
 #include <cmath>
 #include <algorithm>
@@ -16,8 +17,16 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
         gpuInk.EndStroke();
     }
     if (pState) {
+        // ここはペンが紙から離れているパケットごとに呼ばれる。1画書き終えた
+        // ときだけ運筆を測り直す（ホバー中に測り続けても結果は変わらない）。
+        bool wasRecording = pState->trajectory.IsRecordingStroke();
         pState->trajectory.OnStrokeEnd();
         pState->calibration.OnStrokeEnd();
+        if (wasRecording) {
+            // 書きぶりの評価は記録された点だけから出る。お手本との比較と違って
+            // 画素を読まないので、1画ぶん増えるたびに測り直しても軽い。
+            pState->brushwork = Brushwork::Measure(pState->trajectory);
+        }
     }
 }
 

@@ -68,6 +68,13 @@ enum class TbButton {
     ClearAll
 };
 
+// 評価タブの中の見出し。お手本との比較（字形）と、
+// お手本を使わずに出せる運筆の評価を切り替える
+enum class EvalSection {
+    Shape,     // 字形: お手本と比べる
+    Brushwork  // 運筆: 書きぶり
+};
+
 // 左側フローティングパネルのタブ
 enum class LeftTab {
     Brush,
@@ -83,3 +90,7 @@ constexpr double INK_MAX_VALUE = 1.0;
 // 升目セル配列の上限。Lines3 / Lines4 は縦罫線のみで横の区切りが無いため、
 // 用紙の縦横比によって仮想的な行数が伸びる。その上限を与える。
 constexpr int MAX_GRID_CELLS = 32;
+
+// 評価タブの「画ごと」に並べる行数の上限。これより多く書いた場合は
+// 入るところまで並べて、残りは件数だけ添える。
+constexpr int MAX_EVAL_STROKE_ROWS = 16;

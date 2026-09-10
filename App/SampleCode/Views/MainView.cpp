@@ -7,7 +7,6 @@
 #include "ModalView.h"
 #include "CalibrationView.h"
 #include "StatusBarView.h"
-#include "ShapeCompare.h"
 
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
     if (width <= 0 || height <= 0) return;
@@ -33,12 +32,6 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
     // 4. 下敷き・升目格子ガイド
     CanvasView::DrawGrid(memDC, state);
-
-    // 4-2. お手本との比較の重ね表示。評価タブのボタンで出し入れする。
-    // 描くのは評価タブで測った結果だけで、ここでは計算しない。
-    if (state.ui.showEvalOverlay && state.evaluation.valid) {
-        ShapeCompare::DrawOverlay(memDC, state, state.evaluation);
-    }
 
     // 5. 右側 硯パネル
     InkStoneView::Draw(memDC, state);

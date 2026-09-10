@@ -97,19 +97,26 @@ void AppState::Layout(int w, int h) {
             const int left = ui.rSub.left + 18;
             const int right = ui.rSub.right - 18;
 
-            ui.rEvalRunBtn = { left, topOff, right, topOff + 54 };
+            // 字形（お手本と比べる）と運筆（書きぶり）の切り替え。
+            // 運筆はお手本が無くても出せるので、どちらも同じ高さに並べる。
+            const int secH = 44;
+            int secW = (right - left - 10) / 2;
+            ui.rEvalSectionBtn[0] = { left, topOff, left + secW, topOff + secH };
+            ui.rEvalSectionBtn[1] = { left + secW + 10, topOff, right, topOff + secH };
+
+            const int secBottom = topOff + secH + 12;
+
+            ui.rEvalRunBtn = { left, secBottom, right, secBottom + 54 };
 
             // 総合点の大枠。ここが一番目立つ。
             int scoreTop = ui.rEvalRunBtn.bottom + 14;
             const int scoreH = 150;
 
-            ui.rEvalDetailBtn  = { left, scoreTop + scoreH + 12, right, scoreTop + scoreH + 12 + 44 };
-            ui.rEvalOverlayBtn = { left, ui.rEvalDetailBtn.bottom + 8,
-                                   right, ui.rEvalDetailBtn.bottom + 8 + 44 };
+            ui.rEvalDetailBtn = { left, scoreTop + scoreH + 12, right, scoreTop + scoreH + 12 + 44 };
 
             // マスごとの明細。詳細を開いたときだけ描くが、
             // 矩形は畳まず持っておく（開閉のたびに再計算しないため）。
-            int rowTop = ui.rEvalOverlayBtn.bottom + 14;
+            int rowTop = ui.rEvalDetailBtn.bottom + 14;
             const int rowH = ui.showEvalDetail ? 76 : 46;
             for (int i = 0; i < MAX_GRID_CELLS; ++i) {
                 int y = rowTop + i * (rowH + 8);
@@ -118,6 +125,28 @@ void AppState::Layout(int w, int h) {
                     continue;
                 }
                 ui.rEvalCellRow[i] = { left, y, right, y + rowH };
+            }
+
+            // 運筆（書きぶり）。総合点・軸ごとの内訳・画ごとの明細を縦に積む。
+            ui.rEvalWorkScoreBox = { left, secBottom, right, secBottom + scoreH };
+
+            const int axisH = 46;
+            int axisTop = ui.rEvalWorkScoreBox.bottom + 12;
+            for (int i = 0; i < WORK_AXIS_COUNT; ++i) {
+                int y = axisTop + i * (axisH + 6);
+                ui.rEvalWorkAxisRow[i] = { left, y, right, y + axisH };
+            }
+
+            // 画ごと。見出しのぶんを空けてから並べ、入らない行は畳む。
+            int strokeTop = ui.rEvalWorkAxisRow[WORK_AXIS_COUNT - 1].bottom + 34;
+            const int strokeRowH = 30;
+            for (int i = 0; i < MAX_EVAL_STROKE_ROWS; ++i) {
+                int y = strokeTop + i * (strokeRowH + 4);
+                if (y + strokeRowH > ui.rSub.bottom - 16) {
+                    ui.rEvalStrokeRow[i] = { 0, 0, 0, 0 };
+                    continue;
+                }
+                ui.rEvalStrokeRow[i] = { left, y, right, y + strokeRowH };
             }
         }
 

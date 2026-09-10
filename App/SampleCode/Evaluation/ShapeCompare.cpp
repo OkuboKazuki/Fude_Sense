@@ -333,10 +333,6 @@ CompareResult ShapeCompare::Evaluate(HDC refDC, const AppState& state, GpuInk& g
             if (oh > 0) cc.sizeRatioY = (double)(ib.bottom - ib.top) / oh;
         }
 
-        // 確認用オーバーレイへ渡す。お手本のラスタライズをやり直さずに済む。
-        cc.otehonMask = std::move(otehonMask);
-        cc.inkMask = std::move(inkMask);
-
         result.cells.push_back(std::move(cc));
     }
 
@@ -350,91 +346,4 @@ CompareResult ShapeCompare::Evaluate(HDC refDC, const AppState& state, GpuInk& g
 
     result.valid = true;
     return result;
-}
-
-// ---------------------------------------------------------------------------
-// 確認用オーバーレイ
-// ---------------------------------------------------------------------------
-
-void ShapeCompare::DrawOverlay(HDC dc, const AppState& state, const CompareResult& result) {
-    using namespace RenderUtils;
-    if (!result.valid) return;
-    const UIState& ui = state.ui;
-
-    for (const CellCompare& cc : result.cells) {
-        if (cc.cellIndex < 0 || cc.cellIndex >= ui.gridCellCount) continue;
-        if (!cc.hasOtehon || cc.otehonMask.IsEmpty()) continue;
-
-        const RECT& cell = ui.rGridCell[cc.cellIndex];
-        int w = RW(cell);
-        int h = RH(cell);
-        if (w <= 0 || h <= 0) continue;
-        if (cc.otehonMask.width != w || cc.otehonMask.height != h) continue;
-
-        // 一致=緑 / はみ出し=赤 / 欠け=青。どちらも無い画素は白のままにして
-        // SRCAND で転送する（白は下地をそのまま残す）。DrawOtehonGlyph と同じ手口。
-        BITMAPINFO bi{};
-        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bi.bmiHeader.biWidth = w;
-        bi.bmiHeader.biHeight = -h;
-        bi.bmiHeader.biPlanes = 1;
-        bi.bmiHeader.biBitCount = 32;
-        bi.bmiHeader.biCompression = BI_RGB;
-
-        HDC memDC = CreateCompatibleDC(dc);
-        if (!memDC) continue;
-        void* pixels = nullptr;
-        HBITMAP bmp = CreateDIBSection(memDC, &bi, DIB_RGB_COLORS, &pixels, nullptr, 0);
-        if (!bmp || !pixels) {
-            if (bmp) DeleteObject(bmp);
-            DeleteDC(memDC);
-            continue;
-        }
-        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, bmp);
-
-        unsigned char* dst = static_cast<unsigned char*>(pixels);
-        for (int y = 0; y < h; ++y) {
-            unsigned char* row = dst + (size_t)y * w * 4;
-            for (int x = 0; x < w; ++x) {
-                bool o = cc.otehonMask.At(x, y) != 0;
-                bool k = cc.inkMask.At(x, y) != 0;
-                unsigned char b = 255, g = 255, r = 255;
-                if (o && k)      { b = 140; g = 255; r = 140; } // 一致
-                else if (k)      { b = 140; g = 140; r = 255; } // はみ出し
-                else if (o)      { b = 255; g = 190; r = 150; } // 欠け
-                row[x * 4 + 0] = b;
-                row[x * 4 + 1] = g;
-                row[x * 4 + 2] = r;
-                row[x * 4 + 3] = 255;
-            }
-        }
-        GdiFlush();
-        BitBlt(dc, cell.left, cell.top, w, h, memDC, 0, 0, SRCAND);
-
-        SelectObject(memDC, oldBmp);
-        DeleteObject(bmp);
-        DeleteDC(memDC);
-
-        Box(dc, cell, RGB(0, 0, 0), RGB(90, 170, 255), 1, 0);
-
-        wchar_t buf[192];
-        swprintf_s(buf, 192, L"IoU %.2f  形 %.2f  はみ出し %.0f%%  欠け %.0f%%",
-                   cc.grid.iou, cc.shape.iou,
-                   cc.grid.overflow * 100.0, cc.grid.missing * 100.0);
-        wchar_t buf2[192];
-        swprintf_s(buf2, 192, L"ずれ %+.0f%%,%+.0f%%  大きさ %.2fx%.2f",
-                   cc.centroidDx * 100.0, cc.centroidDy * 100.0,
-                   cc.sizeRatioX, cc.sizeRatioY);
-
-        HFONT f = CreateCustomFont(15, FW_BOLD);
-        HFONT oldF = (HFONT)SelectObject(dc, f);
-        SetBkMode(dc, OPAQUE);
-        SetBkColor(dc, RGB(10, 14, 20));
-        SetTextColor(dc, RGB(150, 220, 255));
-        TextOutW(dc, cell.left + 4, cell.top + 4, buf, (int)wcslen(buf));
-        TextOutW(dc, cell.left + 4, cell.top + 22, buf2, (int)wcslen(buf2));
-        SetBkMode(dc, TRANSPARENT);
-        SelectObject(dc, oldF);
-        DeleteObject(f);
-    }
 }
