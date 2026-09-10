@@ -35,11 +35,10 @@ namespace RenderUtils {
             }
         }
 
-        // 2. 相対・絶対パス
+        // 2. 相対パス
         candidates.push_back(L"desk_texture.jpg");
         candidates.push_back(L"App\\SampleCode\\desk_texture.jpg");
         candidates.push_back(L"SampleCode\\desk_texture.jpg");
-        candidates.push_back(L"c:\\Users\\kouki\\Desktop\\workspace2\\Fudesence\\App\\SampleCode\\desk_texture.jpg");
 
         std::wstring foundPath;
         for (const auto& path : candidates) {
