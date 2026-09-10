@@ -23,19 +23,23 @@ namespace RenderUtils {
 
         std::vector<std::wstring> candidates;
 
-        // 1. exe ディレクトリ
+        // 1. exe と同じ場所。ビルド後にここへコピーしている（Fudesence.vcxproj の
+        //    PostBuildEvent）ので、配布時はこれだけで見つかる。
         wchar_t exePath[MAX_PATH] = {};
         if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0) {
             wchar_t* lastSlash = wcsrchr(exePath, L'\\');
             if (lastSlash) {
                 *(lastSlash + 1) = L'\0';
                 candidates.push_back(std::wstring(exePath) + L"desk_texture.jpg");
+                // 2. exe の親・祖父ディレクトリ。Debug/ や Release/ から
+                //    ソースツリーの App\SampleCode\ を辿るための保険。
                 candidates.push_back(std::wstring(exePath) + L"..\\desk_texture.jpg");
                 candidates.push_back(std::wstring(exePath) + L"..\\..\\desk_texture.jpg");
             }
         }
 
-        // 2. 相対パス
+        // 3. カレントディレクトリ基準。Visual Studio から作業ディレクトリを
+        //    変えて起動した場合の保険。見つからなければプロシージャル木目へ落ちる。
         candidates.push_back(L"desk_texture.jpg");
         candidates.push_back(L"App\\SampleCode\\desk_texture.jpg");
         candidates.push_back(L"SampleCode\\desk_texture.jpg");
