@@ -437,6 +437,43 @@ bool GpuSimulator::DownloadToPixels(uint32_t* dstPixels, int width, int height)
     return true;
 }
 
+bool GpuSimulator::DownloadToPixelsRegion(uint32_t* dstPixels, int width, int height, int minX, int minY, int maxX, int maxY)
+{
+    if (!m_available || !m_context || !m_stagingPixel || width != m_width || height != m_height || !dstPixels) return false;
+
+    minX = std::max(0, std::min(width - 1, minX));
+    maxX = std::max(0, std::min(width - 1, maxX));
+    minY = std::max(0, std::min(height - 1, minY));
+    maxY = std::max(0, std::min(height - 1, maxY));
+    if (minX > maxX || minY > maxY) return false;
+
+    D3D11_BOX box;
+    box.left = static_cast<UINT>(minX);
+    box.right = static_cast<UINT>(maxX + 1);
+    box.top = static_cast<UINT>(minY);
+    box.bottom = static_cast<UINT>(maxY + 1);
+    box.front = 0;
+    box.back = 1;
+
+    m_context->CopySubresourceRegion(m_stagingPixel.Get(), 0, minX, minY, 0, m_texPixel.Get(), 0, &box);
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    HRESULT hr = m_context->Map(m_stagingPixel.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) return false;
+
+    const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
+    size_t copyBytes = static_cast<size_t>(maxX - minX + 1) * sizeof(uint32_t);
+    for (int y = minY; y <= maxY; ++y)
+    {
+        std::memcpy(dstPixels + (static_cast<size_t>(y) * width + minX),
+                    srcRow + (static_cast<size_t>(y) * mapped.RowPitch + minX * sizeof(uint32_t)),
+                    copyBytes);
+    }
+
+    m_context->Unmap(m_stagingPixel.Get(), 0);
+    return true;
+}
+
 bool GpuSimulator::DownloadInkAndWet(int* dstInk, uint8_t* dstWet, int width, int height)
 {
     if (!m_available || !m_context || width != m_width || height != m_height) return false;
@@ -468,6 +505,64 @@ bool GpuSimulator::DownloadInkAndWet(int* dstInk, uint8_t* dstWet, int width, in
             for (int y = 0; y < height; ++y)
             {
                 std::memcpy(dstWet + y * width, srcRow + y * mapped.RowPitch, width * sizeof(uint8_t));
+            }
+            m_context->Unmap(m_stagingWet.Get(), 0);
+        }
+    }
+
+    return true;
+}
+
+bool GpuSimulator::DownloadInkAndWetRegion(int* dstInk, uint8_t* dstWet, int width, int height, int minX, int minY, int maxX, int maxY)
+{
+    if (!m_available || !m_context || width != m_width || height != m_height) return false;
+
+    minX = std::max(0, std::min(width - 1, minX));
+    maxX = std::max(0, std::min(width - 1, maxX));
+    minY = std::max(0, std::min(height - 1, minY));
+    maxY = std::max(0, std::min(height - 1, maxY));
+    if (minX > maxX || minY > maxY) return false;
+
+    int curIdx = m_currentPingPong;
+    D3D11_BOX box;
+    box.left = static_cast<UINT>(minX);
+    box.right = static_cast<UINT>(maxX + 1);
+    box.top = static_cast<UINT>(minY);
+    box.bottom = static_cast<UINT>(maxY + 1);
+    box.front = 0;
+    box.back = 1;
+
+    if (dstInk && m_stagingInk)
+    {
+        m_context->CopySubresourceRegion(m_stagingInk.Get(), 0, minX, minY, 0, m_texInk[curIdx].Get(), 0, &box);
+        D3D11_MAPPED_SUBRESOURCE mapped = {};
+        if (SUCCEEDED(m_context->Map(m_stagingInk.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+        {
+            const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
+            size_t copyBytes = static_cast<size_t>(maxX - minX + 1) * sizeof(int);
+            for (int y = minY; y <= maxY; ++y)
+            {
+                std::memcpy(dstInk + (static_cast<size_t>(y) * width + minX),
+                            srcRow + (static_cast<size_t>(y) * mapped.RowPitch + minX * sizeof(int)),
+                            copyBytes);
+            }
+            m_context->Unmap(m_stagingInk.Get(), 0);
+        }
+    }
+
+    if (dstWet && m_stagingWet)
+    {
+        m_context->CopySubresourceRegion(m_stagingWet.Get(), 0, minX, minY, 0, m_texWet[curIdx].Get(), 0, &box);
+        D3D11_MAPPED_SUBRESOURCE mapped = {};
+        if (SUCCEEDED(m_context->Map(m_stagingWet.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+        {
+            const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
+            size_t copyBytes = static_cast<size_t>(maxX - minX + 1) * sizeof(uint8_t);
+            for (int y = minY; y <= maxY; ++y)
+            {
+                std::memcpy(dstWet + (static_cast<size_t>(y) * width + minX),
+                            srcRow + (static_cast<size_t>(y) * mapped.RowPitch + minX * sizeof(uint8_t)),
+                            copyBytes);
             }
             m_context->Unmap(m_stagingWet.Get(), 0);
         }

@@ -583,13 +583,20 @@ bool GpuInk::PropagateInk_NoLock()
 		{
 			if (m_gpuSim.StepSimulation())
 			{
-				m_gpuSim.DownloadToPixels(m_pixelBuffer.data(), m_width, m_height);
-				m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+				int rMinX = std::max(0, m_activeMinX - 2);
+				int rMinY = std::max(0, m_activeMinY - 2);
+				int rMaxX = std::min(m_width - 1, m_activeMaxX + 2);
+				int rMaxY = std::min(m_height - 1, m_activeMaxY + 2);
 
-				m_uploadMinX = 0;
-				m_uploadMinY = 0;
-				m_uploadMaxX = m_width - 1;
-				m_uploadMaxY = m_height - 1;
+				// 全画面ではなく、にじみ進行領域（Dirty Rect）のみ局所リードバック（GPU-CPU転送最適化）
+				m_gpuSim.DownloadToPixelsRegion(m_pixelBuffer.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+				m_gpuSim.DownloadInkAndWetRegion(m_ink.data(), m_wetField.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+
+				// Direct2D へのアップロード範囲も Dirty Rect に限定
+				m_uploadMinX = std::min(m_uploadMinX, rMinX);
+				m_uploadMinY = std::min(m_uploadMinY, rMinY);
+				m_uploadMaxX = std::max(m_uploadMaxX, rMaxX);
+				m_uploadMaxY = std::max(m_uploadMaxY, rMaxY);
 
 				m_activeMinX = std::max(0, m_activeMinX - 1);
 				m_activeMinY = std::max(0, m_activeMinY - 1);
