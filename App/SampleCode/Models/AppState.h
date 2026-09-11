@@ -172,6 +172,7 @@ struct OtehonModel {
 #include "TrajectoryModel.h"
 #include "CalibrationModel.h"
 #include "UndoHistory.h"
+#include "UIComponents.h"
 
 // UI・レイアウト状態
 struct UIState {
@@ -195,33 +196,33 @@ struct UIState {
     std::wstring saveFeedback = L"";
     DWORD saveFeedbackTime = 0;
 
-    // 各種UI矩形
-    RECT rSub{};
-    RECT rCanvasArea{};
-    RECT rRight{};
-    RECT rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
-    RECT rPaper{};
-    RECT rSubSmall{}, rSubMedium{}, rSubLarge{};
-    RECT rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
-    RECT rPaperOrientBtn{}; // 右パネル: 紙の向き
-    RECT rGridTile[9]{};
-    RECT rColorBtn[3]{};
-    RECT rPaperTile[4]{};
-    RECT rOtehonTile[8]{};
-    RECT rOtehonToggleBtn{}, rOtehonOpacityTrack{};
-    RECT rOtehonInputBox{};                  // 書きたい文字の入力欄
-    RECT rOtehonCellMapBox{};                // 配置先を選ぶ升目ミニマップの配置枠
-    RECT rOtehonFontBtn[OTEHON_FONT_COUNT]{}; // 書体の切り替え（楷書 / 教科書体 / 行書）
-    RECT rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
-    RECT rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
-    RECT rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{}, rAnalysisReplayBox{};
-    RECT rReplayPlayBtn{}, rReplayPrevBtn{}, rReplayNextBtn{}, rReplayResetBtn{};
-    RECT rReplaySeekTrack{}, rReplaySeekThumb{};
-    RECT rReplaySpeedBtn[3]{};
-    RECT rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
-    RECT rHardnessTrack{};
-    RECT rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
-    RECT rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
+    // 各種UIウィジェット（コンポーネント指向・RECT互換）
+    UIWidget rSub{};
+    UIWidget rCanvasArea{};
+    UIWidget rRight{};
+    UIWidget rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
+    UIWidget rPaper{};
+    UIWidget rSubSmall{}, rSubMedium{}, rSubLarge{};
+    UIWidget rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
+    UIWidget rPaperOrientBtn{}; // 右パネル: 紙の向き
+    UIWidget rGridTile[9]{};
+    UIWidget rColorBtn[3]{};
+    UIWidget rPaperTile[4]{};
+    UIWidget rOtehonTile[8]{};
+    UIWidget rOtehonToggleBtn{}, rOtehonOpacityTrack{};
+    UIWidget rOtehonInputBox{};                  // 書きたい文字の入力欄
+    UIWidget rOtehonCellMapBox{};                // 配置先を選ぶ升目ミニマップの配置枠
+    UIWidget rOtehonFontBtn[OTEHON_FONT_COUNT]{}; // 書体の切り替え（楷書 / 教科書体 / 行書）
+    UIWidget rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
+    UIWidget rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
+    UIWidget rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{}, rAnalysisReplayBox{};
+    UIWidget rReplayPlayBtn{}, rReplayPrevBtn{}, rReplayNextBtn{}, rReplayResetBtn{};
+    UIWidget rReplaySeekTrack{}, rReplaySeekThumb{};
+    UIWidget rReplaySpeedBtn[3]{};
+    UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
+    UIWidget rHardnessTrack{};
+    UIWidget rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
+    UIWidget rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
 
     // 下敷き升目のジオメトリ。罫線描画（CanvasView::DrawGrid）とお手本の配置が
     // 同じセルを参照できるよう、AppState::Layout で一元的に算出する。
