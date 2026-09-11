@@ -26,7 +26,7 @@ public:
     static void RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state);
 
     // リプレイ用半紙描画
-    static void DrawReplayCanvas(HDC dc, const AppState& state);
+    static void DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state);
 
     // リプレイ描画用のオフスクリーンレイヤを破棄する（終了時）
     static void ReleaseReplayCache();

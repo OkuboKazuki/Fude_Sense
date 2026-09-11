@@ -74,7 +74,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
     // 3. 墨汁の描画（解析タブ表示中はリプレイ墨＆3D筆姿勢、通常時は GPU 墨汁テクスチャ）
     if (state.ui.leftTab == LeftTab::Analysis) {
-        CanvasView::DrawReplayCanvas(memDC, state);
+        CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
     } else {
         CanvasView::RenderInk(memDC, gpuInk, state);
     }

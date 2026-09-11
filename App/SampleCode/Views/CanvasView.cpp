@@ -377,20 +377,33 @@ struct ReplayLayer {
     HDC dc = nullptr;
     HBITMAP bmp = nullptr;
     HBITMAP oldBmp = nullptr;
+    uint32_t* bits = nullptr;
     int w = 0;
     int h = 0;
 
     bool Ensure(HDC ref, int W, int H) {
-        if (dc && w == W && h == H) return true;
+        if (dc && bmp && bits && w == W && h == H) return true;
         Release();
         dc = CreateCompatibleDC(ref);
         if (!dc) return false;
-        bmp = CreateCompatibleBitmap(ref, W, H);
-        if (!bmp) {
+
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = W;
+        bmi.bmiHeader.biHeight = -H; // トップダウン
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        void* pBits = nullptr;
+        bmp = CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+        if (!bmp || !pBits) {
+            if (bmp) DeleteObject(bmp);
             DeleteDC(dc);
             dc = nullptr;
             return false;
         }
+        bits = static_cast<uint32_t*>(pBits);
         oldBmp = (HBITMAP)SelectObject(dc, bmp);
         w = W;
         h = H;
@@ -398,9 +411,8 @@ struct ReplayLayer {
         return true;
     }
     void FillWhite() {
-        if (!dc) return;
-        RECT r = { 0, 0, w, h };
-        FillRect(dc, &r, (HBRUSH)GetStockObject(WHITE_BRUSH));
+        if (!bits || w <= 0 || h <= 0) return;
+        std::fill_n(bits, static_cast<size_t>(w) * static_cast<size_t>(h), 0x00FFFFFF);
     }
     void Release() {
         if (dc) {
@@ -413,23 +425,19 @@ struct ReplayLayer {
             bmp = nullptr;
         }
         oldBmp = nullptr;
+        bits = nullptr;
         w = 0;
         h = 0;
     }
 };
 
 struct ReplayCacheState {
-    // ゴースト筆跡は「これから書く部分」だけを出す。書き終わった墨の上へ重ねると、
-    // SRCAND で墨の縁（かすれや輪郭の中間調）が暗くなり、実物とずれるため。
-    ReplayLayer ghostFuture;            // まだ始まっていない画。先頭の画が変わった時だけ焼き直す
-    ReplayLayer ghostCurrent;           // 今書いている画の、これから走る部分。毎フレーム焼き直す
+    // 実際に書いた本物の墨（かすれ・にじみ・筆圧の抑揚）を100%忠実に保持したマスター淡墨ゴースト
+    ReplayLayer ghostMaster;
     unsigned revision = 0;              // 焼き込み済みの記録リビジョン
     int paperW = 0;
     int paperH = 0;
-    int futureFrom = -1;                // ghostFuture に焼いてある先頭の画
-    bool futureValid = false;
-    RECT currentBox = { 0, 0, 0, 0 };   // ghostCurrent の有効範囲（半紙ローカル）
-    bool currentValid = false;
+    bool masterValid = false;
 };
 
 ReplayCacheState g_replayCache;
@@ -437,131 +445,79 @@ ReplayCacheState g_replayCache;
 // 再生済みの墨。実際に書いたときと同じ GpuInk で描く。
 ReplayInk g_replayInk;
 
-const COLORREF kGhostColor = RGB(218, 222, 228);
+// 実際に書かれた GpuInk の墨汁テクスチャから、かすれ（白抜け・毛筋）とにじみのグラデーションを
+// 1ドットの狂いもなく完全に保持した淡墨ゴーストテクスチャを生成する
+void BakeGhostMaster(GpuInk& gpuInk, int pw, int ph) {
+    ReplayLayer& layer = g_replayCache.ghostMaster;
+    if (!layer.bits || layer.w != pw || layer.h != ph) return;
 
-// 記録点の丸。線分用の太いペンを選んだまま描くと丸まで太るので、必ず1pxへ戻す。
-void DrawReplayDot(HDC dc, PenPool& pens, int px, int py, int radius) {
-    SelectObject(dc, pens.Get(1));
-    Ellipse(dc, px - radius, py - radius, px + radius, py + radius);
-}
+    std::vector<int> ink;
+    int inkW = 0, inkH = 0;
+    gpuInk.GetInkSnapshot(ink, inkW, inkH);
 
-void DrawReplaySegment(HDC dc, PenPool& pens, int fromX, int fromY, int toX, int toY, int width) {
-    SelectObject(dc, pens.Get(width));
-    MoveToEx(dc, fromX, fromY, nullptr);
-    LineTo(dc, toX, toY);
-}
-
-// 1画ぶんのゴーストを、fromPoint 以降の点について描く（半紙ローカル座標）
-void DrawGhostStroke(HDC dc, PenPool& pens, const StrokeData& s, size_t fromPoint, int pw, int ph) {
-    for (size_t i = fromPoint; i < s.points.size(); ++i) {
-        const auto& p = s.points[i];
-        int px = static_cast<int>(p.normX * pw);
-        int py = static_cast<int>(p.normY * ph);
-        DrawReplayDot(dc, pens, px, py, (std::max)(2, static_cast<int>(p.width * 0.45)));
-
-        // 描き始めの点は、直前の（もう墨が乗っている）点とは繋がない
-        if (i > fromPoint) {
-            const auto& q = s.points[i - 1];
-            DrawReplaySegment(dc, pens,
-                static_cast<int>(q.normX * pw), static_cast<int>(q.normY * ph), px, py,
-                (std::max)(2, static_cast<int>((p.width + q.width) * 0.45)));
-        }
-    }
-}
-
-// 1画を囲む矩形（半紙ローカル）。線幅ぶん外側へ広げる。
-RECT GhostStrokeBox(const StrokeData& s, int pw, int ph) {
-    RECT box = { 0, 0, 0, 0 };
-    if (s.points.empty()) return box;
-
-    double minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9, maxW = 0.0;
-    for (const auto& p : s.points) {
-        double x = p.normX * pw;
-        double y = p.normY * ph;
-        minX = (std::min)(minX, x);
-        minY = (std::min)(minY, y);
-        maxX = (std::max)(maxX, x);
-        maxY = (std::max)(maxY, y);
-        maxW = (std::max)(maxW, p.width);
-    }
-    int pad = static_cast<int>(maxW * 0.5) + 4;
-    box.left   = (std::max)(0,      static_cast<int>(minX) - pad);
-    box.top    = (std::max)(0,      static_cast<int>(minY) - pad);
-    box.right  = (std::min)(pw, static_cast<int>(maxX) + pad + 1);
-    box.bottom = (std::min)(ph, static_cast<int>(maxY) + pad + 1);
-    return box;
-}
-
-// まだ始まっていない画（fromStroke 以降）をまとめて焼く
-void BakeFutureGhost(const AppState& state, int pw, int ph, size_t fromStroke) {
-    ReplayLayer& layer = g_replayCache.ghostFuture;
-    layer.FillWhite();
-
-    const auto& strokes = state.trajectory.GetStrokes();
-    if (fromStroke >= strokes.size()) return;
-
-    HDC dc = layer.dc;
-    PenPool pens(kGhostColor);
-    HBRUSH brush = CreateSolidBrush(kGhostColor);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
-    HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
-
-    for (size_t i = fromStroke; i < strokes.size(); ++i) {
-        DrawGhostStroke(dc, pens, strokes[i], 0, pw, ph);
-    }
-
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    DeleteObject(brush);
-}
-
-// 今書いている画の、まだ走っていない部分だけを焼く。
-// 画を囲む矩形の中だけ塗り直すので、毎フレーム呼んでも半紙全面を触らない。
-void BakeCurrentGhost(const AppState& state, int pw, int ph, size_t strokeIdx, size_t fromPoint) {
-    ReplayLayer& layer = g_replayCache.ghostCurrent;
-    const auto& strokes = state.trajectory.GetStrokes();
-    if (strokeIdx >= strokes.size()) {
-        g_replayCache.currentValid = false;
+    if (ink.empty() || inkW <= 0 || inkH <= 0) {
+        layer.FillWhite();
         return;
     }
 
-    const StrokeData& s = strokes[strokeIdx];
-    RECT box = GhostStrokeBox(s, pw, ph);
-    g_replayCache.currentBox = box;
-    g_replayCache.currentValid = (box.right > box.left && box.bottom > box.top);
-    if (!g_replayCache.currentValid) return;
+    size_t totalPixels = static_cast<size_t>(pw) * static_cast<size_t>(ph);
+    uint32_t* dst = layer.bits;
 
-    HDC dc = layer.dc;
-    FillRect(dc, &box, (HBRUSH)GetStockObject(WHITE_BRUSH));
-    if (fromPoint >= s.points.size()) return;  // 走り終わった画。白のまま
+    if (inkW == pw && inkH == ph && ink.size() == totalPixels) {
+        for (size_t i = 0; i < totalPixels; ++i) {
+            int inkVal = ink[i];
+            if (inkVal <= 0) {
+                dst[i] = 0x00FFFFFF;
+            } else {
+                int clamped = (inkVal > 255) ? 255 : inkVal;
+                double ratio = static_cast<double>(clamped) / 255.0;
+                // 淡墨調のトーンカーブ: 墨の最も濃い部分を淡いグレー RGB(190, 195, 205) にマッピング
+                // かすれの毛筋やにじみのグラデーションが 100% 完全に反映される
+                int r = 255 - static_cast<int>((255 - 190) * ratio);
+                int g = 255 - static_cast<int>((255 - 195) * ratio);
+                int b = 255 - static_cast<int>((255 - 205) * ratio);
+                dst[i] = (r << 16) | (g << 8) | b;
+            }
+        }
+    } else {
+        // スケーリング補間
+        for (int y = 0; y < ph; ++y) {
+            int sy = (y * inkH) / ph;
+            if (sy >= inkH) sy = inkH - 1;
+            size_t srcRow = static_cast<size_t>(sy) * static_cast<size_t>(inkW);
+            size_t dstRow = static_cast<size_t>(y) * static_cast<size_t>(pw);
 
-    PenPool pens(kGhostColor);
-    HBRUSH brush = CreateSolidBrush(kGhostColor);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
-    HPEN oldPen = (HPEN)SelectObject(dc, pens.Get(1));
-
-    DrawGhostStroke(dc, pens, s, fromPoint, pw, ph);
-
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    DeleteObject(brush);
+            for (int x = 0; x < pw; ++x) {
+                int sx = (x * inkW) / pw;
+                if (sx >= inkW) sx = inkW - 1;
+                int inkVal = ink[srcRow + sx];
+                if (inkVal <= 0) {
+                    dst[dstRow + x] = 0x00FFFFFF;
+                } else {
+                    int clamped = (inkVal > 255) ? 255 : inkVal;
+                    double ratio = static_cast<double>(clamped) / 255.0;
+                    int r = 255 - static_cast<int>((255 - 190) * ratio);
+                    int g = 255 - static_cast<int>((255 - 195) * ratio);
+                    int b = 255 - static_cast<int>((255 - 205) * ratio);
+                    dst[dstRow + x] = (r << 16) | (g << 8) | b;
+                }
+            }
+        }
+    }
 }
 
 } // namespace
 
 void CanvasView::ReleaseReplayCache() {
-    g_replayCache.ghostFuture.Release();
-    g_replayCache.ghostCurrent.Release();
-    g_replayCache.futureValid = false;
-    g_replayCache.currentValid = false;
-    g_replayCache.futureFrom = -1;
+    g_replayCache.ghostMaster.Release();
+    g_replayCache.masterValid = false;
     g_replayCache.revision = 0;
     g_replayCache.paperW = 0;
     g_replayCache.paperH = 0;
     g_replayInk.Release();
 }
 
-void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
+void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state) {
     const RECT& rPaper = state.ui.rPaper;
     int pw = RenderUtils::RW(rPaper);
     int ph = RenderUtils::RH(rPaper);
@@ -569,45 +525,30 @@ void CanvasView::DrawReplayCanvas(HDC dc, const AppState& state) {
 
     const auto& strokes = state.trajectory.GetStrokes();
     if (!strokes.empty()) {
-        // 1. 再生済みの墨。GpuInk の墨テクスチャは不透明で半紙全面を覆うため、
-        //    ゴースト筆跡より先に置く。
+        // 1. 再生済みの墨（時系列アニメーション）
         bool scrubbing = (state.replay.isDraggingSeekBar || state.replay.isDraggingWaveform);
         if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph, scrubbing)) {
             g_replayInk.Render(dc, rPaper.left, rPaper.top);
         }
 
-        // 2. これから書く部分のゴースト筆跡。
-        //    合成は SRCAND なので、既に墨が乗っている場所へ重ねると縁が暗くなる。
-        //    走り終わった部分は出さない。
-        int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
-        if (curIdx < 0) curIdx = 0;
-        size_t futureFrom = static_cast<size_t>(curIdx) + 1;
-
+        // 2. 実際に書いた文字と100%完全一致する淡墨ゴースト筆跡（かすれ・にじみ・筆圧の抑揚を完全保持）
         unsigned rev = state.trajectory.GetRevision();
         bool keyChanged = (g_replayCache.revision != rev
             || g_replayCache.paperW != pw || g_replayCache.paperH != ph);
 
-        if (g_replayCache.ghostFuture.Ensure(dc, pw, ph) && g_replayCache.ghostCurrent.Ensure(dc, pw, ph)) {
-            if (keyChanged || !g_replayCache.futureValid
-                || g_replayCache.futureFrom != static_cast<int>(futureFrom)) {
-                BakeFutureGhost(state, pw, ph, futureFrom);
-                g_replayCache.futureFrom = static_cast<int>(futureFrom);
+        if (g_replayCache.ghostMaster.Ensure(dc, pw, ph)) {
+            if (keyChanged || !g_replayCache.masterValid) {
+                BakeGhostMaster(gpuInk, pw, ph);
                 g_replayCache.revision = rev;
                 g_replayCache.paperW = pw;
                 g_replayCache.paperH = ph;
-                g_replayCache.futureValid = true;
+                g_replayCache.masterValid = true;
             }
 
-            BakeCurrentGhost(state, pw, ph, static_cast<size_t>(curIdx),
-                state.trajectory.GetVisiblePointCount(static_cast<size_t>(curIdx), state.replay.currentTimeMs));
-
-            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghostFuture.dc, 0, 0, SRCAND);
-            if (g_replayCache.currentValid) {
-                const RECT& b = g_replayCache.currentBox;
-                BitBlt(dc, rPaper.left + b.left, rPaper.top + b.top,
-                    b.right - b.left, b.bottom - b.top,
-                    g_replayCache.ghostCurrent.dc, b.left, b.top, SRCAND);
-            }
+            // SRCAND で半紙に重ねる。
+            // ・再生前(0s): 白紙の上に淡墨ゴーストが描かれ、実際に書いた文字（かすれ・にじみ）が100%完全一致で表示される。
+            // ・再生中: 再生済みの黒い墨(RGB 0,0,0)の上は黒のまま保たれ、未再生の未来の文字だけが淡墨ゴーストとして表示される。
+            BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghostMaster.dc, 0, 0, SRCAND);
         }
     }
 
@@ -644,12 +585,18 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
         DeleteObject(shPen);
     }
 
-    // 2. 筆の立ち具合リング（姿勢判定カラーリング）
-    // 60°以上: 青緑（立っている・基本姿勢）、45°〜60°: 山吹色、45°未満: 赤（寝かせ警告）
+    // 2. 筆圧＆姿勢リング（筆圧の強弱に応じたダイナミックカラーリング）
+    // 筆圧 (0.0〜1.0): 弱(青/水色) -> 中(緑/黄) -> 強(橙/赤)
+    COLORREF prsColor = GetPressureColor(pose.pressure);
     COLORREF postureColor = (alt >= 60.0) ? RGB(40, 205, 140) : ((alt >= 45.0) ? RGB(255, 195, 50) : RGB(255, 65, 65));
-    int ringR = (std::max)(12, static_cast<int>(pose.width * 0.5) + 8);
+    
+    // 着筆中は筆圧カラー、空中ホバー時は姿勢カラーを使用
+    COLORREF activeColor = isPenDown ? prsColor : postureColor;
 
-    HPEN ringPen = CreatePen(isPenDown ? PS_SOLID : PS_DOT, 2, postureColor);
+    int ringR = (std::max)(12, static_cast<int>(pose.width * 0.5) + 8);
+    int ringPenW = isPenDown ? (std::max)(1, std::min(4, 1 + static_cast<int>(pose.pressure * 3.0))) : 1;
+
+    HPEN ringPen = CreatePen(isPenDown ? PS_SOLID : PS_DOT, ringPenW, activeColor);
     HBRUSH nullB = (HBRUSH)GetStockObject(NULL_BRUSH);
     HPEN oldPen = (HPEN)SelectObject(dc, ringPen);
     HBRUSH oldBrush = (HBRUSH)SelectObject(dc, nullB);
@@ -657,9 +604,10 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
     Ellipse(dc, cx - ringR, cy - ringR, cx + ringR, cy + ringR);
 
     // 中心接地点マーカー
-    HBRUSH dotB = CreateSolidBrush(isPenDown ? postureColor : RGB(140, 150, 170));
+    HBRUSH dotB = CreateSolidBrush(isPenDown ? prsColor : RGB(140, 150, 170));
     SelectObject(dc, dotB);
-    Ellipse(dc, cx - 3, cy - 3, cx + 3, cy + 3);
+    int dotR = isPenDown ? (std::max)(3, 2 + static_cast<int>(pose.pressure * 3.0)) : 3;
+    Ellipse(dc, cx - dotR, cy - dotR, cx + dotR, cy + dotR);
     DeleteObject(dotB);
 
     SelectObject(dc, oldPen);
@@ -667,7 +615,6 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
     DeleteObject(ringPen);
 
     // 3. 3D 筆軸ベクトルの算出
-    // 画面奥（上方向）を基準に、高度角と方位角から立体的な筆軸方向を算出
     double dirX = -std::sin(azmRad) * tiltNorm;
     double dirY = std::cos(azmRad) * tiltNorm - (alt / 90.0) * 0.85;
     double len = std::sqrt(dirX * dirX + dirY * dirY);
@@ -727,8 +674,8 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
     LineTo(dc, shaftTopX + static_cast<int>(normX * 1.5), shaftTopY + static_cast<int>(normY * 1.5));
     DeleteObject(hlPen);
 
-    // 穂首の巻線バンド（ホワイトリング）
-    HPEN bandPen = CreatePen(PS_SOLID, 3, RGB(245, 240, 225));
+    // 穂首の巻線バンド（筆圧カラーアクセント）
+    HPEN bandPen = CreatePen(PS_SOLID, 3, isPenDown ? prsColor : RGB(245, 240, 225));
     SelectObject(dc, bandPen);
     MoveToEx(dc, tipBaseX + static_cast<int>(normX * (shaftHalfW + 0.5)), tipBaseY + static_cast<int>(normY * (shaftHalfW + 0.5)), nullptr);
     LineTo(dc, tipBaseX - static_cast<int>(normX * (shaftHalfW + 0.5)), tipBaseY - static_cast<int>(normY * (shaftHalfW + 0.5)));
@@ -739,26 +686,25 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
     DeleteObject(shaftPen);
     DeleteObject(shaftBrush);
 
-    // 6. 姿勢・高度角バッジ（ヘッドアップディスプレイ）
-    wchar_t poseText[32];
-    if (alt >= 60.0) {
-        swprintf_s(poseText, 32, L"%.0f° [直立]", alt);
-    } else if (alt >= 45.0) {
-        swprintf_s(poseText, 32, L"%.0f° [やや傾]", alt);
+    // 6. 姿勢・筆圧バッジ（ヘッドアップディスプレイ）
+    const wchar_t* prsLevel = (pose.pressure >= 0.70) ? L"強" : ((pose.pressure >= 0.35) ? L"中" : L"軽");
+    wchar_t hudText[64];
+    if (isPenDown) {
+        swprintf_s(hudText, 64, L"%.0f° | 圧:%.0f%%[%s]", alt, pose.pressure * 100.0, prsLevel);
     } else {
-        swprintf_s(poseText, 32, L"%.0f° [寝かせ警告!]", alt);
+        swprintf_s(hudText, 64, L"%.0f° [空中]", alt);
     }
 
-    int badgeW = (alt < 45.0) ? 104 : 84;
+    int badgeW = isPenDown ? 120 : 76;
     int badgeH = 22;
     int badgeX = shaftTopX + ((dirX >= 0) ? 10 : (-badgeW - 10));
     int badgeY = shaftTopY - 12;
 
     RECT rBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
-    Box(dc, rBadge, RGB(24, 28, 36), postureColor, 1, 4);
+    Box(dc, rBadge, RGB(24, 28, 36), activeColor, 1, 4);
 
     HFONT fBadge = CreateCustomFont(11, FW_BOLD);
-    Center(dc, rBadge, poseText, fBadge, postureColor);
+    Center(dc, rBadge, hudText, fBadge, activeColor);
     DeleteObject(fBadge);
 }
 
