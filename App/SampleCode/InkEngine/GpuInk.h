@@ -121,6 +121,8 @@ private:
 private:
 	int m_width = 0;
 	int m_height = 0;
+	int m_paperOffsetX = 0;
+	int m_paperOffsetY = 0;
 
 	// Direct2D リソース
 	ID2D1Factory* m_pD2DFactory = nullptr;

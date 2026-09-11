@@ -927,11 +927,9 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	}
 
 	extern HWND g_hInkWnd;
-	extern HWND g_mainWnd;
 	if (stampChanged)
 	{
 		if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
-		if (g_mainWnd && IsWindow(g_mainWnd)) InvalidateRect(g_mainWnd, NULL, FALSE);
 	}
 }
 
@@ -1038,6 +1036,9 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 	if (dispW <= 0) dispW = m_width;
 	if (dispH <= 0) dispH = m_height;
 
+	m_paperOffsetX = destX;
+	m_paperOffsetY = destY;
+
 	// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
 	if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
 	{
@@ -1101,7 +1102,25 @@ void GpuInk::PropagationThreadLoop()
 			extern HWND g_hInkWnd;
 			extern HWND g_mainWnd;
 			if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
-			if (g_mainWnd && IsWindow(g_mainWnd)) InvalidateRect(g_mainWnd, NULL, FALSE);
+			if (g_mainWnd && IsWindow(g_mainWnd))
+			{
+				RECT rcPaper;
+				{
+					std::lock_guard<std::mutex> lock(m_mutex);
+					rcPaper.left = m_paperOffsetX;
+					rcPaper.top = m_paperOffsetY;
+					rcPaper.right = m_paperOffsetX + m_width;
+					rcPaper.bottom = m_paperOffsetY + m_height;
+				}
+				if (rcPaper.right > rcPaper.left && rcPaper.bottom > rcPaper.top)
+				{
+					InvalidateRect(g_mainWnd, &rcPaper, FALSE);
+				}
+				else
+				{
+					InvalidateRect(g_mainWnd, NULL, FALSE);
+				}
+			}
 		}
 
 		std::this_thread::sleep_for(frameTime);
