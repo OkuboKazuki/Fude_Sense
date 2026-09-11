@@ -96,6 +96,7 @@
     <ClInclude Include="InkEngine\ReplayInk.h" />
     <ClInclude Include="Inputs\MouseAdapter.h" />
     <ClInclude Include="Inputs\PenInputEvent.h" />
+    <ClInclude Include="Inputs\WindowsPointerAdapter.h" />
     <ClInclude Include="Inputs\WintabAdapter.h" />
     <ClInclude Include="Models\AppEnums.h" />
     <ClInclude Include="Models\AppState.h" />
