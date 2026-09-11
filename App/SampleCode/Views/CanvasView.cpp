@@ -445,9 +445,10 @@ ReplayCacheState g_replayCache;
 // 再生済みの墨。実際に書いたときと同じ GpuInk で描く。
 ReplayInk g_replayInk;
 
-// 実際に書かれた GpuInk の墨汁テクスチャから、かすれ（白抜け・毛筋）とにじみのグラデーションを
-// 1ドットの狂いもなく完全に保持した淡墨ゴーストテクスチャを生成する
-void BakeGhostMaster(GpuInk& gpuInk, int pw, int ph) {
+// 実際に書かれた GpuInk の墨汁テクスチャ（かすれの白抜け・毛筋・物理にじみ）に、
+// 各位置の筆圧の強弱に応じたカラーグラデーション（弱=水色/青 -> 中=緑/黄 -> 強=橙/赤）を融合した
+// マスターゴーストテクスチャを生成する
+void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, int ph) {
     ReplayLayer& layer = g_replayCache.ghostMaster;
     if (!layer.bits || layer.w != pw || layer.h != ph) return;
 
@@ -460,9 +461,69 @@ void BakeGhostMaster(GpuInk& gpuInk, int pw, int ph) {
         return;
     }
 
-    size_t totalPixels = static_cast<size_t>(pw) * static_cast<size_t>(ph);
+    const size_t totalPixels = static_cast<size_t>(pw) * static_cast<size_t>(ph);
     uint32_t* dst = layer.bits;
 
+    // 1. 各画素の筆圧マップ (pressureMap) を構築
+    std::vector<float> pressureMap(totalPixels, -1.0f);
+    const auto& strokes = session.GetStrokes();
+
+    for (const auto& s : strokes) {
+        if (s.points.empty()) continue;
+
+        for (size_t i = 0; i < s.points.size(); ++i) {
+            const auto& p = s.points[i];
+            const auto& prev = (i > 0) ? s.points[i - 1] : p;
+
+            double x1 = prev.normX * pw;
+            double y1 = prev.normY * ph;
+            double x2 = p.normX * pw;
+            double y2 = p.normY * ph;
+            double prs1 = prev.pressure;
+            double prs2 = p.pressure;
+            double rad1 = (std::max)(2.0, prev.width * 0.5 + 4.0);
+            double rad2 = (std::max)(2.0, p.width * 0.5 + 4.0);
+
+            double dx = x2 - x1;
+            double dy = y2 - y1;
+            double dist = std::hypot(dx, dy);
+
+            double step = (std::max)(1.0, (std::min)(rad1, rad2) * 0.4);
+            int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
+
+            for (int k = 0; k <= steps; ++k) {
+                double t = (steps == 0) ? 0.0 : static_cast<double>(k) / static_cast<double>(steps);
+                double cx = x1 + dx * t;
+                double cy = y1 + dy * t;
+                double prs = prs1 + (prs2 - prs1) * t;
+                double r = rad1 + (rad2 - rad1) * t;
+                double rSq = r * r;
+
+                int minX = (std::max)(0, static_cast<int>(std::floor(cx - r)));
+                int maxX = (std::min)(pw - 1, static_cast<int>(std::ceil(cx + r)));
+                int minY = (std::max)(0, static_cast<int>(std::floor(cy - r)));
+                int maxY = (std::min)(ph - 1, static_cast<int>(std::ceil(cy + r)));
+
+                float fPrs = static_cast<float>(prs);
+
+                for (int py = minY; py <= maxY; ++py) {
+                    double dY = static_cast<double>(py) - cy;
+                    size_t rowOffset = static_cast<size_t>(py) * static_cast<size_t>(pw);
+                    for (int px = minX; px <= maxX; ++px) {
+                        double dX = static_cast<double>(px) - cx;
+                        if (dX * dX + dY * dY <= rSq) {
+                            size_t idx = rowOffset + px;
+                            if (pressureMap[idx] < 0.0f || fPrs > pressureMap[idx]) {
+                                pressureMap[idx] = fPrs;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 墨テクスチャと筆圧マップを融合して DIBSection へ一括書き込み
     if (inkW == pw && inkH == ph && ink.size() == totalPixels) {
         for (size_t i = 0; i < totalPixels; ++i) {
             int inkVal = ink[i];
@@ -471,11 +532,18 @@ void BakeGhostMaster(GpuInk& gpuInk, int pw, int ph) {
             } else {
                 int clamped = (inkVal > 255) ? 255 : inkVal;
                 double ratio = static_cast<double>(clamped) / 255.0;
-                // 淡墨調のトーンカーブ: 墨の最も濃い部分を淡いグレー RGB(190, 195, 205) にマッピング
-                // かすれの毛筋やにじみのグラデーションが 100% 完全に反映される
-                int r = 255 - static_cast<int>((255 - 190) * ratio);
-                int g = 255 - static_cast<int>((255 - 195) * ratio);
-                int b = 255 - static_cast<int>((255 - 205) * ratio);
+
+                // その画素の筆圧に応じたカラーを取得
+                double prs = (pressureMap[i] >= 0.0f) ? static_cast<double>(pressureMap[i]) : 0.5;
+                COLORREF prsColor = RenderUtils::GetPressureColor(prs);
+                int baseR = GetRValue(prsColor);
+                int baseG = GetGValue(prsColor);
+                int baseB = GetBValue(prsColor);
+
+                // 墨の濃淡・かすれ・にじみに応じて白から筆圧カラーへ階調変換
+                int r = 255 - static_cast<int>((255 - baseR) * ratio);
+                int g = 255 - static_cast<int>((255 - baseG) * ratio);
+                int b = 255 - static_cast<int>((255 - baseB) * ratio);
                 dst[i] = (r << 16) | (g << 8) | b;
             }
         }
@@ -491,15 +559,23 @@ void BakeGhostMaster(GpuInk& gpuInk, int pw, int ph) {
                 int sx = (x * inkW) / pw;
                 if (sx >= inkW) sx = inkW - 1;
                 int inkVal = ink[srcRow + sx];
+                size_t dstIdx = dstRow + x;
                 if (inkVal <= 0) {
-                    dst[dstRow + x] = 0x00FFFFFF;
+                    dst[dstIdx] = 0x00FFFFFF;
                 } else {
                     int clamped = (inkVal > 255) ? 255 : inkVal;
                     double ratio = static_cast<double>(clamped) / 255.0;
-                    int r = 255 - static_cast<int>((255 - 190) * ratio);
-                    int g = 255 - static_cast<int>((255 - 195) * ratio);
-                    int b = 255 - static_cast<int>((255 - 205) * ratio);
-                    dst[dstRow + x] = (r << 16) | (g << 8) | b;
+
+                    double prs = (pressureMap[dstIdx] >= 0.0f) ? static_cast<double>(pressureMap[dstIdx]) : 0.5;
+                    COLORREF prsColor = RenderUtils::GetPressureColor(prs);
+                    int baseR = GetRValue(prsColor);
+                    int baseG = GetGValue(prsColor);
+                    int baseB = GetBValue(prsColor);
+
+                    int r = 255 - static_cast<int>((255 - baseR) * ratio);
+                    int g = 255 - static_cast<int>((255 - baseG) * ratio);
+                    int b = 255 - static_cast<int>((255 - baseB) * ratio);
+                    dst[dstIdx] = (r << 16) | (g << 8) | b;
                 }
             }
         }
@@ -531,14 +607,14 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
             g_replayInk.Render(dc, rPaper.left, rPaper.top);
         }
 
-        // 2. 実際に書いた文字と100%完全一致する淡墨ゴースト筆跡（かすれ・にじみ・筆圧の抑揚を完全保持）
+        // 2. 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト（かすれ・にじみ完全保持）
         unsigned rev = state.trajectory.GetRevision();
         bool keyChanged = (g_replayCache.revision != rev
             || g_replayCache.paperW != pw || g_replayCache.paperH != ph);
 
         if (g_replayCache.ghostMaster.Ensure(dc, pw, ph)) {
             if (keyChanged || !g_replayCache.masterValid) {
-                BakeGhostMaster(gpuInk, pw, ph);
+                BakeGhostMaster(gpuInk, state.trajectory, pw, ph);
                 g_replayCache.revision = rev;
                 g_replayCache.paperW = pw;
                 g_replayCache.paperH = ph;
@@ -546,8 +622,8 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
             }
 
             // SRCAND で半紙に重ねる。
-            // ・再生前(0s): 白紙の上に淡墨ゴーストが描かれ、実際に書いた文字（かすれ・にじみ）が100%完全一致で表示される。
-            // ・再生中: 再生済みの黒い墨(RGB 0,0,0)の上は黒のまま保たれ、未再生の未来の文字だけが淡墨ゴーストとして表示される。
+            // ・再生前(0s): 白紙の上に筆圧グラデーション文字（かすれ・にじみ付き）が100%完全一致で表示される。
+            // ・再生中: 再生済みの黒い墨(RGB 0,0,0)の上は黒のまま保たれ、未再生の未来の文字だけが筆圧グラデーションとして表示される。
             BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghostMaster.dc, 0, 0, SRCAND);
         }
     }
