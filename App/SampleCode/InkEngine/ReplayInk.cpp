@@ -9,21 +9,17 @@ constexpr double kPi = 3.14159265358979323846;
 
 // にじみ1段階分の時間。書いているときの拡散スレッドと同じ刻み。
 constexpr DWORD kDiffusionStepMs = 16;
-// 1フレームで進める段数の上限。拡散は墨の広がった範囲全体を
-// 走るので、高速再生で段数が伸びると描画が止まる。
-constexpr int kMaxDiffusionStepsPerFrame = 4;
+// 1フレームで進める段数の上限。倍速再生やフレーム落ち時にも滑らかに追従させる。
+constexpr int kMaxDiffusionStepsPerFrame = 8;
 // 引き直した直後にまとめて進める段数。
-// シークで飛んだ先でにじみが全く乗っていないのを避ける。
-constexpr int kRebuildDiffusionSteps = 12;
-// 画と画の間でまとめて進める段数の上限。長く考え込んだ場合でも、そこで
-// 再生が止まらないようにする。拡散は落ち着くと StepPropagation が false を
-// 返すので、通常はその手前で打ち切れる。
-constexpr int kMaxGapDiffusionSteps = 60;
+// シークで飛んだ先でも自然なにじみを即座に乗せる。
+constexpr int kRebuildDiffusionSteps = 30;
+// 画と画の間でまとめて進める段数の上限。
+constexpr int kMaxGapDiffusionSteps = 120;
 // 巻き戻し用に控える墨の状態の最大数と、その合計サイズの上限。
-// 半紙はほとんどが白紙なので RLE がよく効くが、書き込むほど大きくなる。
 constexpr size_t kMaxCheckpoints = 12;
 constexpr size_t kCheckpointByteBudget = 64u * 1024u * 1024u;
-// 控えを取る間隔の下限。短い記録で控えだらけにならないようにする。
+// 控えを取る間隔の下限。
 constexpr DWORD kMinCheckpointIntervalMs = 400;
 }
 
@@ -87,11 +83,7 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
     }
 
     // 初回、または半紙の大きさが変わったとき。
-    // 記録は正規化座標で持っているので座標は追従できるが、線幅は記録時の
-    // ピクセル値なので、大きさを変えると太さの比率はずれる。
     if (!m_ready || m_paperW != paperW || m_paperH != paperH) {
-        // 拡散スレッドは立てない。立てると拡散のたびにウィンドウ全体の
-        // 再描画を 60fps で要求し続け、解析タブを離れた後も重さが残る。
         if (!m_ink->Initialize(paperW, paperH, false)) {
             m_ready = false;
             return false;
@@ -116,9 +108,8 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
             session.GetReplayTotalDurationMs() / static_cast<DWORD>(kMaxCheckpoints));
     }
 
-    // 墨は画素へ破壊的に積み上がるので、巻き戻すには引き直すしかない。
-    // 全部引き直すとシークのドラッグが毎フレーム重くなるため、手前の控えまで
-    // 書き戻して、そこからの差分だけを引く。
+    // 墨は画素へ破壊的に積み上がるので、巻き戻すには引き直す。
+    // 手前の控えまで書き戻して差分だけを引く。
     bool rebuilt = (rewound || recordChanged);
     bool restored = false;
     if (rebuilt) {
@@ -132,9 +123,6 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
     }
 
     // にじみは時間発展なので、進める量を再生時刻の進みに合わせる。
-    // 停止中は進まず、2倍速なら2倍速で進む。
-    // ドラッグ中は毎フレーム引き直しになるので、まとめ進めは省く。
-    // 指を離した時にまとめて進める。
     int steps = 0;
     if (rebuilt) {
         steps = scrubbing ? 0 : kRebuildDiffusionSteps;
@@ -145,23 +133,23 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
         if (steps > kMaxDiffusionStepsPerFrame) steps = kMaxDiffusionStepsPerFrame;
     }
 
-    // 引き直しの最中は全画を一気に流し込むため、画ごとの間の拡散を積むと
-    // 1フレームで数百段走ることになる。そこでは補わない。
-    FeedForward(session, timeMs, rebuilt, !scrubbing);
+    // ドラッグ中(scrubbing)以外は、再構築時であっても画ごとの空中拡散を適用する
+    bool skipGap = scrubbing;
+    FeedForward(session, timeMs, skipGap, !scrubbing);
     AdvanceDiffusion(steps);
+
+    // 全画の再生が終端に達した場合、あるいは末尾で指を離した場合は、
+    // 残った水分を自然乾燥・拡散させ、完成作品と全く同一の仕上がりに落ち着かせる
+    DWORD totalDur = session.GetReplayTotalDurationMs();
+    if (!scrubbing && totalDur > 0 && timeMs >= totalDur) {
+        m_ink->SettleDiffusion(200);
+    }
+
     m_timeMs = timeMs;
     m_wasScrubbing = scrubbing;
     return true;
 }
 
-// 画と画の間（空中移動）は、再生では 250〜700ms に丸められている
-// （BuildReplayTimeline）。長く間を置いて書いていた場合、その間に紙の上で
-// 進んだにじみが再生では足りない。テンポは丸めたままにして、にじみだけ
-// 実際の間隔ぶん先へ進める。
-//
-// 実際の間隔は、両画の startTime の差から前の画の所要時間を引いて求める。
-// endTime は GetTickCount 由来、startTime は Wintab のパケット時刻由来で
-// 時計が違う可能性があるため、引き算は startTime 同士で閉じる。
 int ReplayInk::GapDiffusionSteps(const TrajectorySession& session, size_t strokeIdx) const {
     const auto& strokes = session.GetStrokes();
     if (strokeIdx == 0 || strokeIdx >= strokes.size()) return 0;
@@ -196,12 +184,15 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
         // これ以降の画はまだ始まっていない
         if (timeMs < session.GetStrokeTimelineStart(si)) break;
 
-        // 点と点の間を補間した先端は打たない。墨は重ねるほど濃くなるので、
-        // 次のフレームで本来の記録点に打ち直されると濃さが狂うため。
         size_t visible = session.GetVisiblePointCount(si, timeMs);
         if (visible <= m_fedCount[si]) continue;
 
         if (m_fedCount[si] == 0) {
+            // この画の1点目を置く前に、手前の空中移動のにじみを補う
+            if (!skipGapDiffusion) {
+                AdvanceDiffusion(GapDiffusionSteps(session, si));
+            }
+
             // 画の切れ目は、巻き戻しの足がかりとして墨の状態を控えておく。
             // 一定の間隔を空けて、記録全体をまばらに覆う。
             DWORD startMs = session.GetStrokeTimelineStart(si);
@@ -210,11 +201,6 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
                 if (m_openStroke >= 0) m_ink->EndStroke();
                 m_openStroke = -1;
                 CaptureCheckpoint(startMs);
-            }
-
-            // この画の1点目を置く前に、手前の空中移動のにじみを補う
-            if (!skipGapDiffusion) {
-                AdvanceDiffusion(GapDiffusionSteps(session, si));
             }
         }
 
@@ -246,8 +232,7 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
         m_fedCount[si] = visible;
     }
 
-    // 最後まで流し込んだ画は区切る。次の画が前の画の続きとして扱われると、
-    // 払いや跳ねの判定（EndStroke の速度・加速度）が狂う。
+    // 最後まで流し込んだ画は区切る。
     if (m_openStroke >= 0 && static_cast<size_t>(m_openStroke) < strokes.size()
         && m_fedCount[m_openStroke] >= strokes[m_openStroke].points.size()) {
         m_ink->EndStroke();

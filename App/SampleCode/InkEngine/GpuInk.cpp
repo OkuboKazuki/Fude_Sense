@@ -534,10 +534,31 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 
 	RebuildPixels_NoLock();
 
-	// 書き戻した時点の絵で止める。ここで拡散の対象範囲を半紙全面にすると、
-	// 戻すたびに全画素を舐める重いパスが走るため、範囲は空にしておく。
-	// 次の画を置いた時点で、その周りから拡散が再開する。
+	// 書き戻した時点の水分領域を走査し、拡散対象のアクティブ範囲を再設定する。
+	// これにより復元後も残った水分によるにじみ拡散が途切れず正常に進行する。
 	ResetDirtyRect_NoLock();
+	int minX = INT_MAX, maxX = -1, minY = INT_MAX, maxY = -1;
+	for (int y = 0; y < m_height; ++y)
+	{
+		size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(m_width);
+		for (int x = 0; x < m_width; ++x)
+		{
+			if (m_wetField[rowOffset + x] > 0)
+			{
+				if (x < minX) minX = x;
+				if (x > maxX) maxX = x;
+				if (y < minY) minY = y;
+				if (y > maxY) maxY = y;
+			}
+		}
+	}
+	if (minX <= maxX && minY <= maxY)
+	{
+		m_activeMinX = minX;
+		m_activeMaxX = maxX;
+		m_activeMinY = minY;
+		m_activeMaxY = maxY;
+	}
 
 	if (m_pInkBitmap && !m_pixelBuffer.empty())
 	{
@@ -545,6 +566,19 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 		m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 	}
 	return true;
+}
+
+int GpuInk::SettleDiffusion(int maxSteps)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	if (m_width <= 0 || m_height <= 0 || m_ink.empty()) return 0;
+	int count = 0;
+	for (int i = 0; i < maxSteps; ++i)
+	{
+		if (!PropagateInk_NoLock()) break;
+		count++;
+	}
+	return count;
 }
 
 void GpuInk::RebuildPixels_NoLock()

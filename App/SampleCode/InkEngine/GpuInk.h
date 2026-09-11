@@ -76,6 +76,8 @@ public:
 	// にじみを1段階進める。背景スレッドを立てていないときに使う。
 	// 戻り値は画素が変わったかどうか。
 	bool StepPropagation();
+	// 水分が落ち着くまで（または最大ステップ数まで）にじみをまとめて進める
+	int SettleDiffusion(int maxSteps = 200);
 	bool IsInStroke() const { return m_inStroke; }
 
 	KinematicsInfo GetKinematicsInfo();
