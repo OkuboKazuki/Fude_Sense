@@ -15,6 +15,7 @@
 #include <chrono>
 
 #include "InkSnapshot.h"
+#include "GpuSimulator.h"
 
 struct KinematicsInfo
 {
@@ -181,4 +182,8 @@ private:
 
 	std::thread m_propagationThread;
 	std::atomic<bool> m_runPropagation{ false };
+
+	// Direct3D 11 Compute Shader GPU 浸透シミュレータ
+	GpuSimulator m_gpuSim;
+	bool m_needsGpuUpload = false;
 };

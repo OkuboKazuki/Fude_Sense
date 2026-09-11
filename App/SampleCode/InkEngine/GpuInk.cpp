@@ -277,6 +277,8 @@ void GpuInk::ReleaseResources_NoLock()
 	m_pixelBuffer.clear();
 	m_pixelBuffer.shrink_to_fit();
 	ResetDirtyRect_NoLock();
+	m_gpuSim.Release();
+	m_needsGpuUpload = false;
 	m_width = m_height = 0;
 	m_inStroke = false;
 }
@@ -339,6 +341,8 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 	);
 
 	ResetDirtyRect_NoLock();
+	m_gpuSim.Initialize(m_width, m_height);
+	m_needsGpuUpload = true;
 	return SUCCEEDED(hr);
 }
 
@@ -448,6 +452,8 @@ void GpuInk::Resize(int width, int height)
 	}
 
 	ResetDirtyRect_NoLock();
+	m_gpuSim.Resize(width, height);
+	m_needsGpuUpload = true;
 	m_uploadMinX = 0; m_uploadMinY = 0;
 	m_uploadMaxX = m_width - 1; m_uploadMaxY = m_height - 1;
 }
@@ -494,6 +500,7 @@ void GpuInk::Clear()
 			D2D1_RECT_U rect = D2D1::RectU(0, 0, m_width, m_height);
 			m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 		}
+		m_needsGpuUpload = true;
 	}
 }
 
@@ -544,6 +551,7 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 		D2D1_RECT_U rect = D2D1::RectU(0, 0, m_width, m_height);
 		m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 	}
+	m_needsGpuUpload = true;
 	return true;
 }
 
@@ -556,11 +564,45 @@ void GpuInk::RebuildPixels_NoLock()
 	}
 }
 
-// 物理インク拡散シミュレーション (GPU/バッファ)
+// 物理インク拡散シミュレーション (Direct3D 11 Compute Shader GPU 加速 / CPU フォールバック)
 bool GpuInk::PropagateInk_NoLock()
 {
 	if (m_width <= 0 || m_height <= 0 || m_ink.empty()) return false;
 	if (m_wetField.size() != m_ink.size()) return false;
+
+	// 1. Direct3D 11 Compute Shader GPU 加速パス
+	if (m_gpuSim.IsAvailable())
+	{
+		if (m_needsGpuUpload)
+		{
+			m_gpuSim.UploadFromCpu(m_ink.data(), m_wetField.data(), m_width, m_height);
+			m_needsGpuUpload = false;
+		}
+
+		if (m_activeMinX <= m_activeMaxX && m_activeMinY <= m_activeMaxY)
+		{
+			if (m_gpuSim.StepSimulation())
+			{
+				m_gpuSim.DownloadToPixels(m_pixelBuffer.data(), m_width, m_height);
+				m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+
+				m_uploadMinX = 0;
+				m_uploadMinY = 0;
+				m_uploadMaxX = m_width - 1;
+				m_uploadMaxY = m_height - 1;
+
+				m_activeMinX = std::max(0, m_activeMinX - 1);
+				m_activeMinY = std::max(0, m_activeMinY - 1);
+				m_activeMaxX = std::min(m_width - 1, m_activeMaxX + 1);
+				m_activeMaxY = std::min(m_height - 1, m_activeMaxY + 1);
+
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// 2. フォールバック: 従来の CPU セルラー・オートマトン計算
 	if (m_activeMinX > m_activeMaxX || m_activeMinY > m_activeMaxY) return false;
 
 	int startX = std::max(0, m_activeMinX - 1);
@@ -942,6 +984,7 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	extern HWND g_hInkWnd;
 	if (stampChanged)
 	{
+		m_needsGpuUpload = true;
 		if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
 	}
 }
