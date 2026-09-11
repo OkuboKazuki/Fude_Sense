@@ -149,6 +149,7 @@ private:
 	int m_uploadMaxY = -1;
 
 	std::mutex m_mutex;
+	std::mutex m_kinematicsMutex;
 
 	bool m_inStroke = false;
 	POINT m_lastPt = { 0, 0 };
