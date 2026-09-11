@@ -537,7 +537,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		if (!OpenTabletContexts(hWnd))
 		{
-			ShowError("Could Not Open Wintab Tablet Contexts.");
+			OutputDebugStringA("Could Not Open Wintab Tablet Contexts.\n");
 		}
 
 		break;

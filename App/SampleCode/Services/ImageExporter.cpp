@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "ImageExporter.h"
 #include <shlobj.h>
+#include <knownfolders.h>
 #include <vector>
 
 bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
@@ -30,19 +31,22 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
     if (toClipboard) {
         if (OpenClipboard(hWnd)) {
             EmptyClipboard();
-            SetClipboardData(CF_BITMAP, memBmp);
+            // クリップボードへ所有権を引き渡す（成功時はシステムがメモリを管理するため DeleteObject してはならない）
+            if (SetClipboardData(CF_BITMAP, memBmp)) {
+                state.SetSaveFeedback(L"✓ クリップボードにコピーしました");
+                success = true;
+            }
             CloseClipboard();
-            state.SetSaveFeedback(L"✓ クリップボードにコピーしました");
-            success = true;
         }
     } else {
-        wchar_t deskPath[MAX_PATH];
-        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, deskPath))) {
+        PWSTR pDeskPath = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, NULL, &pDeskPath))) {
             SYSTEMTIME st;
             GetLocalTime(&st);
             wchar_t filePath[MAX_PATH];
             swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
-                deskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+            CoTaskMemFree(pDeskPath);
 
             BITMAP bmp;
             GetObject(memBmp, sizeof(BITMAP), &bmp);
@@ -79,7 +83,10 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
     }
 
     SelectObject(memDC, oldBmp);
-    DeleteObject(memBmp);
+    // クリップボードへ正常に渡した場合はシステムが所有するため破棄しない
+    if (!toClipboard || !success) {
+        DeleteObject(memBmp);
+    }
     DeleteDC(memDC);
     ReleaseDC(hWnd, screenDC);
 
