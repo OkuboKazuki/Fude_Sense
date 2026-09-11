@@ -2,7 +2,120 @@
 #include "ImageExporter.h"
 #include <shlobj.h>
 #include <knownfolders.h>
+#include <wincodec.h>
+#include <wrl/client.h>
 #include <vector>
+
+#pragma comment(lib, "windowscodecs.lib")
+
+using Microsoft::WRL::ComPtr;
+
+namespace {
+
+// WIC (Windows Imaging Component) による PNG エンコード保存
+bool SaveBitmapAsPng(HBITMAP hBmp, int width, int height, const wchar_t* filePath) {
+    if (!hBmp || width <= 0 || height <= 0 || !filePath) return false;
+
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool needUninit = SUCCEEDED(hrCo);
+
+    bool success = false;
+    do {
+        ComPtr<IWICImagingFactory> pFactory;
+        HRESULT hr = CoCreateInstance(
+            CLSID_WICImagingFactory,
+            NULL,
+            CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&pFactory)
+        );
+        if (FAILED(hr) || !pFactory) break;
+
+        ComPtr<IWICBitmap> pWicBitmap;
+        hr = pFactory->CreateBitmapFromHBITMAP(hBmp, NULL, WICBitmapIgnoreAlpha, &pWicBitmap);
+        if (FAILED(hr) || !pWicBitmap) break;
+
+        ComPtr<IWICStream> pStream;
+        hr = pFactory->CreateStream(&pStream);
+        if (FAILED(hr) || !pStream) break;
+
+        hr = pStream->InitializeFromFilename(filePath, GENERIC_WRITE);
+        if (FAILED(hr)) break;
+
+        ComPtr<IWICBitmapEncoder> pEncoder;
+        hr = pFactory->CreateEncoder(GUID_ContainerFormatPng, NULL, &pEncoder);
+        if (FAILED(hr) || !pEncoder) break;
+
+        hr = pEncoder->Initialize(pStream.Get(), WICBitmapEncoderNoCache);
+        if (FAILED(hr)) break;
+
+        ComPtr<IWICBitmapFrameEncode> pFrame;
+        hr = pEncoder->CreateNewFrame(&pFrame, NULL);
+        if (FAILED(hr) || !pFrame) break;
+
+        hr = pFrame->Initialize(NULL);
+        if (FAILED(hr)) break;
+
+        hr = pFrame->SetSize(static_cast<UINT>(width), static_cast<UINT>(height));
+        if (FAILED(hr)) break;
+
+        WICPixelFormatGUID format = GUID_WICPixelFormat24bppBGR;
+        hr = pFrame->SetPixelFormat(&format);
+        if (FAILED(hr)) break;
+
+        hr = pFrame->WriteSource(pWicBitmap.Get(), NULL);
+        if (FAILED(hr)) break;
+
+        hr = pFrame->Commit();
+        if (FAILED(hr)) break;
+
+        hr = pEncoder->Commit();
+        if (FAILED(hr)) break;
+
+        success = true;
+    } while (false);
+
+    if (needUninit) {
+        CoUninitialize();
+    }
+    return success;
+}
+
+// WIC 失敗時のフォールバック用 BMP 保存
+bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* filePath) {
+    BITMAP bmp;
+    GetObject(memBmp, sizeof(BITMAP), &bmp);
+
+    BITMAPFILEHEADER bfh = { 0 };
+    BITMAPINFOHEADER bih = { 0 };
+
+    bih.biSize = sizeof(BITMAPINFOHEADER);
+    bih.biWidth = pw;
+    bih.biHeight = ph;
+    bih.biPlanes = 1;
+    bih.biBitCount = 24;
+    bih.biCompression = BI_RGB;
+
+    DWORD dwSize = ((pw * bih.biBitCount + 31) / 32) * 4 * ph;
+    bfh.bfType = 0x4D42; // "BM"
+    bfh.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dwSize;
+    bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
+    std::vector<BYTE> buf(dwSize);
+    GetDIBits(memDC, memBmp, 0, ph, buf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
+
+    HANDLE hFile = CreateFileW(filePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(hFile, &bfh, sizeof(bfh), &written, NULL);
+        WriteFile(hFile, &bih, sizeof(bih), &written, NULL);
+        WriteFile(hFile, buf.data(), dwSize, &written, NULL);
+        CloseHandle(hFile);
+        return true;
+    }
+    return false;
+}
+
+} // namespace
 
 bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
     using namespace RenderUtils;
@@ -44,41 +157,23 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
             SYSTEMTIME st;
             GetLocalTime(&st);
             wchar_t filePath[MAX_PATH];
-            swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
+            swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.png",
                 pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-            CoTaskMemFree(pDeskPath);
 
-            BITMAP bmp;
-            GetObject(memBmp, sizeof(BITMAP), &bmp);
-
-            BITMAPFILEHEADER bfh = { 0 };
-            BITMAPINFOHEADER bih = { 0 };
-
-            bih.biSize = sizeof(BITMAPINFOHEADER);
-            bih.biWidth = pw;
-            bih.biHeight = ph;
-            bih.biPlanes = 1;
-            bih.biBitCount = 24;
-            bih.biCompression = BI_RGB;
-
-            DWORD dwSize = ((pw * bih.biBitCount + 31) / 32) * 4 * ph;
-            bfh.bfType = 0x4D42; // "BM"
-            bfh.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dwSize;
-            bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-
-            std::vector<BYTE> buf(dwSize);
-            GetDIBits(memDC, memBmp, 0, ph, buf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
-
-            HANDLE hFile = CreateFileW(filePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (hFile != INVALID_HANDLE_VALUE) {
-                DWORD written = 0;
-                WriteFile(hFile, &bfh, sizeof(bfh), &written, NULL);
-                WriteFile(hFile, &bih, sizeof(bih), &written, NULL);
-                WriteFile(hFile, buf.data(), dwSize, &written, NULL);
-                CloseHandle(hFile);
-                state.SetSaveFeedback(L"✓ デスクトップに保存しました");
+            // WIC による PNG 保存を実行
+            if (SaveBitmapAsPng(memBmp, pw, ph, filePath)) {
+                state.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
                 success = true;
+            } else {
+                // WIC 失敗時は拡張子を .bmp にしてフォールバック保存
+                swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
+                    pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                if (SaveBitmapAsBmp(memDC, memBmp, pw, ph, filePath)) {
+                    state.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
+                    success = true;
+                }
             }
+            CoTaskMemFree(pDeskPath);
         }
     }
 
