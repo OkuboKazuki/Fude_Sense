@@ -153,11 +153,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 運筆に伴うインク・水分の物理消費
-        // アーカイブ記録より先に行う。直後の seg.dryness はこの消費を織り込んだ
-        // 値を読むため、順序を入れ替えるとかすれが1セグメント分遅れる。
+        // WATER_LOSS_RATIO(1.35) を加味し、漢字1文字で約70%消費して25〜30%余るバランスに設定
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
-        double consumeAmount = stepDist * widthRatio * 0.00015;
+        double consumeAmount = stepDist * widthRatio * 0.00035;
         state.ink.Consume(consumeAmount);
 
         // 運筆データアーカイブへ記録
