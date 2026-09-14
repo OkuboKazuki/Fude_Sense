@@ -388,28 +388,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
             } else if (ui.leftTab == LeftTab::Paper) {
-                // 用紙種類切り替え
-                for (int i = 0; i < 4; ++i) {
-                    if (PtIn(ui.rPaperTile[i], pt)) {
-                        state.paper.type = static_cast<PaperType>(i);
-                        state.Layout(w, h);
-                        // マスの割り付けが別物になるので、配置済みのお手本は破棄する
-                        // （残すとどのマスの手本か分からなくなる）
-                        state.otehon.ClearCellChars();
-                        int pw = RW(ui.rPaper);
-                        int ph = RH(ui.rPaper);
-                        if (pw > 0 && ph > 0) {
-                            gpuInk.Resize(pw, ph);
-                            // 半紙の画素数が変わるので控えは書き戻せない
-                            state.undo.Clear();
-                        }
-                        InvalidateRect(hWnd, NULL, FALSE);
-                        return true;
-                    }
-                }
-
                 // 下敷き・升目切り替え
-                for (int i = 0; i < 9; ++i) {
+                for (int i = 0; i < GRID_PATTERN_COUNT; ++i) {
                     if (PtIn(ui.rGridTile[i], pt)) {
                         state.paper.gridPattern = static_cast<GridPattern>(i);
                         // 升目のセル分割は Layout で算出しているため、
@@ -683,8 +663,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
                     else if (PtIn(ui.rSubLarge, pt)) ui.hoverSub = 3;
                     else if (PtIn(ui.rSubCalibBtn, pt)) ui.hoverSub = 4;
                 } else if (ui.leftTab == LeftTab::Paper) {
-                    for (int i = 0; i < 4; ++i) if (PtIn(ui.rPaperTile[i], pt)) ui.hoverSub = 50 + i;
-                    for (int i = 0; i < 9; ++i) if (PtIn(ui.rGridTile[i], pt)) ui.hoverSub = 10 + i;
+                    for (int i = 0; i < GRID_PATTERN_COUNT; ++i) if (PtIn(ui.rGridTile[i], pt)) ui.hoverSub = 10 + i;
                     for (int i = 0; i < 3; ++i) if (PtIn(ui.rColorBtn[i], pt)) ui.hoverSub = 30 + i;
                 } else if (ui.leftTab == LeftTab::Save) {
                     if (PtIn(ui.rSaveBtnPng, pt)) ui.hoverSub = 60;

@@ -305,21 +305,14 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     int bw = RW(rBorder);
     int bh = RH(rBorder);
 
-    // 升目の内側罫線（セル境界）。
-    // Lines3 / Lines4 は縦罫線のみの下敷きで、行方向の区切りはお手本配置用の
-    // 仮想的なものなので線としては描かない。
-    bool drawRowLines = (state.paper.gridPattern != GridPattern::Lines3
-                      && state.paper.gridPattern != GridPattern::Lines4);
-
+    // 升目の内側罫線（セル境界）
     for (int c = 1; c < ui.gridCols; ++c) {
         int x = rBorder.left + (bw * c) / ui.gridCols;
         MoveToEx(dc, x, rBorder.top, nullptr); LineTo(dc, x, rBorder.bottom);
     }
-    if (drawRowLines) {
-        for (int r = 1; r < ui.gridRows; ++r) {
-            int y = rBorder.top + (bh * r) / ui.gridRows;
-            MoveToEx(dc, rBorder.left, y, nullptr); LineTo(dc, rBorder.right, y);
-        }
+    for (int r = 1; r < ui.gridRows; ++r) {
+        int y = rBorder.top + (bh * r) / ui.gridRows;
+        MoveToEx(dc, rBorder.left, y, nullptr); LineTo(dc, rBorder.right, y);
     }
 
     // パターン固有の補助線（セル境界ではない装飾）
@@ -353,19 +346,6 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
             const RECT& cell = ui.rGridCell[i];
             DrawCross(dc, (cell.left + cell.right) / 2, (cell.top + cell.bottom) / 2, 12);
         }
-        break;
-    }
-    case GridPattern::StarGrid:
-    {
-        int mx = rBorder.left + bw / 2;
-        int my = rBorder.top + bh / 2;
-        MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
-        MoveToEx(dc, rBorder.left, my, nullptr); LineTo(dc, rBorder.right, my);
-
-        SelectObject(dc, gpDash);
-        MoveToEx(dc, rBorder.left, rBorder.top, nullptr); LineTo(dc, rBorder.right, rBorder.bottom);
-        MoveToEx(dc, rBorder.right, rBorder.top, nullptr); LineTo(dc, rBorder.left, rBorder.bottom);
-        SelectObject(dc, gp);
         break;
     }
     default:

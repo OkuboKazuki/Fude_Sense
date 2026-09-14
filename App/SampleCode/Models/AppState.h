@@ -53,9 +53,6 @@ struct PaperModel {
     void GetAspectRatio(double& outW, double& outH) const {
         switch (type) {
         case PaperType::Hanshi:   outW = 242.0; outH = 333.0; break;
-        case PaperType::Jofuku:   outW = 350.0; outH = 680.0; break;
-        case PaperType::Shikishi: outW = 242.0; outH = 272.0; break;
-        case PaperType::Tanzaku:  outW = 60.0;  outH = 180.0; break;
         }
 
         if (isLandscape) { double t = outW; outW = outH; outH = t; }
@@ -205,9 +202,8 @@ struct UIState {
     UIWidget rSubSmall{}, rSubMedium{}, rSubLarge{};
     UIWidget rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
     UIWidget rPaperOrientBtn{}; // 右パネル: 紙の向き
-    UIWidget rGridTile[9]{};
+    UIWidget rGridTile[GRID_PATTERN_COUNT]{};
     UIWidget rColorBtn[3]{};
-    UIWidget rPaperTile[4]{};
     UIWidget rOtehonTile[8]{};
     UIWidget rOtehonToggleBtn{}, rOtehonOpacityTrack{};
     UIWidget rOtehonInputBox{};                  // 書きたい文字の入力欄

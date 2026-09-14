@@ -61,31 +61,21 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         DeleteObject(fCalibBtn);
     }
     else if (ui.leftTab == LeftTab::Paper) {
-        const wchar_t* pTitles[4] = { L"半紙", L"条幅", L"色紙", L"短冊" };
-        const wchar_t* pSubs[4]   = { L"242×333", L"350×680", L"242×272", L"60×180" };
-        for (int i = 0; i < 4; ++i) {
-            bool act = ((int)state.paper.type == i);
-            bool hov = (ui.hoverSub == 50 + i);
-            DrawTileCard(dc, ui.rPaperTile[i], pTitles[i], pSubs[i], act, hov);
-        }
-
-        RECT rGridHeader = { ui.rSub.left + 18, ui.rPaperTile[2].bottom + 8, ui.rSub.right - 18, ui.rPaperTile[2].bottom + 32 };
+        RECT rGridHeader = { ui.rSub.left + 18, ui.rGridTile[0].top - 28, ui.rSub.right - 18, ui.rGridTile[0].top - 4 };
         HFONT fgh = CreateCustomFont(20, FW_BOLD);
         DrawTextCustom(dc, rGridHeader, L"下敷き・升目ガイド", fgh, RGB(210, 216, 228));
         DeleteObject(fgh);
 
-        const wchar_t* titles[9] = {
+        const wchar_t* titles[GRID_PATTERN_COUNT] = {
             L"なし", L"1字 (十字)", L"2文字 (2段)",
-            L"4文字 (田)", L"6文字 (2x3)", L"8文字 (2x4)",
-            L"3行 罫線", L"4行 罫線", L"米字格 (対角)"
+            L"4文字 (田)", L"6文字 (2x3)", L"8文字 (2x4)"
         };
-        const wchar_t* subs[9] = {
+        const wchar_t* subs[GRID_PATTERN_COUNT] = {
             L"無地半紙", L"中心ガイド", L"二文字熟語",
-            L"四字熟語", L"六文字配列", L"八文字配列",
-            L"行書・かな", L"条幅・古典", L"臨書・骨格"
+            L"四字熟語", L"六文字配列", L"八文字配列"
         };
 
-        for (int i = 0; i < 9; ++i) {
+        for (int i = 0; i < GRID_PATTERN_COUNT; ++i) {
             bool act = ((int)state.paper.gridPattern == i);
             bool hov = (ui.hoverSub == 10 + i);
             DrawTileCard(dc, ui.rGridTile[i], titles[i], subs[i], act, hov);

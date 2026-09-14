@@ -5,9 +5,7 @@ namespace {
 
 // 升目の分割数（列×行）をパターンから求める。
 // 列は縦書きの「行（ぎょう）」に相当し、右列から左列へ向かって書き進める。
-// Lines3 / Lines4 は縦罫線のみで横の区切りが無いため、列幅を1辺とする
-// 正方セルを縦に敷き詰め、お手本配置用の仮想的な行として扱う。
-void GetGridDivision(GridPattern pattern, int borderW, int borderH, int& cols, int& rows) {
+void GetGridDivision(GridPattern pattern, int& cols, int& rows) {
     cols = 1;
     rows = 1;
 
@@ -16,26 +14,10 @@ void GetGridDivision(GridPattern pattern, int borderW, int borderH, int& cols, i
     case GridPattern::Grid4: cols = 2; rows = 2; break;
     case GridPattern::Grid6: cols = 2; rows = 3; break;
     case GridPattern::Grid8: cols = 2; rows = 4; break;
-    case GridPattern::Lines3:
-    case GridPattern::Lines4:
-    {
-        cols = (pattern == GridPattern::Lines3) ? 3 : 4;
-        int colW = borderW / cols;
-        rows = (colW > 0) ? static_cast<int>(static_cast<double>(borderH) / colW + 0.5) : 1;
-        break;
-    }
     case GridPattern::None:
     case GridPattern::Cross1:
-    case GridPattern::StarGrid:
     default:
         break; // 1字用（1マス）
-    }
-
-    if (cols < 1) cols = 1;
-    if (rows < 1) rows = 1;
-    if (cols * rows > MAX_GRID_CELLS) {
-        rows = MAX_GRID_CELLS / cols;
-        if (rows < 1) rows = 1;
     }
 }
 
@@ -102,28 +84,17 @@ void AppState::Layout(int w, int h) {
         ui.rSubCalibBtn = { ui.rSub.left + 18, calibBtnY, ui.rSub.right - 18, calibBtnY + 58 };
 
         // 紙タブ
-        int ptW = (menuW - 56) / 2;
-        int ptH = 66;
-        for (int i = 0; i < 4; ++i) {
-            int col = i % 2;
-            int row = i / 2;
-            ui.rPaperTile[i] = { ui.rSub.left + 18 + col * (ptW + 12), topOff + row * (ptH + 10), ui.rSub.left + 18 + col * (ptW + 12) + ptW, topOff + row * (ptH + 10) + ptH };
-        }
-
-        int gridTop = topOff + 2 * (ptH + 10) + 36;
+        // 用紙は半紙に固定なので、先頭は下敷きの見出しから始める
+        int gridTop = topOff + 36;
         int tileW = (menuW - 56) / 2;
         int tileH = 58;
-        for (int i = 0; i < 9; ++i) {
+        for (int i = 0; i < GRID_PATTERN_COUNT; ++i) {
             int col = i % 2;
             int row = i / 2;
-            if (i == 8) {
-                ui.rGridTile[i] = { ui.rSub.left + 18, gridTop + row * (tileH + 8), ui.rSub.left + 18 + tileW * 2 + 12, gridTop + row * (tileH + 8) + tileH };
-            } else {
-                ui.rGridTile[i] = { ui.rSub.left + 18 + col * (tileW + 12), gridTop + row * (tileH + 8), ui.rSub.left + 18 + col * (tileW + 12) + tileW, gridTop + row * (tileH + 8) + tileH };
-            }
+            ui.rGridTile[i] = { ui.rSub.left + 18 + col * (tileW + 12), gridTop + row * (tileH + 8), ui.rSub.left + 18 + col * (tileW + 12) + tileW, gridTop + row * (tileH + 8) + tileH };
         }
 
-        int colorY = gridTop + 5 * (tileH + 8) + 30;
+        int colorY = gridTop + 3 * (tileH + 8) + 30;
         int colBtnW = (menuW - 60) / 3;
         for (int i = 0; i < 3; ++i) {
             ui.rColorBtn[i] = { ui.rSub.left + 18 + i * (colBtnW + 10), colorY, ui.rSub.left + 18 + i * (colBtnW + 10) + colBtnW, colorY + 48 };
@@ -332,7 +303,7 @@ void AppState::LayoutGridGeometry() {
 
         int bw = RW(ui.rGridBorder);
         int bh = RH(ui.rGridBorder);
-        GetGridDivision(paper.gridPattern, bw, bh, ui.gridCols, ui.gridRows);
+        GetGridDivision(paper.gridPattern, ui.gridCols, ui.gridRows);
 
         ui.gridCellCount = 0;
         for (int i = 0; i < ui.gridCols; ++i) {

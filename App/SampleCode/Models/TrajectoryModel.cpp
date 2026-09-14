@@ -172,9 +172,6 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
     const char* paperNameStr = "Hanshi";
     switch (paperType) {
     case PaperType::Hanshi:   paperNameStr = "Hanshi (242x333)"; break;
-    case PaperType::Jofuku:   paperNameStr = "Jofuku (350x680)"; break;
-    case PaperType::Shikishi: paperNameStr = "Shikishi (242x272)"; break;
-    case PaperType::Tanzaku:  paperNameStr = "Tanzaku (60x180)"; break;
     }
 
     const char* brushNameStr = "Medium";

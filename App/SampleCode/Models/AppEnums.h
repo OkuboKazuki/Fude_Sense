@@ -19,12 +19,9 @@ inline const wchar_t* BrushName(Brush b) {
     return L"中筆";
 }
 
-// 半紙・用紙の種類（実寸の縦横比に対応）
+// 用紙の種類（実寸の縦横比に対応）
 enum class PaperType {
-    Hanshi,    // 半紙   242x333  W:H=1:1.376
-    Jofuku,    // 条幅   350x680  W:H=1:1.943
-    Shikishi,  // 色紙   242x272  W:H=1:1.124
-    Tanzaku    // 短冊   60x180   W:H=1:3.0
+    Hanshi     // 半紙   242x333  W:H=1:1.376
 };
 
 // 下敷き・升目格子パターン
@@ -34,11 +31,9 @@ enum class GridPattern {
     Div2,           // 2文字 (上下2段)
     Grid4,          // 4文字 (2x2 田の字)
     Grid6,          // 6文字 (2x3)
-    Grid8,          // 8文字 (2x4)
-    Lines3,         // 3行 縦罫線
-    Lines4,         // 4行 縦罫線
-    StarGrid        // 米字格 (対角線入り)
+    Grid8           // 8文字 (2x4)
 };
+constexpr int GRID_PATTERN_COUNT = 6;
 
 // お手本の書体。練習する書きぶりに合わせて切り替える
 enum class OtehonFontStyle {
@@ -79,9 +74,8 @@ enum class LeftTab {
 
 constexpr double INK_MAX_VALUE = 1.0;
 
-// 升目セル配列の上限。Lines3 / Lines4 は縦罫線のみで横の区切りが無いため、
-// 用紙の縦横比によって仮想的な行数が伸びる。その上限を与える。
-constexpr int MAX_GRID_CELLS = 32;
+// 升目セル配列の上限（最大は Grid8 の 2x4）
+constexpr int MAX_GRID_CELLS = 8;
 
 // リプレイ再生用タイマの ID。再生中だけ回すため、
 // 開始側（コントローラ）と停止側（WM_TIMER）の両方から触る。
