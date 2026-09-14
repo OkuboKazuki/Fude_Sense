@@ -68,4 +68,5 @@ private:
     size_t m_checkpointBytes = 0;
     DWORD m_checkpointIntervalMs = 0;
     bool m_wasScrubbing = false;
+    bool m_settled = false;
 };

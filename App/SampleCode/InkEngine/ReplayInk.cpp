@@ -43,6 +43,7 @@ void ReplayInk::Release() {
     m_openStroke = -1;
     m_checkpointIntervalMs = 0;
     m_wasScrubbing = false;
+    m_settled = false;
 }
 
 // 巻き戻し先の手前で控えてある状態を書き戻す。
@@ -137,11 +138,15 @@ bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paper
     FeedForward(session, timeMs, skipGap, !scrubbing);
     AdvanceDiffusion(steps);
 
-    // 全画の再生が終端に達した場合、あるいは末尾で指を離した場合は、
-    // 残った水分を自然乾燥・拡散させ、完成作品と全く同一の仕上がりに落ち着かせる
+    // 全画の再生が終端に達した場合、残った水分を自然乾燥・拡散させる（1度だけ実行）
     DWORD totalDur = session.GetReplayTotalDurationMs();
     if (!scrubbing && totalDur > 0 && timeMs >= totalDur) {
-        m_ink->SettleDiffusion(200);
+        if (!m_settled) {
+            m_ink->SettleDiffusion(2);
+            m_settled = true;
+        }
+    } else {
+        m_settled = false;
     }
 
     m_timeMs = timeMs;
