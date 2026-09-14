@@ -60,46 +60,86 @@ void MainView::ReleaseBackBuffer() {
 }
 
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
+    RECT rcFull = { 0, 0, width, height };
+    Render(hdc, width, height, gpuInk, state, rcFull);
+}
+
+void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state, const RECT& rcPaint) {
     if (width <= 0 || height <= 0) return;
 
     // 裏画面へ一括描画してから転送する（フリッカー防止）
     if (!g_backBuffer.Ensure(hdc, width, height)) return;
     HDC memDC = g_backBuffer.dc;
 
-    // 1. 和風木製机（文机）の背景描画
-    RenderUtils::DrawWoodDesk(memDC, width, height);
+    RECT rcFull = { 0, 0, width, height };
+    bool isFullRedraw = (rcPaint.left <= 0 && rcPaint.top <= 0 && rcPaint.right >= width && rcPaint.bottom >= height);
 
-    // 2. 半紙背景
-    CanvasView::DrawBackground(memDC, state);
+    RECT dummy;
+    bool hitPaper = (IntersectRect(&dummy, &rcPaint, &state.ui.rPaper) != FALSE);
+    bool hitRight = (IntersectRect(&dummy, &rcPaint, &state.ui.rRight) != FALSE);
+    bool hitLeft = (IntersectRect(&dummy, &rcPaint, &state.ui.rTbNavToggle) != FALSE)
+                || (state.ui.isSubPanelOpen && IntersectRect(&dummy, &rcPaint, &state.ui.rSub) != FALSE);
+    bool hitModal = state.ui.showClearConfirm || state.calibration.IsActive();
 
-    // 3. 墨汁の描画（解析タブ表示中はリプレイ墨＆3D筆姿勢、通常時は GPU 墨汁テクスチャ）
-    if (state.ui.leftTab == LeftTab::Analysis) {
-        CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
+    // 運筆中など半紙や硯の局所更新で、モーダルや左メニュー、木目余白と交差しない場合は背景を再描画しない
+    if (isFullRedraw || hitModal || hitLeft || (!hitPaper && !hitRight)) {
+        // 1. 和風木製机（文机）の背景描画
+        RenderUtils::DrawWoodDesk(memDC, width, height);
+
+        // 2. 半紙背景
+        CanvasView::DrawBackground(memDC, state);
+
+        // 3. 墨汁の描画（解析タブ表示中はリプレイ墨＆3D筆姿勢、通常時は GPU 墨汁テクスチャ）
+        if (state.ui.leftTab == LeftTab::Analysis) {
+            CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
+        } else {
+            CanvasView::RenderInk(memDC, gpuInk, state);
+        }
+
+        // 3-2. お手本文字
+        CanvasView::DrawOtehon(memDC, state);
+
+        // 4. 下敷き・升目格子ガイド
+        CanvasView::DrawGrid(memDC, state);
+
+        // 5. 右側 硯パネル
+        InkStoneView::Draw(memDC, state);
+
+        // 6. 左側 フローティングメニュー
+        FloatingMenuView::Draw(memDC, state);
+
+        // 8. 全消し確認モーダルオーバーレイ
+        ModalView::DrawClearConfirm(memDC, width, height, state);
+
+        // 9. 筆圧キャリブレーション（ガイダンスまたは結果モーダル）
+        CalibrationView::Draw(memDC, width, height, state);
+
+        // 画面へ一括転送 (フリッカーフリー)
+        BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
     } else {
-        CanvasView::RenderInk(memDC, gpuInk, state);
+        // 局所更新パス（運筆中の高速描画パス）
+        if (hitPaper) {
+            CanvasView::DrawBackground(memDC, state);
+            if (state.ui.leftTab == LeftTab::Analysis) {
+                CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
+            } else {
+                CanvasView::RenderInk(memDC, gpuInk, state);
+            }
+            CanvasView::DrawOtehon(memDC, state);
+            CanvasView::DrawGrid(memDC, state);
+        }
+
+        if (hitRight) {
+            InkStoneView::Draw(memDC, state);
+        }
+
+        // 無効化領域のみを画面へ高速転送 (CPU/GPU バス帯域を劇的に節約)
+        int bltX = (std::max)(0, static_cast<int>(rcPaint.left));
+        int bltY = (std::max)(0, static_cast<int>(rcPaint.top));
+        int bltW = (std::min)(width, static_cast<int>(rcPaint.right)) - bltX;
+        int bltH = (std::min)(height, static_cast<int>(rcPaint.bottom)) - bltY;
+        if (bltW > 0 && bltH > 0) {
+            BitBlt(hdc, bltX, bltY, bltW, bltH, memDC, bltX, bltY, SRCCOPY);
+        }
     }
-
-    // 3-2. お手本文字
-
-    // 墨のテクスチャは不透明で半紙全面を覆うため、必ず墨より後に重ねる。
-    // 墨との合成は SRCAND なので、なぞった墨がお手本を隠す見え方になる。
-    CanvasView::DrawOtehon(memDC, state);
-
-    // 4. 下敷き・升目格子ガイド
-    CanvasView::DrawGrid(memDC, state);
-
-    // 5. 右側 硯パネル
-    InkStoneView::Draw(memDC, state);
-
-    // 6. 左側 フローティングメニュー
-    FloatingMenuView::Draw(memDC, state);
-
-    // 8. 全消し確認モーダルオーバーレイ
-    ModalView::DrawClearConfirm(memDC, width, height, state);
-
-    // 9. 筆圧キャリブレーション（ガイダンスまたは結果モーダル）
-    CalibrationView::Draw(memDC, width, height, state);
-
-    // 画面へ一括転送 (フリッカーフリー)
-    BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
 }

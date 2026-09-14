@@ -699,7 +699,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		if (w > 0 && h > 0)
 		{
-			MainView::Render(hdc, w, h, g_gpuInk, g_appState);
+			MainView::Render(hdc, w, h, g_gpuInk, g_appState, ps.rcPaint);
 		}
 
 		EndPaint(hWnd, &ps);
