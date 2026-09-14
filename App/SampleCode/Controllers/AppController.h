@@ -25,8 +25,4 @@ public:
     static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 記録が変わったときにリプレイのタイムラインを作り直す
     static void SyncReplayTimeline(HWND hWnd, AppState& state);
-
-    // 半紙の向き（縦／横）の切り替え。半紙の画素数が変わるので、
-    // 墨の作り直しと控えの破棄までまとめて行う。
-    static void TogglePaperOrientation(HWND hWnd, AppState& state, GpuInk& gpuInk);
 };

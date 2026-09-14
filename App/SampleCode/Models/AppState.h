@@ -46,16 +46,10 @@ struct PaperModel {
     GridPattern gridPattern = GridPattern::Grid4;
     GridColorTheme gridColor = GridColorTheme::RedLine;
 
-    // 半紙を横向き（横長）に使う。縦横比を入れ替えるだけなので、
-    // 升目・お手本・書き出しはすべてこの向きに追従する。
-    bool isLandscape = false;
-
     void GetAspectRatio(double& outW, double& outH) const {
         switch (type) {
         case PaperType::Hanshi:   outW = 242.0; outH = 333.0; break;
         }
-
-        if (isLandscape) { double t = outW; outW = outH; outH = t; }
     }
 };
 
@@ -201,7 +195,6 @@ struct UIState {
     UIWidget rPaper{};
     UIWidget rSubSmall{}, rSubMedium{}, rSubLarge{};
     UIWidget rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
-    UIWidget rPaperOrientBtn{}; // 右パネル: 紙の向き
     UIWidget rGridTile[GRID_PATTERN_COUNT]{};
     UIWidget rColorBtn[3]{};
     UIWidget rOtehonTile[8]{};

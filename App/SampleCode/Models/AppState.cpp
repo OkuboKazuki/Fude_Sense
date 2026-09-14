@@ -188,18 +188,6 @@ void AppState::Layout(int w, int h) {
     int maxPaperW = (int)(w * 0.54);
     if (maxPaperW < 100) maxPaperW = 100;
 
-    // 横向きの紙は横へ広がるので、画面中央のままだと左のメニューへ潜り込む。
-    // 開いているメニューと右の硯パネルの間へ収め、その帯の中心へ置く。
-    int paperCenterX = w / 2;
-    if (paper.isLandscape) {
-        int bandLeft = ui.isSubPanelOpen ? (ui.rSub.right + 16) : 96;
-        int bandRight = w - (rightW - 30);
-        if (bandRight - bandLeft > 240) {
-            maxPaperW = bandRight - bandLeft;
-            paperCenterX = (bandLeft + bandRight) / 2;
-        }
-    }
-
     int paperH = maxPaperH;
     int paperW = (int)(paperH * (ratioW / ratioH));
     if (paperW > maxPaperW) {
@@ -207,8 +195,8 @@ void AppState::Layout(int w, int h) {
         paperH = (int)(paperW * (ratioH / ratioW));
     }
 
-    // ★ 縦向きは画面全体の水平中央に固定配置。横向きは上で求めた帯の中心 ★
-    int canvasCenterX = paperCenterX;
+    // ★ 画面全体の水平中央に固定配置 ★
+    int canvasCenterX = w / 2;
     int canvasCenterY = h / 2;
 
     ui.rPaper.left = canvasCenterX - paperW / 2;
@@ -226,14 +214,11 @@ void AppState::Layout(int w, int h) {
     int undoBtnH = 46;
     int redoBtnH = 46;
     int clearBtnH = 46;
-    int viewBtnH = 44;   // 表示切り替え（紙の向き）
     int spacing = 12;
     int headerSpace = 32; // 墨残量ヘッダー用スペース
 
-    int viewGap = 20;    // 硯まわりの操作と表示切り替えの間の区切り
     int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
-                    + spacing + redoBtnH + spacing + clearBtnH
-                    + viewGap + viewBtnH;
+                    + spacing + redoBtnH + spacing + clearBtnH;
     int blockStartY = canvasCenterY - totalBlockH / 2;
     if (blockStartY < 24) blockStartY = 24;
 
@@ -253,11 +238,6 @@ void AppState::Layout(int w, int h) {
     ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
     ui.rRedoBtn       = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + redoBtnH };
     ui.rClearAllBtn   = { stoneX, ui.rRedoBtn.bottom + spacing, stoneX + stoneW, ui.rRedoBtn.bottom + spacing + clearBtnH };
-
-    // 表示の切り替え。墨や履歴の操作とは用途が違うので、少し間を空けて下へ置く。
-    int viewTop = ui.rClearAllBtn.bottom + viewGap;
-    ui.rPaperOrientBtn = { stoneX, viewTop, stoneX + stoneW, viewTop + viewBtnH };
-
     // 4. 全消し確認モーダルダイアログ
     int modalW = 660;
     int modalH = 260;
