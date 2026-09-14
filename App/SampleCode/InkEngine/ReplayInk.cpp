@@ -9,13 +9,12 @@ constexpr double kPi = 3.14159265358979323846;
 
 // にじみ1段階分の時間。書いているときの拡散スレッドと同じ刻み。
 constexpr DWORD kDiffusionStepMs = 16;
-// 1フレームで進める段数の上限。倍速再生やフレーム落ち時にも滑らかに追従させる。
-constexpr int kMaxDiffusionStepsPerFrame = 8;
-// 引き直した直後にまとめて進める段数。
-// シークで飛んだ先でも自然なにじみを即座に乗せる。
-constexpr int kRebuildDiffusionSteps = 30;
-// 画と画の間でまとめて進める段数の上限。
-constexpr int kMaxGapDiffusionSteps = 120;
+// 1フレームで進める段数の上限。通常再生時のフレーム落ち連鎖を防ぎ滑らかさを維持。
+constexpr int kMaxDiffusionStepsPerFrame = 2;
+// 引き直した直後にまとめて進める段数。シーク先でも自然なにじみを即座に乗せる。
+constexpr int kRebuildDiffusionSteps = 8;
+// 画と画の間（空中移動時）でまとめて進める段数の上限。画の切り替わりスパイクを解消。
+constexpr int kMaxGapDiffusionSteps = 10;
 // 巻き戻し用に控える墨の状態の最大数と、その合計サイズの上限。
 constexpr size_t kMaxCheckpoints = 12;
 constexpr size_t kCheckpointByteBudget = 64u * 1024u * 1024u;
