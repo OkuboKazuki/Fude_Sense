@@ -25,6 +25,29 @@ namespace RenderUtils {
         return (pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom);
     }
 
+    // 筆圧 (0.0: 軽 〜 1.0: 強) に応じた視覚化カラー（青/水色 -> 緑/黄 -> 橙/赤）を取得
+    inline COLORREF GetPressureColor(double p) {
+        double t = Clamp(p, 0.0, 1.0);
+        int r, g, b;
+        if (t < 0.35) {
+            double u = t / 0.35;
+            r = static_cast<int>(60  + (80 - 60) * u);
+            g = static_cast<int>(180 + (220 - 180) * u);
+            b = static_cast<int>(255 + (100 - 255) * u);
+        } else if (t < 0.70) {
+            double u = (t - 0.35) / 0.35;
+            r = static_cast<int>(80  + (255 - 80) * u);
+            g = static_cast<int>(220 + (180 - 220) * u);
+            b = static_cast<int>(100 + (40 - 100) * u);
+        } else {
+            double u = (t - 0.70) / 0.30;
+            r = static_cast<int>(255 + (255 - 255) * u);
+            g = static_cast<int>(180 + (50 - 180) * u);
+            b = static_cast<int>(40  + (50 - 40) * u);
+        }
+        return RGB(Clamp(r, 0, 255), Clamp(g, 0, 255), Clamp(b, 0, 255));
+    }
+
     // フォント生成
     HFONT CreateCustomFont(int size, int weight = FW_NORMAL, const wchar_t* face = L"Yu Gothic UI");
 

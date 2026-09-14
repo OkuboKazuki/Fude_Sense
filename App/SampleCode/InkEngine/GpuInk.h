@@ -60,7 +60,9 @@ public:
 
 	// 初期化 / リサイズ
 	bool Initialize(HWND hWnd, int width, int height);
-	bool Initialize(int width, int height);
+	// runPropagationThread = false で、にじみを進める背景スレッドを立てない。
+	// リプレイのように、時間の進め方を呼び出し側が決める場合に使う。
+	bool Initialize(int width, int height, bool runPropagationThread = true);
 	void Resize(int width, int height);
 
 	// ストローク操作
@@ -70,6 +72,12 @@ public:
 	void DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha = 255);
 	void DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha = 255);
 	void EndStroke();
+
+	// にじみを1段階進める。背景スレッドを立てていないときに使う。
+	// 戻り値は画素が変わったかどうか。
+	bool StepPropagation();
+	// 水分が落ち着くまで（または最大ステップ数まで）にじみをまとめて進める
+	int SettleDiffusion(int maxSteps = 200);
 	bool IsInStroke() const { return m_inStroke; }
 
 	KinematicsInfo GetKinematicsInfo();

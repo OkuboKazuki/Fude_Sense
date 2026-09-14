@@ -28,6 +28,7 @@
 #include "AppState.h"
 #include "WintabManager.h"
 #include "MainView.h"
+#include "CanvasView.h"
 #include "PenInputEvent.h"
 #include "WintabAdapter.h"
 #include "MouseAdapter.h"
@@ -57,6 +58,9 @@ static WintabManager g_wintab;
 static GpuInk g_gpuInk;
 static StrokeController g_strokeCtrl;
 static AppController g_appCtrl;
+
+// 前回の再生タイマ刻。停止中は 0。
+static DWORD g_lastReplayTick = 0;
 
 HWND g_hInkWnd = NULL;
 HWND g_hMonitorWnd = NULL;
@@ -533,7 +537,49 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			ShowError("Could Not Open Wintab Tablet Contexts.");
 		}
+
 		break;
+	}
+
+	case WM_TIMER:
+	{
+		if (wParam == REPLAY_TIMER_ID)
+		{
+			// 再生中でなくなったらタイマを止める。再び張るのは再生ボタン側。
+			if (g_appState.ui.leftTab != LeftTab::Analysis || g_appState.replay.state != ReplayState::Playing)
+			{
+				KillTimer(hWnd, REPLAY_TIMER_ID);
+				g_lastReplayTick = 0;
+				return 0;
+			}
+
+			DWORD now = GetTickCount();
+			DWORD dt = (g_lastReplayTick != 0) ? (now - g_lastReplayTick) : 16;
+			if (dt > 100) dt = 16;
+			g_lastReplayTick = now;
+
+			DWORD advanceMs = static_cast<DWORD>(dt * g_appState.replay.playbackSpeed);
+			if (advanceMs < 1 && g_appState.replay.playbackSpeed > 0.0) advanceMs = 1;
+
+			g_appState.replay.currentTimeMs += advanceMs;
+			if (g_appState.replay.currentTimeMs >= g_appState.replay.totalDurationMs)
+			{
+				g_appState.replay.currentTimeMs = g_appState.replay.totalDurationMs;
+				g_appState.replay.state = ReplayState::Paused;
+				KillTimer(hWnd, REPLAY_TIMER_ID);
+				g_lastReplayTick = 0;
+			}
+
+			g_appState.replay.hasValidSample = g_appState.trajectory.GetReplaySample(
+				g_appState.replay.currentTimeMs, g_appState.ui.rPaper, g_appState.replay.currentSample);
+
+			// 動くのは半紙のリプレイと解析パネルだけ。Layout() 全体も全画面の
+			// 無効化も要らない。
+			g_appState.UpdateReplaySeekThumb();
+			InvalidateRect(hWnd, &g_appState.ui.rPaper, FALSE);
+			InvalidateRect(hWnd, &g_appState.ui.rSub, FALSE);
+		}
+		return 0;
 	}
 
 	case WM_CLOSE:
@@ -772,6 +818,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_DESTROY:
 	{
+		KillTimer(hWnd, REPLAY_TIMER_ID);
+		MainView::ReleaseBackBuffer();
+		CanvasView::ReleaseReplayCache();
 		ReleaseDC(hWnd, g_hdc);
 		CloseTabletContexts();
 		Cleanup();

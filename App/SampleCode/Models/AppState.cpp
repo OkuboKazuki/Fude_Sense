@@ -41,6 +41,19 @@ void GetGridDivision(GridPattern pattern, int borderW, int borderH, int& cols, i
 
 } // namespace
 
+// シークバーのツマミだけを再生時刻から置き直す。
+// 再生中は毎フレーム動くが、他のレイアウトは変わらないため、
+// Layout() 全体を呼び直す必要は無い。
+void AppState::UpdateReplaySeekThumb() {
+    double prog = (replay.totalDurationMs > 0) ? (static_cast<double>(replay.currentTimeMs) / static_cast<double>(replay.totalDurationMs)) : 0.0;
+    prog = RenderUtils::Clamp(prog, 0.0, 1.0);
+    int trackW = ui.rReplaySeekTrack.right - ui.rReplaySeekTrack.left;
+    int thumbX = ui.rReplaySeekTrack.left + static_cast<int>(trackW * prog);
+    int thumbCy = (ui.rReplaySeekTrack.top + ui.rReplaySeekTrack.bottom) / 2;
+    int thumbR = 8;
+    ui.rReplaySeekThumb = { thumbX - thumbR, thumbCy - thumbR, thumbX + thumbR, thumbCy + thumbR };
+}
+
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
@@ -116,22 +129,51 @@ void AppState::Layout(int w, int h) {
             ui.rColorBtn[i] = { ui.rSub.left + 18 + i * (colBtnW + 10), colorY, ui.rSub.left + 18 + i * (colBtnW + 10) + colBtnW, colorY + 48 };
         }
 
-        // 解析（グラフ）タブ
+        // 解析（グラフ・リプレイ）タブ
         int availSubH = ui.rSub.bottom - topOff - 18;
-        int metricsH = 104;
-        int compassH = 190;
-        int graphH = (std::max)(170, availSubH - metricsH - compassH - 28);
+        int replayH = 126;
+        int metricsH = 88;
+        int compassH = 168;
+        int graphH = (std::max)(150, availSubH - replayH - metricsH - compassH - 42);
 
-        ui.rAnalysisMetricsBox = { ui.rSub.left + 18, topOff, ui.rSub.right - 18, topOff + metricsH };
-        ui.rAnalysisCompassBox = { ui.rSub.left + 18, ui.rAnalysisMetricsBox.bottom + 14, ui.rSub.right - 18, ui.rAnalysisMetricsBox.bottom + 14 + compassH };
-        ui.rAnalysisGraphBox   = { ui.rSub.left + 18, ui.rAnalysisCompassBox.bottom + 14, ui.rSub.right - 18, ui.rAnalysisCompassBox.bottom + 14 + graphH };
+        ui.rAnalysisReplayBox  = { ui.rSub.left + 18, topOff, ui.rSub.right - 18, topOff + replayH };
+        ui.rAnalysisMetricsBox = { ui.rSub.left + 18, ui.rAnalysisReplayBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisReplayBox.bottom + 12 + metricsH };
+        ui.rAnalysisCompassBox = { ui.rSub.left + 18, ui.rAnalysisMetricsBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisMetricsBox.bottom + 12 + compassH };
+        ui.rAnalysisGraphBox   = { ui.rSub.left + 18, ui.rAnalysisCompassBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisCompassBox.bottom + 12 + graphH };
+
+        // リプレイ操作コントロール内矩形
+        int repLeft = ui.rAnalysisReplayBox.left;
+        int repRight = ui.rAnalysisReplayBox.right;
+        int repTop = ui.rAnalysisReplayBox.top;
+
+        int seekY = repTop + 34;
+        int seekH = 12;
+        ui.rReplaySeekTrack = { repLeft + 16, seekY, repRight - 16, seekY + seekH };
+
+        UpdateReplaySeekThumb();
+
+        int btnY = repTop + 62;
+        int btnH = 46;
+        ui.rReplayResetBtn = { repLeft + 16, btnY, repLeft + 16 + 42, btnY + btnH };
+        ui.rReplayPrevBtn  = { ui.rReplayResetBtn.right + 8, btnY, ui.rReplayResetBtn.right + 8 + 44, btnY + btnH };
+        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, btnY, ui.rReplayPrevBtn.right + 8 + 68, btnY + btnH };
+        ui.rReplayNextBtn  = { ui.rReplayPlayBtn.right + 8, btnY, ui.rReplayPlayBtn.right + 8 + 44, btnY + btnH };
+
+        int spdW = 48;
+        int spdH = 36;
+        int spdY = btnY + (btnH - spdH) / 2;
+        ui.rReplaySpeedBtn[2] = { repRight - 16 - spdW, spdY, repRight - 16, spdY + spdH };
+        ui.rReplaySpeedBtn[1] = { ui.rReplaySpeedBtn[2].left - 6 - spdW, spdY, ui.rReplaySpeedBtn[2].left - 6, spdY + spdH };
+        ui.rReplaySpeedBtn[0] = { ui.rReplaySpeedBtn[1].left - 6 - spdW, spdY, ui.rReplaySpeedBtn[1].left - 6, spdY + spdH };
+
 
         // 保存タブ
-        int btnH = 68;
-        ui.rSaveBtnPng  = { ui.rSub.left + 20, topOff + 12, ui.rSub.right - 20, topOff + 12 + btnH };
-        ui.rSaveBtnClip = { ui.rSub.left + 20, ui.rSaveBtnPng.bottom + 14, ui.rSub.right - 20, ui.rSaveBtnPng.bottom + 14 + btnH };
-        ui.rSaveBtnJson = { ui.rSub.left + 20, ui.rSaveBtnClip.bottom + 20, ui.rSub.right - 20, ui.rSaveBtnClip.bottom + 20 + btnH };
-        ui.rSaveBtnCsv  = { ui.rSub.left + 20, ui.rSaveBtnJson.bottom + 14, ui.rSub.right - 20, ui.rSaveBtnJson.bottom + 14 + btnH };
+        int saveBtnH = 68;
+        ui.rSaveBtnPng  = { ui.rSub.left + 20, topOff + 12, ui.rSub.right - 20, topOff + 12 + saveBtnH };
+        ui.rSaveBtnClip = { ui.rSub.left + 20, ui.rSaveBtnPng.bottom + 14, ui.rSub.right - 20, ui.rSaveBtnPng.bottom + 14 + saveBtnH };
+        ui.rSaveBtnJson = { ui.rSub.left + 20, ui.rSaveBtnClip.bottom + 20, ui.rSub.right - 20, ui.rSaveBtnClip.bottom + 20 + saveBtnH };
+        ui.rSaveBtnCsv  = { ui.rSub.left + 20, ui.rSaveBtnJson.bottom + 14, ui.rSub.right - 20, ui.rSaveBtnJson.bottom + 14 + saveBtnH };
+
 
         // お手本タブ
         ui.rOtehonToggleBtn = { ui.rSub.left + 20, topOff, ui.rSub.right - 20, topOff + 60 };
