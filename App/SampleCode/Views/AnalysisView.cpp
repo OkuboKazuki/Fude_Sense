@@ -307,6 +307,156 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
     DeleteObject(fInfoB);
 }
 
+namespace {
+
+struct WaveformBitmapCache {
+    HDC dc = nullptr;
+    HBITMAP bmp = nullptr;
+    HBITMAP oldBmp = nullptr;
+    int w = 0;
+    int h = 0;
+    unsigned revision = 0;
+    size_t strokeCount = 0;
+    DWORD totalDur = 0;
+
+    bool Ensure(HDC ref, int reqW, int reqH) {
+        if (dc && bmp && w == reqW && h == reqH) return true;
+        Release();
+        dc = CreateCompatibleDC(ref);
+        if (!dc) return false;
+        bmp = CreateCompatibleBitmap(ref, reqW, reqH);
+        if (!bmp) {
+            DeleteDC(dc);
+            dc = nullptr;
+            return false;
+        }
+        oldBmp = (HBITMAP)SelectObject(dc, bmp);
+        w = reqW;
+        h = reqH;
+        return true;
+    }
+
+    void Release() {
+        if (dc) {
+            SelectObject(dc, oldBmp);
+            DeleteDC(dc);
+            dc = nullptr;
+        }
+        if (bmp) {
+            DeleteObject(bmp);
+            bmp = nullptr;
+        }
+        oldBmp = nullptr;
+        w = 0;
+        h = 0;
+        revision = 0;
+        strokeCount = 0;
+        totalDur = 0;
+    }
+};
+
+WaveformBitmapCache g_waveformCache;
+
+void BakeWaveform(HDC targetDC, int plotW, int plotH, const AppState& state) {
+    using namespace RenderUtils;
+
+    RECT rLocal = { 0, 0, plotW, plotH };
+    Fill(targetDC, rLocal, RGB(14, 16, 21));
+
+    // 目盛り線（0%, 50%, 100%）
+    HPEN gridPen = CreatePen(PS_DOT, 1, RGB(38, 44, 58));
+    HPEN oldPen = (HPEN)SelectObject(targetDC, gridPen);
+
+    int y0 = plotH;
+    int y50 = plotH / 2;
+    int y100 = 0;
+
+    MoveToEx(targetDC, 0, y50, nullptr); LineTo(targetDC, plotW, y50);
+    MoveToEx(targetDC, 0, y100, nullptr); LineTo(targetDC, plotW, y100);
+
+    SelectObject(targetDC, oldPen);
+    DeleteObject(gridPen);
+
+    const auto& strokes = state.trajectory.GetStrokes();
+    DWORD totalDur = state.replay.totalDurationMs;
+
+    if (strokes.empty() || totalDur == 0) {
+        HFONT fEmpty = CreateCustomFont(13, FW_NORMAL);
+        Center(targetDC, rLocal, L"（筆記した軌跡の波形と再生位置が表示されます）", fEmpty, RGB(110, 120, 140));
+        DeleteObject(fEmpty);
+        return;
+    }
+
+    // 速度最大値スケール計算
+    double maxSpd = 500.0;
+    for (const auto& s : strokes) {
+        if (s.maxSpeed > maxSpd) maxSpd = s.maxSpeed;
+    }
+    maxSpd *= 1.1;
+
+    // 1. 速度波形描画 (オレンジ破線/細線)
+    HPEN spdPen = CreatePen(PS_SOLID, 1, RGB(220, 160, 50));
+    oldPen = (HPEN)SelectObject(targetDC, spdPen);
+
+    for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
+        const auto& s = strokes[sIdx];
+        if (s.points.empty()) continue;
+        DWORD strokeStartTimeline = state.trajectory.GetStrokeTimelineStart(sIdx);
+
+        bool firstPt = true;
+        for (const auto& pt : s.points) {
+            DWORD ptTimeline = strokeStartTimeline + pt.timeMs;
+            double normT = static_cast<double>(ptTimeline) / static_cast<double>(totalDur);
+            int gx = static_cast<int>(plotW * Clamp(normT, 0.0, 1.0));
+            double spdNorm = Clamp(pt.speedPxPerSec / maxSpd, 0.0, 1.0);
+            int gy = plotH - static_cast<int>(plotH * spdNorm);
+
+            if (firstPt) {
+                MoveToEx(targetDC, gx, gy, nullptr);
+                firstPt = false;
+            } else {
+                LineTo(targetDC, gx, gy);
+            }
+        }
+    }
+    SelectObject(targetDC, oldPen);
+    DeleteObject(spdPen);
+
+    // 2. 筆圧波形描画 (太いシアン線)
+    HPEN prsPen = CreatePen(PS_SOLID, 2, RGB(80, 215, 255));
+    oldPen = (HPEN)SelectObject(targetDC, prsPen);
+
+    for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
+        const auto& s = strokes[sIdx];
+        if (s.points.empty()) continue;
+        DWORD strokeStartTimeline = state.trajectory.GetStrokeTimelineStart(sIdx);
+
+        bool firstPt = true;
+        for (const auto& pt : s.points) {
+            DWORD ptTimeline = strokeStartTimeline + pt.timeMs;
+            double normT = static_cast<double>(ptTimeline) / static_cast<double>(totalDur);
+            int gx = static_cast<int>(plotW * Clamp(normT, 0.0, 1.0));
+            double pNorm = Clamp(pt.pressure, 0.0, 1.0);
+            int gy = plotH - static_cast<int>(plotH * pNorm);
+
+            if (firstPt) {
+                MoveToEx(targetDC, gx, gy, nullptr);
+                firstPt = false;
+            } else {
+                LineTo(targetDC, gx, gy);
+            }
+        }
+    }
+    SelectObject(targetDC, oldPen);
+    DeleteObject(prsPen);
+}
+
+} // namespace
+
+void AnalysisView::ReleaseWaveformCache() {
+    g_waveformCache.Release();
+}
+
 void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& state) {
     using namespace RenderUtils;
     Box(dc, rBox, RGB(20, 23, 30), RGB(45, 52, 66), 1, 8);
@@ -328,24 +478,12 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
 
     // グラフプロット領域
     RECT rPlot = { rBox.left + 38, rBox.top + 32, rBox.right - 14, rBox.bottom - 20 };
-    Fill(dc, rPlot, RGB(14, 16, 21));
-
-    // 目盛り線（0%, 50%, 100%）
-    HPEN gridPen = CreatePen(PS_DOT, 1, RGB(38, 44, 58));
-    HPEN oldPen = (HPEN)SelectObject(dc, gridPen);
-
     int plotW = RW(rPlot);
     int plotH = RH(rPlot);
 
     int y0 = rPlot.bottom;
     int y50 = rPlot.top + plotH / 2;
     int y100 = rPlot.top;
-
-    MoveToEx(dc, rPlot.left, y50, nullptr); LineTo(dc, rPlot.right, y50);
-    MoveToEx(dc, rPlot.left, y100, nullptr); LineTo(dc, rPlot.right, y100);
-
-    SelectObject(dc, oldPen);
-    DeleteObject(gridPen);
 
     // 目盛りラベル
     HFONT fTick = CreateCustomFont(11, FW_BOLD);
@@ -357,105 +495,53 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
     DrawTextCustom(dc, rL0, L"0.0", fTick, RGB(130, 140, 160), DT_RIGHT | DT_SINGLELINE);
     DeleteObject(fTick);
 
-    const auto& strokes = state.trajectory.GetStrokes();
-    DWORD totalDur = state.replay.totalDurationMs;
+    if (plotW <= 0 || plotH <= 0) return;
 
-    if (strokes.empty() || totalDur == 0) {
-        HFONT fEmpty = CreateCustomFont(13, FW_NORMAL);
-        Center(dc, rPlot, L"（筆記した軌跡の波形と再生位置が表示されます）", fEmpty, RGB(110, 120, 140));
-        DeleteObject(fEmpty);
-        return;
-    }
+    unsigned curRev = state.trajectory.GetRevision();
+    size_t curStrokeCount = state.trajectory.GetTotalStrokeCount();
+    DWORD curTotalDur = state.replay.totalDurationMs;
 
-    // 速度最大値スケール計算
-    double maxSpd = 500.0;
-    for (const auto& s : strokes) {
-        if (s.maxSpeed > maxSpd) maxSpd = s.maxSpeed;
-    }
-    maxSpd *= 1.1;
-
-    // 1. 速度波形描画 (オレンジ破線/細線)
-    HPEN spdPen = CreatePen(PS_SOLID, 1, RGB(220, 160, 50));
-    oldPen = (HPEN)SelectObject(dc, spdPen);
-
-    for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
-        const auto& s = strokes[sIdx];
-        if (s.points.empty()) continue;
-        DWORD strokeStartTimeline = state.trajectory.GetStrokeTimelineStart(sIdx);
-
-        bool firstPt = true;
-        for (const auto& pt : s.points) {
-            DWORD ptTimeline = strokeStartTimeline + pt.timeMs;
-            double normT = static_cast<double>(ptTimeline) / static_cast<double>(totalDur);
-            int gx = rPlot.left + static_cast<int>(plotW * Clamp(normT, 0.0, 1.0));
-            double spdNorm = Clamp(pt.speedPxPerSec / maxSpd, 0.0, 1.0);
-            int gy = rPlot.bottom - static_cast<int>(plotH * spdNorm);
-
-            if (firstPt) {
-                MoveToEx(dc, gx, gy, nullptr);
-                firstPt = false;
-            } else {
-                LineTo(dc, gx, gy);
-            }
+    // 1. キャッシュの更新確認（サイズまたはデータ変更時のみ Bake）
+    if (g_waveformCache.Ensure(dc, plotW, plotH)) {
+        if (g_waveformCache.revision != curRev ||
+            g_waveformCache.strokeCount != curStrokeCount ||
+            g_waveformCache.totalDur != curTotalDur) {
+            BakeWaveform(g_waveformCache.dc, plotW, plotH, state);
+            g_waveformCache.revision = curRev;
+            g_waveformCache.strokeCount = curStrokeCount;
+            g_waveformCache.totalDur = curTotalDur;
         }
+        // 2. キャッシュ画像をプロット領域へ高速転送
+        BitBlt(dc, rPlot.left, rPlot.top, plotW, plotH, g_waveformCache.dc, 0, 0, SRCCOPY);
     }
-    SelectObject(dc, oldPen);
-    DeleteObject(spdPen);
-
-    // 2. 筆圧波形描画 (太いシアン線)
-    HPEN prsPen = CreatePen(PS_SOLID, 2, RGB(80, 215, 255));
-    oldPen = (HPEN)SelectObject(dc, prsPen);
-
-    for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
-        const auto& s = strokes[sIdx];
-        if (s.points.empty()) continue;
-        DWORD strokeStartTimeline = state.trajectory.GetStrokeTimelineStart(sIdx);
-
-        bool firstPt = true;
-        for (const auto& pt : s.points) {
-            DWORD ptTimeline = strokeStartTimeline + pt.timeMs;
-            double normT = static_cast<double>(ptTimeline) / static_cast<double>(totalDur);
-            int gx = rPlot.left + static_cast<int>(plotW * Clamp(normT, 0.0, 1.0));
-            double pNorm = Clamp(pt.pressure, 0.0, 1.0);
-            int gy = rPlot.bottom - static_cast<int>(plotH * pNorm);
-
-            if (firstPt) {
-                MoveToEx(dc, gx, gy, nullptr);
-                firstPt = false;
-            } else {
-                LineTo(dc, gx, gy);
-            }
-        }
-    }
-    SelectObject(dc, oldPen);
-    DeleteObject(prsPen);
 
     // 3. リプレイ再生位置シークヘッド（縦線＋ヘッド三角形）
-    double curProg = static_cast<double>(state.replay.currentTimeMs) / static_cast<double>(totalDur);
-    curProg = Clamp(curProg, 0.0, 1.0);
-    int headX = rPlot.left + static_cast<int>(plotW * curProg);
+    if (curTotalDur > 0 && curStrokeCount > 0) {
+        double curProg = static_cast<double>(state.replay.currentTimeMs) / static_cast<double>(curTotalDur);
+        curProg = Clamp(curProg, 0.0, 1.0);
+        int headX = rPlot.left + static_cast<int>(plotW * curProg);
 
-    HPEN headPen = CreatePen(PS_SOLID, 2, RGB(255, 230, 80));
-    oldPen = (HPEN)SelectObject(dc, headPen);
-    MoveToEx(dc, headX, rPlot.top, nullptr);
-    LineTo(dc, headX, rPlot.bottom);
-    SelectObject(dc, oldPen);
-    DeleteObject(headPen);
+        HPEN headPen = CreatePen(PS_SOLID, 2, RGB(255, 230, 80));
+        HPEN oldPen = (HPEN)SelectObject(dc, headPen);
+        MoveToEx(dc, headX, rPlot.top, nullptr);
+        LineTo(dc, headX, rPlot.bottom);
+        SelectObject(dc, oldPen);
+        DeleteObject(headPen);
 
-    // シークヘッドの三角形
-    POINT tri[3] = {
-        { headX - 5, rPlot.top },
-        { headX + 5, rPlot.top },
-        { headX, rPlot.top + 7 }
-    };
-    HBRUSH triB = CreateSolidBrush(RGB(255, 230, 80));
-    HBRUSH oldB = (HBRUSH)SelectObject(dc, triB);
-    HPEN noPen = CreatePen(PS_NULL, 0, RGB(0, 0, 0));
-    oldPen = (HPEN)SelectObject(dc, noPen);
-    Polygon(dc, tri, 3);
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldB);
-    DeleteObject(noPen);
-    DeleteObject(triB);
+        POINT tri[3] = {
+            { headX - 5, rPlot.top },
+            { headX + 5, rPlot.top },
+            { headX, rPlot.top + 7 }
+        };
+        HBRUSH triB = CreateSolidBrush(RGB(255, 230, 80));
+        HBRUSH oldB = (HBRUSH)SelectObject(dc, triB);
+        HPEN noPen = CreatePen(PS_NULL, 0, RGB(0, 0, 0));
+        oldPen = (HPEN)SelectObject(dc, noPen);
+        Polygon(dc, tri, 3);
+        SelectObject(dc, oldPen);
+        SelectObject(dc, oldB);
+        DeleteObject(noPen);
+        DeleteObject(triB);
+    }
 }
 

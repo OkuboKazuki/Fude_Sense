@@ -11,6 +11,7 @@
 class AnalysisView {
 public:
     static void Draw(HDC dc, const AppState& state);
+    static void ReleaseWaveformCache();
 
 private:
     static void DrawReplayControls(HDC dc, const RECT& rBox, const AppState& state);

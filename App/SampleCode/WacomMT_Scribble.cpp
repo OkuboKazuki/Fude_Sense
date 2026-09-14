@@ -35,6 +35,7 @@
 #include "MouseAdapter.h"
 #include "StrokeController.h"
 #include "AppController.h"
+#include "AnalysisView.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -857,6 +858,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		KillTimer(hWnd, REPLAY_TIMER_ID);
 		MainView::ReleaseBackBuffer();
 		CanvasView::ReleaseReplayCache();
+		AnalysisView::ReleaseWaveformCache();
 		ReleaseDC(hWnd, g_hdc);
 		CloseTabletContexts();
 		Cleanup();
