@@ -92,7 +92,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     CanvasView::DrawGrid(memDC, state);
 
     if (state.ui.paperOnly) {
-        // 5. 紙だけ表示。操作は半紙の右の「墨を補充」「通常表示に戻る」だけ。
+        // 5. 紙だけ表示。操作は半紙の右の「墨を補充」「通常表示に戻る」「筆跡を消す」だけ。
         InkStoneView::DrawPaperOnlyBar(memDC, state);
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
         return;

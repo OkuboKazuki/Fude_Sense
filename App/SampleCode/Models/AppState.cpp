@@ -251,7 +251,7 @@ void AppState::Layout(int w, int h) {
     // 表示の切り替え。墨や履歴の操作とは用途が違うので、少し間を空けて下へ置く。
     int viewTop = ui.rClearAllBtn.bottom + viewGap;
     ui.rPaperOnlyBtn = { stoneX, viewTop, stoneX + stoneW, viewTop + viewBtnH };
-    ui.rPaperOnlyExitBtn = ui.rPaperOnlyBar = { 0, 0, 0, 0 };
+    ui.rPaperOnlyExitBtn = ui.rPaperOnlyClearBtn = ui.rPaperOnlyBar = { 0, 0, 0, 0 };
 
     // 4. 全消し確認モーダルダイアログ
     int modalW = 660;
@@ -281,9 +281,10 @@ void AppState::Layout(int w, int h) {
 }
 
 // 紙だけ表示。机や毛氈は描かず、横長の半紙を画面いっぱいに広げ、
-// 右端の帯へ「墨を補充」と「通常表示に戻る」を並べる。
+// 右端の帯へ「墨を補充」「通常表示に戻る」「筆跡を消す」を並べる。
 // 画面を右回りに90度倒して使う前提で、右端の帯が半紙の「下」になる。
-// 倒した向きで見て、補充ボタンが下の中央、戻るボタンが右端（画面では上端）に来る。
+// 倒した向きで見て、補充ボタンが下の中央、戻るボタンが右端（画面では上端）、
+// 消すボタンが左端（画面では下端）に来る。
 // 左メニュー・硯パネルは描かないので、当たり判定が残って運筆を横取り
 // しないよう矩形ごと畳んでおく。
 void AppState::LayoutPaperOnly(int w, int h) {
@@ -310,6 +311,8 @@ void AppState::LayoutPaperOnly(int w, int h) {
     int left = ui.rPaperOnlyBar.left + (barW - btnThick) / 2;
     int right = left + btnThick;
     ui.rPaperOnlyExitBtn = { left, pad, right, pad + exitLen };
+    // 戻るボタンと上下対称に置くので、補充ボタンの詰め方は戻るボタン側だけ見ればよい
+    ui.rPaperOnlyClearBtn = { left, h - pad - exitLen, right, h - pad };
 
     int cy = h / 2;
     int refillHalf = (std::min)(180, cy - static_cast<int>(ui.rPaperOnlyExitBtn.bottom) - 12);

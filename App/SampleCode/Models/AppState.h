@@ -182,8 +182,7 @@ struct UIState {
     // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
     // 硯が無いので、墨の補充は半紙の右のボタンから行う。
     bool paperOnly = false;
-    int hoverPaperOnly = 0;  // 1: 通常表示に戻る, 2: 墨を補充
-
+    int hoverPaperOnly = 0;  // 1: 通常表示に戻る, 2: 墨を補充, 3: 筆跡を消す
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
     int hoverInkStone = 0;
@@ -216,6 +215,7 @@ struct UIState {
     UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
     UIWidget rPaperOnlyBtn{};      // 右パネル: 紙だけ表示に入る
     UIWidget rPaperOnlyExitBtn{};  // 紙だけ表示中: 通常表示に戻る（墨の補充は rInkRefillBtn を半紙の右へ置き直す）
+    UIWidget rPaperOnlyClearBtn{}; // 紙だけ表示中: 筆跡を消す（確認なしで消去）
     UIWidget rPaperOnlyBar{};      // 紙だけ表示中: 半紙の右のボタンの帯
     UIWidget rHardnessTrack{};
     UIWidget rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};

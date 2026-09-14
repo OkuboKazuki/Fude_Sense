@@ -167,4 +167,11 @@ void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state) {
         hovExit ? RGB(85, 145, 235) : RGB(72, 80, 98), 1, 8);
     DrawRotatedCenter(dc, ui.rPaperOnlyExitBtn, L"通常表示に戻る", 18, FW_BOLD,
         hovExit ? RGB(255, 255, 255) : RGB(220, 230, 245));
+
+    // 筆跡を消す（確認なし）
+    bool hovClear = (ui.hoverPaperOnly == 3);
+    Box(dc, ui.rPaperOnlyClearBtn, hovClear ? RGB(85, 38, 38) : RGB(42, 30, 32),
+        hovClear ? RGB(180, 70, 70) : RGB(74, 48, 52), 1, 8);
+    DrawRotatedCenter(dc, ui.rPaperOnlyClearBtn, L"筆跡を消す", 18, FW_BOLD,
+        hovClear ? RGB(255, 225, 225) : RGB(230, 185, 185));
 }

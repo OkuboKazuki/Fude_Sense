@@ -138,9 +138,14 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
 
-    // 紙だけ表示中は半紙の右の2ボタンだけを見る。
+    // 紙だけ表示中は半紙の右の3ボタンだけを見る。
     // それ以外は false を返して素通しし、半紙への運筆をそのまま通す。
     if (ui.paperOnly) {
+        // 紙だけ表示では確認モーダルを出さず、押したらすぐ消す
+        if (PtIn(ui.rPaperOnlyClearBtn, pt)) {
+            ClearAllInk(hWnd, state, gpuInk);
+            return true;
+        }
         if (PtIn(ui.rPaperOnlyExitBtn, pt)) {
             SetPaperOnly(hWnd, false, state, gpuInk);
             return true;
@@ -586,15 +591,17 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
 
-    // 紙だけ表示中は半紙の右の2ボタンだけがホバー対象
+    // 紙だけ表示中は半紙の右の3ボタンだけがホバー対象
     if (ui.paperOnly) {
         int oldPaperOnly = ui.hoverPaperOnly;
         ui.hoverPaperOnly = 0;
         if (PtIn(ui.rPaperOnlyExitBtn, pt)) ui.hoverPaperOnly = 1;
         else if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverPaperOnly = 2;
+        else if (PtIn(ui.rPaperOnlyClearBtn, pt)) ui.hoverPaperOnly = 3;
         if (oldPaperOnly != ui.hoverPaperOnly) {
             InvalidateRect(hWnd, &ui.rPaperOnlyExitBtn, FALSE);
             InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
+            InvalidateRect(hWnd, &ui.rPaperOnlyClearBtn, FALSE);
         }
         return true;
     }
