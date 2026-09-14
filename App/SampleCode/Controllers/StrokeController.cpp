@@ -203,10 +203,16 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             m_lastInvalidateTick = now;
         }
 
-        // 墨消費に伴う硯パネルの残量表示を適正頻度（約16Hz / 60ms間隔）で更新
+        // 墨消費に伴う硯パネル（液面＋墨残量テキスト）をリアルタイムに滑らかに更新（約30Hz / 33ms間隔）
         if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
-            if (now - m_lastInkStoneInvalidateTick >= 60) {
-                InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+            if (now - m_lastInkStoneInvalidateTick >= 33) {
+                RECT rcStoneArea = {
+                    state.ui.rInkStoneLarge.left,
+                    state.ui.rInkStoneLarge.top - 36,
+                    state.ui.rInkStoneLarge.right,
+                    state.ui.rInkStoneLarge.bottom
+                };
+                InvalidateRect(hWnd, &rcStoneArea, FALSE);
                 m_lastInkStoneInvalidateTick = now;
             }
         }
@@ -222,7 +228,13 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             // ストローク終了時のみ、半紙全体を更新してにじみ・終筆を反映
             InvalidateRect(hWnd, &rPaper, FALSE);
             if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
-                InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+                RECT rcStoneArea = {
+                    state.ui.rInkStoneLarge.left,
+                    state.ui.rInkStoneLarge.top - 36,
+                    state.ui.rInkStoneLarge.right,
+                    state.ui.rInkStoneLarge.bottom
+                };
+                InvalidateRect(hWnd, &rcStoneArea, FALSE);
             }
         }
     }

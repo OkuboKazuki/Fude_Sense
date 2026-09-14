@@ -32,14 +32,30 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     using namespace RenderUtils;
     const UIState& ui = state.ui;
 
-    // 1. 墨量表示ヘッダー（硯の真上にシンプルに表示）
-    HFONT fMeta = CreateCustomFont(18, FW_BOLD);
-    RECT rMeta1 = { ui.rInkStoneLarge.left, ui.rInkStoneLarge.top - 32, ui.rInkStoneLarge.right, ui.rInkStoneLarge.top - 6 };
-    wchar_t buf[64];
+    // 1. 墨量表示ヘッダー（硯の真上にモダンなピルバッジとして表示）
     int inkPercent = (int)(state.ink.stoneAmount * 100.0);
-    wsprintfW(buf, L"墨残量: %d%%", inkPercent);
-    COLORREF metaColor = (inkPercent > 20) ? RGB(235, 240, 250) : RGB(255, 110, 110);
-    Center(dc, rMeta1, buf, fMeta, metaColor);
+    bool isLow = (inkPercent <= 20);
+
+    COLORREF badgeBg     = isLow ? RGB(52, 22, 25)     : RGB(24, 28, 36);
+    COLORREF badgeBorder = isLow ? RGB(240, 75, 75)    : RGB(46, 54, 70);
+    COLORREF metaColor   = isLow ? RGB(255, 140, 140)  : RGB(225, 235, 250);
+
+    int badgeW = 160;
+    int badgeH = 26;
+    int badgeX = (ui.rInkStoneLarge.left + ui.rInkStoneLarge.right - badgeW) / 2;
+    int badgeY = ui.rInkStoneLarge.top - badgeH - 8;
+    RECT rBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
+
+    Box(dc, rBadge, badgeBg, badgeBorder, 1, 13);
+
+    HFONT fMeta = CreateCustomFont(15, FW_BOLD);
+    wchar_t buf[64];
+    if (isLow) {
+        wsprintfW(buf, L"⚠️ 墨残量: %d%%", inkPercent);
+    } else {
+        wsprintfW(buf, L"💧 墨残量: %d%%", inkPercent);
+    }
+    Center(dc, rBadge, buf, fMeta, metaColor);
     DeleteObject(fMeta);
 
     // 2. 硯本体（外枠の黒い影を無くし、スッキリした石のフォルム）
