@@ -161,10 +161,6 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed,
             pressureFactor, state.ink.GetDryness(), m_lastMoveAngle);
 
-        // 墨の描画（常に高品位な墨汁濃度255で描画）
-        // 運筆方向はセグメントの a→b ではなく平滑化済みの m_lastMoveAngle を渡す。
-        // かすれの筋はこの方向を軸に並ぶため、止めや微動でセグメント長が
-        // ほぼ 0 になっても向きが保たれる必要がある（a→b では向きが暴れる）。
         StrokeSegment seg;
         seg.a = oldPaperPt;
         seg.b = paperPt;
@@ -175,10 +171,29 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         seg.dryness = state.ink.GetDryness();
         seg.inkAlpha = 255;
         gpuInk.DrawSegmentLinear(seg);
+
+        // セグメント周辺の Dirty Rect（軸平行境界ボックス + マージン）のみを局所更新
+        double maxWidth = (std::max)(startWidth, m_smoothedWidth);
+        int pad = static_cast<int>(std::ceil(maxWidth * 1.5 + 24.0));
+        RECT rcDirty;
+        rcDirty.left   = (std::max)(rPaper.left,   (std::min)(m_ptOld.x, clientPt.x) - pad);
+        rcDirty.top    = (std::max)(rPaper.top,    (std::min)(m_ptOld.y, clientPt.y) - pad);
+        rcDirty.right  = (std::min)(rPaper.right,  (std::max)(m_ptOld.x, clientPt.x) + pad);
+        rcDirty.bottom = (std::min)(rPaper.bottom, (std::max)(m_ptOld.y, clientPt.y) + pad);
+        InvalidateRect(hWnd, &rcDirty, FALSE);
+
+        // 墨消費に伴う硯パネルの残量表示を更新
+        if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
+            InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+        }
     } else {
+        bool wasActive = m_strokeActive;
         ResetStroke(gpuInk, &state);
+        if (wasActive) {
+            // ストローク終了時のみ、半紙全体を更新してにじみ・終筆を反映
+            InvalidateRect(hWnd, &rPaper, FALSE);
+        }
     }
 
     m_ptOld = clientPt;
-    InvalidateRect(hWnd, NULL, FALSE);
 }

@@ -74,6 +74,56 @@ struct OtehonFontCache {
 };
 OtehonFontCache g_otehonFont;
 
+// お手本描画用のオフスクリーンレイヤキャッシュ。
+// 毎フレーム・毎文字ごとの CreateCompatibleDC / CreateCompatibleBitmap の
+// 頻繁な再生成を排除し、GDI リソースの浪費とオーバーヘッドを防ぐ。
+struct OtehonLayerCache {
+    HDC dc = nullptr;
+    HBITMAP bmp = nullptr;
+    HBITMAP oldBmp = nullptr;
+    int w = 0;
+    int h = 0;
+
+    bool Ensure(HDC ref, int reqW, int reqH) {
+        if (dc && w >= reqW && h >= reqH) return true;
+        Release();
+        dc = CreateCompatibleDC(ref);
+        if (!dc) return false;
+        int allocW = (reqW < 512) ? 512 : reqW;
+        int allocH = (reqH < 512) ? 512 : reqH;
+        bmp = CreateCompatibleBitmap(ref, allocW, allocH);
+        if (!bmp) {
+            DeleteDC(dc);
+            dc = nullptr;
+            return false;
+        }
+        oldBmp = (HBITMAP)SelectObject(dc, bmp);
+        w = allocW;
+        h = allocH;
+        return true;
+    }
+
+    void Release() {
+        if (dc) {
+            if (oldBmp) SelectObject(dc, oldBmp);
+            DeleteDC(dc);
+            dc = nullptr;
+        }
+        if (bmp) {
+            DeleteObject(bmp);
+            bmp = nullptr;
+        }
+        oldBmp = nullptr;
+        w = 0;
+        h = 0;
+    }
+
+    ~OtehonLayerCache() {
+        Release();
+    }
+};
+OtehonLayerCache g_otehonLayer;
+
 HFONT GetOtehonFont(HDC dc, int emSize, OtehonFontStyle style) {
     if (g_otehonFont.font && g_otehonFont.emSize == emSize && g_otehonFont.style == style) {
         return g_otehonFont.font;
@@ -176,14 +226,8 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
     // なぞった墨をお手本が隠してしまう。そこで一旦オフスクリーンへ白地＋薄墨色で
     // 字を描き、SRCAND（チャンネルごとの論理積＝暗い方が残る）で転送する。
     // 白い紙の上にはお手本が出て、墨の上では墨が残る。
-    HDC layerDC = CreateCompatibleDC(dc);
-    if (!layerDC) return;
-    HBITMAP layerBmp = CreateCompatibleBitmap(dc, cellW, cellH);
-    if (!layerBmp) {
-        DeleteDC(layerDC);
-        return;
-    }
-    HBITMAP oldLayerBmp = (HBITMAP)SelectObject(layerDC, layerBmp);
+    if (!g_otehonLayer.Ensure(dc, cellW, cellH)) return;
+    HDC layerDC = g_otehonLayer.dc;
 
     RECT local = { 0, 0, cellW, cellH };
     FillRect(layerDC, &local, (HBRUSH)GetStockObject(WHITE_BRUSH));
@@ -214,9 +258,6 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
     BitBlt(dc, cell.left, cell.top, cellW, cellH, layerDC, 0, 0, SRCAND);
 
     SelectObject(layerDC, oldFont);
-    SelectObject(layerDC, oldLayerBmp);
-    DeleteObject(layerBmp);
-    DeleteDC(layerDC);
 }
 
 void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
@@ -585,6 +626,7 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
 } // namespace
 
 void CanvasView::ReleaseReplayCache() {
+    g_otehonLayer.Release();
     g_replayCache.ghostMaster.Release();
     g_replayCache.masterValid = false;
     g_replayCache.revision = 0;

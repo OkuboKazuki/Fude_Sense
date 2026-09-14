@@ -15,6 +15,7 @@
 #include <chrono>
 
 #include "InkSnapshot.h"
+#include "GpuSimulator.h"
 
 struct KinematicsInfo
 {
@@ -123,6 +124,8 @@ private:
 private:
 	int m_width = 0;
 	int m_height = 0;
+	int m_paperOffsetX = 0;
+	int m_paperOffsetY = 0;
 
 	// Direct2D リソース
 	ID2D1Factory* m_pD2DFactory = nullptr;
@@ -149,6 +152,7 @@ private:
 	int m_uploadMaxY = -1;
 
 	std::mutex m_mutex;
+	std::mutex m_kinematicsMutex;
 
 	bool m_inStroke = false;
 	POINT m_lastPt = { 0, 0 };
@@ -180,4 +184,8 @@ private:
 
 	std::thread m_propagationThread;
 	std::atomic<bool> m_runPropagation{ false };
+
+	// Direct3D 11 Compute Shader GPU 浸透シミュレータ
+	GpuSimulator m_gpuSim;
+	bool m_needsGpuUpload = false;
 };

@@ -31,6 +31,7 @@
 #include "CanvasView.h"
 #include "PenInputEvent.h"
 #include "WintabAdapter.h"
+#include "WindowsPointerAdapter.h"
 #include "MouseAdapter.h"
 #include "StrokeController.h"
 #include "AppController.h"
@@ -61,6 +62,7 @@ static AppController g_appCtrl;
 
 // 前回の再生タイマ刻。停止中は 0。
 static DWORD g_lastReplayTick = 0;
+DWORD g_lastWintabTick = 0;
 
 HWND g_hInkWnd = NULL;
 HWND g_hMonitorWnd = NULL;
@@ -535,7 +537,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		if (!OpenTabletContexts(hWnd))
 		{
-			ShowError("Could Not Open Wintab Tablet Contexts.");
+			OutputDebugStringA("Could Not Open Wintab Tablet Contexts.\n");
 		}
 
 		break;
@@ -786,10 +788,44 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WT_PACKET:
 	{
+		extern DWORD g_lastWintabTick;
+		g_lastWintabTick = GetTickCount();
 		PenInputEvent penEvent;
 		if (WintabAdapter::ConvertPacket(hWnd, wParam, lParam, g_wintab, penEvent))
 		{
 			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
+		}
+		break;
+	}
+
+	case WM_POINTERDOWN:
+	case WM_POINTERUPDATE:
+	case WM_POINTERUP:
+	{
+		// Wintab で正常に入力パケットを受信できている間は Wintab を優先（二重入力防止）
+		// Surface 等の Windows Ink デバイスや Wintab 非対応環境で本ルートが自動的にアクティブ化
+		extern DWORD g_lastWintabTick;
+		if (GetTickCount() - g_lastWintabTick > 500)
+		{
+			PenInputEvent penEvent;
+			if (WindowsPointerAdapter::ConvertPointer(hWnd, message, wParam, lParam, penEvent))
+			{
+				if (message == WM_POINTERDOWN)
+				{
+					POINT pt = { penEvent.x, penEvent.y };
+					if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk))
+					{
+						g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
+						break;
+					}
+				}
+				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
+				if (message == WM_POINTERUP)
+				{
+					g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
+				}
+				return 0;
+			}
 		}
 		break;
 	}

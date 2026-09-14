@@ -21,23 +21,42 @@
 
 ---
 
-## 2. アーキテクチャ構成
+## 2. アーキテクチャ構成と設計方針
+
+### 描画パイプラインのハイブリッド設計 (GDI + Direct2D / D3D11)
+- **UI ウィジェット層 (GDI)**:
+  - 左側フローティングメニュー、硯パネル、モーダル、文机背景などの UI 部品は Win32 GDI で実装。
+  - 軽量・低レイテンシで確実な描画とフリッカーフリー（ダブルバッファリング）を実現し、Windows 10/11 の GDI Scaling により高 DPI 環境でもシャープに描画されます。
+- **墨汁物理シミュレーション層 (Direct2D / Direct3D 11 Compute Shader)**:
+  - 半紙上の墨汁浸透・水分拡散・セルラーオートマトン計算には Direct3D 11 Compute Shader および Direct2D を採用。
+  - 運筆の筆跡周辺（Dirty Rect）のみを GPU から局所リードバックすることで、PCIe バス帯域の消費を最小限に抑え、低遅延なリアルタイム運筆レスポンスを実現しています。
+
+### 状態管理のファサード設計 (AppState)
+- `AppState` は、Models (筆・紙・お手本・物理パラメータ), Controllers (運筆・UI制御), Views (各UIパネル) の間を仲介する統合ファサード（Facade）として設計されています。
+- サブシステム間の疎結合を保ちつつ、運筆中の瞬時なパラメータ参照（筆圧、硬さ補正、インク消費量）をキャッシュミスなく O(1) で高速アクセス可能にしています。
 
 ```text
 App/SampleCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
-│   └── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合
+│   ├── CalibrationModel.h           # 筆圧キャリブレーション数理モデル
+│   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
+│   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
+│   └── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合ファサード
 │
 ├── InkEngine/                       # ★ [Ink System] インク管理・物理にじみシミュレーション ★
 │   ├── GpuInk.h / .cpp              # Direct2D/D3D11 リアルタイム墨汁浸透・物理エンジン
+│   ├── GpuSimulator.h / .cpp        # Direct3D 11 Compute Shader 浸透シミュレータ
+│   ├── ReplayInk.h / .cpp           # 運筆リプレイ墨汁再生エンジン
 │   └── InkModel.h                   # 墨残量・筆保水量・カスレ物理モデル
 │
-├── Views/                           # [View] 描画・プレゼンテーション
+├── Views/                           # [View] 描画・プレゼンテーション (GDI + D2D)
 │   ├── RenderUtils.h / .cpp         # GDI描画ヘルパー関数 (Box, Text, Font, Fill 等)
 │   ├── CanvasView.h / .cpp          # 半紙・下敷き・お手本・墨ストローク描画
 │   ├── FloatingMenuView.h / .cpp    # 左側フローティングパネル (筆/紙/保存/お手本)
 │   ├── InkStoneView.h / .cpp        # 右側 硯・墨残量・墨補充・全消し描画
+│   ├── AnalysisView.h / .cpp        # リアルタイム運筆解析・3D筆姿勢モニタ描画
+│   ├── CalibrationView.h / .cpp     # 筆圧自動測定ガイダンス・結果モーダル
 │   ├── ModalView.h / .cpp           # 全消し確認モーダル描画
 │   └── MainView.h / .cpp            # ダブルバッファリングと描画統括
 │
@@ -47,11 +66,13 @@ App/SampleCode/
 │
 ├── Inputs/                          # [Input Adapter] デバイス固有入力の抽象化
 │   ├── PenInputEvent.h              # デバイス非依存の正規化ペン入力構造体
-│   └── WintabAdapter.h / .cpp       # Wintab PACKET -> PenInputEvent 変換
+│   ├── WintabAdapter.h / .cpp       # Wintab PACKET -> PenInputEvent 変換
+│   ├── WindowsPointerAdapter.h      # Windows Ink / Pointer API 変換アダプタ
+│   └── MouseAdapter.h               # マウス入力フォールバックアダプタ
 │
 ├── Services/                        # [Service] OS・外部デバイス連携
 │   ├── WintabManager.h / .cpp       # Wintabコンテキスト・デバイス管理
-│   ├── ImageExporter.h / .cpp       # 画像エクスポート (BMP保存、クリップボード)
+│   ├── ImageExporter.h / .cpp       # 画像エクスポート (WIC PNG / BMP, クリップボード)
 │   └── WintabUtils.h / .cpp         # Wintab ユーティリティ
 │
 ├── Resource.h / Fudesence.rc        # Win32リソース

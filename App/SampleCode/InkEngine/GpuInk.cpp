@@ -277,6 +277,8 @@ void GpuInk::ReleaseResources_NoLock()
 	m_pixelBuffer.clear();
 	m_pixelBuffer.shrink_to_fit();
 	ResetDirtyRect_NoLock();
+	m_gpuSim.Release();
+	m_needsGpuUpload = false;
 	m_width = m_height = 0;
 	m_inStroke = false;
 }
@@ -339,6 +341,8 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 	);
 
 	ResetDirtyRect_NoLock();
+	m_gpuSim.Initialize(m_width, m_height);
+	m_needsGpuUpload = true;
 	return SUCCEEDED(hr);
 }
 
@@ -448,6 +452,8 @@ void GpuInk::Resize(int width, int height)
 	}
 
 	ResetDirtyRect_NoLock();
+	m_gpuSim.Resize(width, height);
+	m_needsGpuUpload = true;
 	m_uploadMinX = 0; m_uploadMinY = 0;
 	m_uploadMaxX = m_width - 1; m_uploadMaxY = m_height - 1;
 }
@@ -494,6 +500,7 @@ void GpuInk::Clear()
 			D2D1_RECT_U rect = D2D1::RectU(0, 0, m_width, m_height);
 			m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 		}
+		m_needsGpuUpload = true;
 	}
 }
 
@@ -565,6 +572,7 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 		D2D1_RECT_U rect = D2D1::RectU(0, 0, m_width, m_height);
 		m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 	}
+	m_needsGpuUpload = true;
 	return true;
 }
 
@@ -590,11 +598,52 @@ void GpuInk::RebuildPixels_NoLock()
 	}
 }
 
-// 物理インク拡散シミュレーション (GPU/バッファ)
+// 物理インク拡散シミュレーション (Direct3D 11 Compute Shader GPU 加速 / CPU フォールバック)
 bool GpuInk::PropagateInk_NoLock()
 {
 	if (m_width <= 0 || m_height <= 0 || m_ink.empty()) return false;
 	if (m_wetField.size() != m_ink.size()) return false;
+
+	// 1. Direct3D 11 Compute Shader GPU 加速パス
+	if (m_gpuSim.IsAvailable())
+	{
+		if (m_needsGpuUpload)
+		{
+			m_gpuSim.UploadFromCpu(m_ink.data(), m_wetField.data(), m_width, m_height);
+			m_needsGpuUpload = false;
+		}
+
+		if (m_activeMinX <= m_activeMaxX && m_activeMinY <= m_activeMaxY)
+		{
+			if (m_gpuSim.StepSimulation())
+			{
+				int rMinX = std::max(0, m_activeMinX - 2);
+				int rMinY = std::max(0, m_activeMinY - 2);
+				int rMaxX = std::min(m_width - 1, m_activeMaxX + 2);
+				int rMaxY = std::min(m_height - 1, m_activeMaxY + 2);
+
+				// 全画面ではなく、にじみ進行領域（Dirty Rect）のみ局所リードバック（GPU-CPU転送最適化）
+				m_gpuSim.DownloadToPixelsRegion(m_pixelBuffer.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+				m_gpuSim.DownloadInkAndWetRegion(m_ink.data(), m_wetField.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+
+				// Direct2D へのアップロード範囲も Dirty Rect に限定
+				m_uploadMinX = std::min(m_uploadMinX, rMinX);
+				m_uploadMinY = std::min(m_uploadMinY, rMinY);
+				m_uploadMaxX = std::max(m_uploadMaxX, rMaxX);
+				m_uploadMaxY = std::max(m_uploadMaxY, rMaxY);
+
+				m_activeMinX = std::max(0, m_activeMinX - 1);
+				m_activeMinY = std::max(0, m_activeMinY - 1);
+				m_activeMaxX = std::min(m_width - 1, m_activeMaxX + 1);
+				m_activeMaxY = std::min(m_height - 1, m_activeMaxY + 1);
+
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// 2. フォールバック: 従来の CPU セルラー・オートマトン計算
 	if (m_activeMinX > m_activeMaxX || m_activeMinY > m_activeMaxY) return false;
 
 	int startX = std::max(0, m_activeMinX - 1);
@@ -762,7 +811,7 @@ bool GpuInk::PropagateInk_NoLock()
 
 KinematicsInfo GpuInk::GetKinematicsInfo()
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
 	KinematicsInfo info;
 	info.currentSpeed = m_lastSpeed;
 	info.currentAccel = m_lastAcceleration;
@@ -782,7 +831,7 @@ KinematicsInfo GpuInk::GetKinematicsInfo()
 
 void GpuInk::UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering)
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
 	m_penZ = z;
 	m_penAltitudeDegrees = (altitudeDegrees > 0.0) ? altitudeDegrees : 90.0;
 	m_penAzimuthRad = azimuthRad;
@@ -798,7 +847,7 @@ void GpuInk::UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees
 
 void GpuInk::SetPressureFactor(double factor)
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
 	if (factor < 0.0) factor = 0.0;
 	if (factor > 1.0) factor = 1.0;
 	m_pressureFactor = factor;
@@ -807,20 +856,22 @@ void GpuInk::SetPressureFactor(double factor)
 // ストローク終了 (ユーザー指示に基づき「跳ね払い」のスタンプ生成処理は削除)
 void GpuInk::EndStroke()
 {
+	{
+		std::lock_guard<std::mutex> lock(m_kinematicsMutex);
+
+		double effectiveSpeed = std::min(MAX_SPEED_PX_PER_SEC, std::max(m_lastSpeed, m_recentMaxDist * 60.0));
+		const double MIN_FLICK_SPEED = 35.0;
+		bool hasSpeed = (effectiveSpeed > MIN_FLICK_SPEED) || (m_recentMaxDist >= 1.0);
+		bool isStopping = (m_lastAcceleration < -3000.0);
+		bool isFlick = hasSpeed && !isStopping;
+
+		m_lastEndSpeed = m_lastSpeed;
+		m_lastEndEffectiveSpeed = effectiveSpeed;
+		m_lastEndAccel = m_lastAcceleration;
+		m_lastIsFlick = isFlick;
+	}
+
 	std::lock_guard<std::mutex> lock(m_mutex);
-
-	double effectiveSpeed = std::min(MAX_SPEED_PX_PER_SEC, std::max(m_lastSpeed, m_recentMaxDist * 60.0));
-	const double MIN_FLICK_SPEED = 35.0;
-	bool hasSpeed = (effectiveSpeed > MIN_FLICK_SPEED) || (m_recentMaxDist >= 1.0);
-	bool isStopping = (m_lastAcceleration < -3000.0);
-	bool isFlick = hasSpeed && !isStopping;
-
-	m_lastEndSpeed = m_lastSpeed;
-	m_lastEndEffectiveSpeed = effectiveSpeed;
-	m_lastEndAccel = m_lastAcceleration;
-	m_lastIsFlick = isFlick;
-
-	// 跳ね払い（flick tail）スタンプは行わず、シンプルにストローク終了
 	m_inStroke = false;
 }
 
@@ -831,13 +882,24 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 
 	uint32_t* pixels = m_pixelBuffer.data();
 
+	// ペンの傾き (altitude/azimuth) と圧力を安全に取得
+	double penAltDeg = 90.0;
+	double penAzRad = 0.0;
+	double penPressFactor = 0.0;
+	{
+		std::lock_guard<std::mutex> kLock(m_kinematicsMutex);
+		penAltDeg = m_penAltitudeDegrees;
+		penAzRad = m_penAzimuthRad;
+		penPressFactor = m_pressureFactor;
+	}
+
 	// ペンの傾き (altitude/azimuth) から毛束の接地形状（しなり・広がり）を推定
-	double altitudeDegrees = (m_penAltitudeDegrees > 0.0) ? m_penAltitudeDegrees : 90.0;
+	double altitudeDegrees = (penAltDeg > 0.0) ? penAltDeg : 90.0;
 	double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
 	if (tiltFactor < 0.0) tiltFactor = 0.0;
 	if (tiltFactor > 1.0) tiltFactor = 1.0;
 
-	double azimuthRad = m_penAzimuthRad;
+	double azimuthRad = penAzRad;
 	double angRad = azimuthRad + 1.57079632679; // 毛束の接地広がり方向
 
 	double rad = radius;
@@ -852,7 +914,7 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	// 楕円の傾き方向の半径は semiMajor
 	// 正規化圧力 pNorm (0.0 〜 1.0) と傾き (tiltFactor) に応じてシフト量を算出
 	// pNorm = 1.0, tiltFactor = 1.0 の時、シフト量は exactly semiMajor となり、先端が楕円の端に位置する
-	double pNorm = m_pressureFactor;
+	double pNorm = penPressFactor;
 	if (pNorm <= 0.0 && radius > 0.5)
 	{
 		pNorm = std::min(1.0, (radius - 0.5) / 18.0);
@@ -961,11 +1023,10 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	}
 
 	extern HWND g_hInkWnd;
-	extern HWND g_mainWnd;
 	if (stampChanged)
 	{
+		m_needsGpuUpload = true;
 		if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
-		if (g_mainWnd && IsWindow(g_mainWnd)) InvalidateRect(g_mainWnd, NULL, FALSE);
 	}
 }
 
@@ -1065,33 +1126,39 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 {
 	if (!hdc) return;
 
-	std::lock_guard<std::mutex> lock(m_mutex);
-	if (!m_pDCRenderTarget || !m_pInkBitmap || m_width <= 0 || m_height <= 0) return;
-
 	// dispW/dispH が指定されていない場合は 1:1 描画
 	if (dispW <= 0) dispW = m_width;
 	if (dispH <= 0) dispH = m_height;
 
-	// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
-	if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
 	{
-		uint32_t minX = static_cast<uint32_t>(std::max(0, m_uploadMinX));
-		uint32_t minY = static_cast<uint32_t>(std::max(0, m_uploadMinY));
-		uint32_t maxX = static_cast<uint32_t>(std::min(m_width - 1, m_uploadMaxX));
-		uint32_t maxY = static_cast<uint32_t>(std::min(m_height - 1, m_uploadMaxY));
+		std::lock_guard<std::mutex> lock(m_mutex);
+		if (!m_pDCRenderTarget || !m_pInkBitmap || m_width <= 0 || m_height <= 0) return;
 
-		D2D1_RECT_U dirtyRect = D2D1::RectU(minX, minY, maxX + 1, maxY + 1);
-		size_t offset = static_cast<size_t>(minY) * static_cast<size_t>(m_width) + static_cast<size_t>(minX);
-		const uint32_t* srcPtr = m_pixelBuffer.data() + offset;
+		m_paperOffsetX = destX;
+		m_paperOffsetY = destY;
 
-		m_pInkBitmap->CopyFromMemory(&dirtyRect, srcPtr, m_width * sizeof(uint32_t));
+		// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
+		if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
+		{
+			uint32_t minX = static_cast<uint32_t>(std::max(0, m_uploadMinX));
+			uint32_t minY = static_cast<uint32_t>(std::max(0, m_uploadMinY));
+			uint32_t maxX = static_cast<uint32_t>(std::min(m_width - 1, m_uploadMaxX));
+			uint32_t maxY = static_cast<uint32_t>(std::min(m_height - 1, m_uploadMaxY));
 
-		m_uploadMinX = INT_MAX;
-		m_uploadMinY = INT_MAX;
-		m_uploadMaxX = -1;
-		m_uploadMaxY = -1;
+			D2D1_RECT_U dirtyRect = D2D1::RectU(minX, minY, maxX + 1, maxY + 1);
+			size_t offset = static_cast<size_t>(minY) * static_cast<size_t>(m_width) + static_cast<size_t>(minX);
+			const uint32_t* srcPtr = m_pixelBuffer.data() + offset;
+
+			m_pInkBitmap->CopyFromMemory(&dirtyRect, srcPtr, m_width * sizeof(uint32_t));
+
+			m_uploadMinX = INT_MAX;
+			m_uploadMinY = INT_MAX;
+			m_uploadMaxX = -1;
+			m_uploadMaxY = -1;
+		}
 	}
 
+	// Direct2D の GPU / DC 描画は CPU バッファに依存しないため、m_mutex 解放後に実行
 	RECT rc = { destX, destY, destX + dispW, destY + dispH };
 	HRESULT hr = m_pDCRenderTarget->BindDC(hdc, &rc);
 	if (SUCCEEDED(hr))
@@ -1135,7 +1202,25 @@ void GpuInk::PropagationThreadLoop()
 			extern HWND g_hInkWnd;
 			extern HWND g_mainWnd;
 			if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
-			if (g_mainWnd && IsWindow(g_mainWnd)) InvalidateRect(g_mainWnd, NULL, FALSE);
+			if (g_mainWnd && IsWindow(g_mainWnd))
+			{
+				RECT rcPaper;
+				{
+					std::lock_guard<std::mutex> lock(m_mutex);
+					rcPaper.left = m_paperOffsetX;
+					rcPaper.top = m_paperOffsetY;
+					rcPaper.right = m_paperOffsetX + m_width;
+					rcPaper.bottom = m_paperOffsetY + m_height;
+				}
+				if (rcPaper.right > rcPaper.left && rcPaper.bottom > rcPaper.top)
+				{
+					InvalidateRect(g_mainWnd, &rcPaper, FALSE);
+				}
+				else
+				{
+					InvalidateRect(g_mainWnd, NULL, FALSE);
+				}
+			}
 		}
 
 		std::this_thread::sleep_for(frameTime);

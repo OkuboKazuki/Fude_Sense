@@ -4,12 +4,12 @@
 
 bool WintabManager::OpenContexts(HWND hWnd) {
     if (!LoadWintab()) {
-        ShowError("Wintab not available");
+        OutputDebugStringA("Wintab not available\n");
         return false;
     }
 
     if (!gpWTInfoA(0, 0, NULL)) {
-        ShowError("WinTab Services Not Available.");
+        OutputDebugStringA("WinTab Services Not Available.\n");
         return false;
     }
 
