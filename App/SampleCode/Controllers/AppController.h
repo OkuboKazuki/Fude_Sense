@@ -25,4 +25,8 @@ public:
     static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 記録が変わったときにリプレイのタイムラインを作り直す
     static void SyncReplayTimeline(HWND hWnd, AppState& state);
+
+    // 紙だけ表示（横向きの半紙を画面いっぱいに出す）の出入り。
+    // 半紙の縦横が入れ替わるので、書いた墨と記録は消して新しい紙から始める。
+    static void SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk);
 };

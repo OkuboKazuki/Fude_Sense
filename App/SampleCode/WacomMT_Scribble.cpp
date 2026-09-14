@@ -605,6 +605,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		}
 
+		// F9 は「紙だけ表示（横向き）」の切り替え。硯パネルのボタンと同じ働き。
+		if (wParam == VK_F9)
+		{
+			AppController::SetPaperOnly(hWnd, !g_appState.ui.paperOnly, g_appState, g_gpuInk);
+			break;
+		}
+
 		// 文字入力中はショートカット（Esc=全消し / I=インクウィンドウ）を止める。
 		// Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
 		if (g_appState.otehon.isTyping) break;

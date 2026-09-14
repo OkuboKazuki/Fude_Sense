@@ -39,6 +39,12 @@ void AppState::UpdateReplaySeekThumb() {
 void AppState::Layout(int w, int h) {
     using namespace RenderUtils;
 
+    // 紙だけ表示は通常の UI を組まない別レイアウト
+    if (ui.paperOnly) {
+        LayoutPaperOnly(w, h);
+        return;
+    }
+
     const int rightW = 270;
 
     ui.rRight = { w - rightW, 0, w, h };
@@ -214,11 +220,14 @@ void AppState::Layout(int w, int h) {
     int undoBtnH = 46;
     int redoBtnH = 46;
     int clearBtnH = 46;
+    int viewBtnH = 44;    // 紙だけ表示に入るボタン
     int spacing = 12;
     int headerSpace = 32; // 墨残量ヘッダー用スペース
 
+    int viewGap = 20;     // 硯まわりの操作と表示切り替えの間の区切り
     int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
-                    + spacing + redoBtnH + spacing + clearBtnH;
+                    + spacing + redoBtnH + spacing + clearBtnH
+                    + viewGap + viewBtnH;
     int blockStartY = canvasCenterY - totalBlockH / 2;
     if (blockStartY < 24) blockStartY = 24;
 
@@ -238,6 +247,12 @@ void AppState::Layout(int w, int h) {
     ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
     ui.rRedoBtn       = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + redoBtnH };
     ui.rClearAllBtn   = { stoneX, ui.rRedoBtn.bottom + spacing, stoneX + stoneW, ui.rRedoBtn.bottom + spacing + clearBtnH };
+
+    // 表示の切り替え。墨や履歴の操作とは用途が違うので、少し間を空けて下へ置く。
+    int viewTop = ui.rClearAllBtn.bottom + viewGap;
+    ui.rPaperOnlyBtn = { stoneX, viewTop, stoneX + stoneW, viewTop + viewBtnH };
+    ui.rPaperOnlyExitBtn = ui.rPaperOnlyBar = { 0, 0, 0, 0 };
+
     // 4. 全消し確認モーダルダイアログ
     int modalW = 660;
     int modalH = 260;
@@ -265,9 +280,46 @@ void AppState::Layout(int w, int h) {
     ui.rCalibCloseBtn = { cStartX + cApplyW + 12 + cRetryW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW + 12 + cCloseW, cBtnY + cBtnH };
 }
 
+// 紙だけ表示。机や毛氈は描かず、横長の半紙を画面いっぱいに広げ、
+// 右端の帯へ「墨を補充」と「通常表示に戻る」を並べる。
+// 画面を右回りに90度倒して使う前提で、右端の帯が半紙の「下」になる。
+// 倒した向きで見て、補充ボタンが下の中央、戻るボタンが右端（画面では上端）に来る。
+// 左メニュー・硯パネルは描かないので、当たり判定が残って運筆を横取り
+// しないよう矩形ごと畳んでおく。
+void AppState::LayoutPaperOnly(int w, int h) {
+    using namespace RenderUtils;
+
+    const RECT kNone = { 0, 0, 0, 0 };
+    ui.rSub = ui.rRight = kNone;
+    ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
+    ui.rInkStoneLarge = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = ui.rPaperOnlyBtn = kNone;
+    ui.rClearModalBox = ui.rModalClearBtn = ui.rModalCancelBtn = kNone;
+    ui.rCanvasArea = { 0, 0, w, h };
+
+    const int barW = 96;
+    ui.rPaper = { 0, 0, (std::max)(100, w - barW), h };
+    ui.rPaperOnlyBar = { ui.rPaper.right, 0, w, h };
+
+    LayoutGridGeometry();
+
+    // ボタンは倒した向きで横長になるよう、画面上では縦長に取る。
+    // 窓が低くて重なるときも、補充ボタンは中央のまま長さだけ詰める。
+    const int pad = 16;
+    const int btnThick = 64;
+    const int exitLen = 190;
+    int left = ui.rPaperOnlyBar.left + (barW - btnThick) / 2;
+    int right = left + btnThick;
+    ui.rPaperOnlyExitBtn = { left, pad, right, pad + exitLen };
+
+    int cy = h / 2;
+    int refillHalf = (std::min)(180, cy - static_cast<int>(ui.rPaperOnlyExitBtn.bottom) - 12);
+    if (refillHalf < 60) refillHalf = 60;
+    ui.rInkRefillBtn = { left, cy - refillHalf, right, cy + refillHalf };
+}
+
 // 下敷き升目のジオメトリ。半紙（rPaper）から罫線の外枠・各セル・お手本配置用の
 // ミニマップまでを一括で算出する。内側の罫線とセル境界を一致させるため、
-// CanvasView::DrawGrid と共有する。
+// 通常表示と紙だけ表示のどちらからもここを通す（CanvasView::DrawGrid と共有）。
 void AppState::LayoutGridGeometry() {
     using namespace RenderUtils;
 

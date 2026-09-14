@@ -101,6 +101,35 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     return true;
 }
 
+// 紙だけ表示の出入り。
+// 墨は半紙と同じ画素数のバッファに積んでおり、縦横が入れ替わると引き伸ばされて
+// 字が歪むため、墨・運筆記録・控えはまとめて消して新しい紙にする。
+void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk) {
+    if (state.ui.paperOnly == on) return;
+
+    // 紙だけ表示ではリプレイもモーダルも描かないので、止めて閉じておく
+    if (state.replay.state == ReplayState::Playing) {
+        state.replay.state = ReplayState::Paused;
+        KillTimer(hWnd, REPLAY_TIMER_ID);
+    }
+    if (state.calibration.IsActive()) state.calibration.Reset();
+    state.otehon.isTyping = false;
+    state.otehon.isDraggingOpacity = false;
+    state.brush.isDraggingHardness = false;
+    state.ui.hoverPaperOnly = 0;
+
+    state.ui.paperOnly = on;
+
+    RECT rc = { 0, 0, 0, 0 };
+    GetClientRect(hWnd, &rc);
+    state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+    int pw = RW(state.ui.rPaper);
+    int ph = RH(state.ui.rPaper);
+    if (pw > 0 && ph > 0) gpuInk.Resize(pw, ph);
+
+    // 墨・記録・控えを消し、ペンが接地したままでも運筆を始めないようロックする
+    ClearAllInk(hWnd, state, gpuInk);
+}
 
 bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk) {
     UIState& ui = state.ui;
@@ -108,6 +137,22 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     GetClientRect(hWnd, &clientRect);
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
+
+    // 紙だけ表示中は半紙の右の2ボタンだけを見る。
+    // それ以外は false を返して素通しし、半紙への運筆をそのまま通す。
+    if (ui.paperOnly) {
+        if (PtIn(ui.rPaperOnlyExitBtn, pt)) {
+            SetPaperOnly(hWnd, false, state, gpuInk);
+            return true;
+        }
+        if (PtIn(ui.rInkRefillBtn, pt)) {
+            state.ink.Refill();
+            ui.suppressPenUntilLift = true;
+            InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
+            return true;
+        }
+        return false;
+    }
 
     // 入力欄以外を押したら文字入力を終える
     if (state.otehon.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
@@ -480,6 +525,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         ui.showClearConfirm = true;
         InvalidateRect(hWnd, NULL, FALSE);
         return true;
+    } else if (PtIn(ui.rPaperOnlyBtn, pt)) {
+        SetPaperOnly(hWnd, true, state, gpuInk);
+        return true;
     }
 
     return false;
@@ -537,6 +585,19 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     GetClientRect(hWnd, &clientRect);
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
+
+    // 紙だけ表示中は半紙の右の2ボタンだけがホバー対象
+    if (ui.paperOnly) {
+        int oldPaperOnly = ui.hoverPaperOnly;
+        ui.hoverPaperOnly = 0;
+        if (PtIn(ui.rPaperOnlyExitBtn, pt)) ui.hoverPaperOnly = 1;
+        else if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverPaperOnly = 2;
+        if (oldPaperOnly != ui.hoverPaperOnly) {
+            InvalidateRect(hWnd, &ui.rPaperOnlyExitBtn, FALSE);
+            InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
+        }
+        return true;
+    }
 
     // スライダードラッグ中の更新
     if (state.brush.isDraggingHardness && (wParam & MK_LBUTTON)) {
@@ -657,6 +718,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rClearAllBtn, pt)) ui.hoverInkStone = 3;
         else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = 4;
         else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
+        else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = 6;
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 

@@ -179,6 +179,11 @@ struct UIState {
     // （筆圧0 / 圏外）まで運筆入力を無視する。
     bool suppressPenUntilLift = false;
 
+    // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
+    // 硯が無いので、墨の補充は半紙の右のボタンから行う。
+    bool paperOnly = false;
+    int hoverPaperOnly = 0;  // 1: 通常表示に戻る, 2: 墨を補充
+
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
     int hoverInkStone = 0;
@@ -209,6 +214,9 @@ struct UIState {
     UIWidget rReplaySeekTrack{}, rReplaySeekThumb{};
     UIWidget rReplaySpeedBtn[3]{};
     UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
+    UIWidget rPaperOnlyBtn{};      // 右パネル: 紙だけ表示に入る
+    UIWidget rPaperOnlyExitBtn{};  // 紙だけ表示中: 通常表示に戻る（墨の補充は rInkRefillBtn を半紙の右へ置き直す）
+    UIWidget rPaperOnlyBar{};      // 紙だけ表示中: 半紙の右のボタンの帯
     UIWidget rHardnessTrack{};
     UIWidget rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
     UIWidget rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
@@ -249,7 +257,9 @@ public:
     }
 
 private:
-    // 升目のジオメトリ。rPaper から算出する。
+    // 紙だけ表示のレイアウト
+    void LayoutPaperOnly(int clientWidth, int clientHeight);
+    // 升目のジオメトリ。rPaper から算出するので通常表示と紙だけ表示で共有する。
     void LayoutGridGeometry();
 };
 

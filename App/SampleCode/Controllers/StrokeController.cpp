@@ -57,10 +57,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // 半紙領域内かつモーダルやサブパネルに遮られていないか判定
     // 解析タブはリプレイ（過去の運筆の再生）を半紙へ描く。そのままだと新しい運筆が
     // GpuInk へ入っても画面に出ず、記録だけが増えてタイムラインとずれるため、
-    // 解析タブ表示中は運筆そのものを受け付けない。
+    // 解析タブ表示中は運筆そのものを受け付けない（紙だけ表示ではリプレイを描かないので受け付ける）。
     bool canDrawInk = !state.ui.showClearConfirm
         && !state.calibration.IsResult()
-        && state.ui.leftTab != LeftTab::Analysis
+        && (state.ui.paperOnly || state.ui.leftTab != LeftTab::Analysis)
         && PtInRect(&rPaper, clientPt)
         && !(state.ui.isSubPanelOpen && PtInRect(&rSub, clientPt));
 
@@ -185,6 +185,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         // 墨消費に伴う硯パネルの残量表示を更新
         if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
             InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+        }
+        // 紙だけ表示では残量を「墨を補充」ボタンに出している
+        if (state.ui.paperOnly) {
+            InvalidateRect(hWnd, &state.ui.rInkRefillBtn, FALSE);
         }
     } else {
         bool wasActive = m_strokeActive;

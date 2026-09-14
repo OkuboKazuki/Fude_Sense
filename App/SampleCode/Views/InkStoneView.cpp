@@ -26,6 +26,39 @@ void DrawHistoryButton(HDC dc, const RECT& r, const wchar_t* label, int count,
     DeleteObject(f);
 }
 
+// 文字を左回りに90度倒して矩形の中央へ描く。紙だけ表示は画面を右回りに
+// 90度倒して使うので、倒した向きで見ると文字が正しい向きに読める。
+void DrawRotatedCenter(HDC dc, const RECT& r, const wchar_t* s, int size, int weight, COLORREF color) {
+    HFONT f = CreateFontW(size, 0, 900, 900, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, L"Yu Gothic UI");
+    if (!f) return;
+    HFONT old = (HFONT)SelectObject(dc, f);
+
+    // 大きさは倒す前の向きで測る（GetTextExtentPoint32 は回転を考えない）
+    int len = lstrlenW(s);
+    SIZE ext{ 0, 0 };
+    GetTextExtentPoint32W(dc, s, len, &ext);
+
+    // 左回り90度では、文字列は基準点から上へ伸び、字の頭は左を向く。
+    // 基準点（文字セルの左上）から見て、幅は -y 方向、高さは +x 方向に並ぶ。
+    int cx = (r.left + r.right) / 2;
+    int cy = (r.top + r.bottom) / 2;
+    int x = cx - ext.cy / 2;
+    int y = cy + ext.cx / 2;
+
+    int oldBk = SetBkMode(dc, TRANSPARENT);
+    COLORREF oldColor = SetTextColor(dc, color);
+    UINT oldAlign = SetTextAlign(dc, TA_LEFT | TA_TOP);
+    TextOutW(dc, x, y, s, len);
+    SetTextAlign(dc, oldAlign);
+    SetTextColor(dc, oldColor);
+    SetBkMode(dc, oldBk);
+
+    SelectObject(dc, old);
+    DeleteObject(f);
+}
+
 } // namespace
 
 void InkStoneView::Draw(HDC dc, const AppState& state) {
@@ -100,4 +133,38 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     HFONT fClear = CreateCustomFont(17, FW_BOLD);
     Center(dc, ui.rClearAllBtn, L"🗑️ 筆跡をすべて消す", fClear, hovClear ? RGB(255, 225, 225) : RGB(230, 185, 185));
     DeleteObject(fClear);
+
+    // 8. 紙だけ表示（横向き）に入る
+    bool hovPaperOnly = (ui.hoverInkStone == 6);
+    Box(dc, ui.rPaperOnlyBtn, hovPaperOnly ? RGB(42, 72, 110) : RGB(30, 36, 46), hovPaperOnly ? RGB(85, 145, 235) : RGB(54, 62, 78), 1, 8);
+    HFONT fView = CreateCustomFont(17, FW_BOLD);
+    Center(dc, ui.rPaperOnlyBtn, L"🖼️ 紙だけ表示（横向き）", fView, hovPaperOnly ? RGB(255, 255, 255) : RGB(220, 230, 245));
+    DeleteObject(fView);
+}
+
+void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state) {
+    using namespace RenderUtils;
+    const UIState& ui = state.ui;
+
+    // ボタンの帯。机の背景は描かないので、無地で塗る
+    Fill(dc, ui.rPaperOnlyBar, RGB(24, 26, 34));
+
+    // 墨を補充。硯が見えないので残量もボタンに添え、少ないときは赤くする
+    int inkPercent = (int)(state.ink.stoneAmount * 100.0);
+    bool low = (inkPercent <= 20);
+    bool hovRefill = (ui.hoverPaperOnly == 2);
+    Box(dc, ui.rInkRefillBtn, hovRefill ? RGB(42, 72, 110) : RGB(26, 30, 38),
+        hovRefill ? RGB(85, 145, 235) : (low ? RGB(180, 70, 70) : RGB(72, 80, 98)), low ? 2 : 1, 8);
+    // 画面を倒して見る前提なので、文字も倒して描く
+    COLORREF fg = hovRefill ? RGB(255, 255, 255) : (low ? RGB(255, 140, 140) : RGB(220, 230, 245));
+    wchar_t buf[48];
+    wsprintfW(buf, L"墨を補充（残り %d%%）", inkPercent);
+    DrawRotatedCenter(dc, ui.rInkRefillBtn, buf, 22, FW_BOLD, fg);
+
+    // 通常表示（メニュー・硯パネルあり）へ戻る
+    bool hovExit = (ui.hoverPaperOnly == 1);
+    Box(dc, ui.rPaperOnlyExitBtn, hovExit ? RGB(42, 72, 110) : RGB(26, 30, 38),
+        hovExit ? RGB(85, 145, 235) : RGB(72, 80, 98), 1, 8);
+    DrawRotatedCenter(dc, ui.rPaperOnlyExitBtn, L"通常表示に戻る", 18, FW_BOLD,
+        hovExit ? RGB(255, 255, 255) : RGB(220, 230, 245));
 }

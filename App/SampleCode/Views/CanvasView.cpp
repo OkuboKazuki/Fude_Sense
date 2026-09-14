@@ -161,20 +161,23 @@ void CanvasView::DrawBackground(HDC dc, const AppState& state) {
     const RECT& rPaper = state.ui.rPaper;
     if (RW(rPaper) <= 0 || RH(rPaper) <= 0) return;
 
-    // 1. 本物の書道用下敷き（毛氈：縦長フェルト布マット）
-    int marginX = (std::max)(22, RW(rPaper) / 18);
-    int marginTop = (std::max)(26, RH(rPaper) / 16);
-    int marginBottom = (std::max)(32, RH(rPaper) / 13);
+    // 1. 本物の書道用下敷き（毛氈：縦長フェルト布マット）。
+    //    紙だけ表示では半紙が画面いっぱいなので描かない。
+    if (!state.ui.paperOnly) {
+        int marginX = (std::max)(22, RW(rPaper) / 18);
+        int marginTop = (std::max)(26, RH(rPaper) / 16);
+        int marginBottom = (std::max)(32, RH(rPaper) / 13);
 
-    RECT rMat = {
-        rPaper.left - marginX,
-        rPaper.top - marginTop,
-        rPaper.right + marginX,
-        rPaper.bottom + marginBottom
-    };
+        RECT rMat = {
+            rPaper.left - marginX,
+            rPaper.top - marginTop,
+            rPaper.right + marginX,
+            rPaper.bottom + marginBottom
+        };
 
-    // 毛氈本体（品格のある濃紺インディゴフェルト布地・影なしでスッキリ描画）
-    Box(dc, rMat, RGB(20, 26, 40), RGB(46, 54, 76), 1, 6);
+        // 毛氈本体（品格のある濃紺インディゴフェルト布地・影なしでスッキリ描画）
+        Box(dc, rMat, RGB(20, 26, 40), RGB(46, 54, 76), 1, 6);
+    }
 
     // 2. 和紙（半紙）本体
     HBRUSH pb = CreateSolidBrush(RGB(252, 251, 248));
