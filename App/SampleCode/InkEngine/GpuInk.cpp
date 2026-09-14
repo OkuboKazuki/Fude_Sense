@@ -1188,19 +1188,38 @@ void GpuInk::PropagationThreadLoop()
 
 	while (m_runPropagation.load())
 	{
-		// 運筆中（ペン接地中）はメインスレッドのスタンプ描画を最優先し、拡散計算をスキップしてロック競合を回避する
-		if (m_inStroke.load(std::memory_order_relaxed))
-		{
-			std::this_thread::sleep_for(frameTime);
-			continue;
-		}
-
 		bool updated = false;
+		RECT rcDirty = { 0, 0, 0, 0 };
+
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
-			if (m_width > 0 && m_height > 0 && !m_ink.empty())
+			// 運筆中（メインスレッド）のスタンプ描画を最優先するため try_to_lock を使用
+			// ロック競合時はブロックせずにスキップし、運筆レイテンシへの影響を回避しながら
+			// 運筆中もリアルタイムに墨汁浸透・物理にじみを進める
+			std::unique_lock<std::mutex> lock(m_mutex, std::try_to_lock);
+			if (lock.owns_lock())
 			{
-				updated = PropagateInk_NoLock();
+				if (m_width > 0 && m_height > 0 && !m_ink.empty())
+				{
+					int minX = m_activeMinX;
+					int minY = m_activeMinY;
+					int maxX = m_activeMaxX;
+					int maxY = m_activeMaxY;
+
+					updated = PropagateInk_NoLock();
+
+					if (updated)
+					{
+						int rMinX = (std::max)(0, (std::min)(minX, m_activeMinX) - 4);
+						int rMinY = (std::max)(0, (std::min)(minY, m_activeMinY) - 4);
+						int rMaxX = (std::min)(m_width, (std::max)(maxX, m_activeMaxX) + 5);
+						int rMaxY = (std::min)(m_height, (std::max)(maxY, m_activeMaxY) + 5);
+
+						rcDirty.left   = m_paperOffsetX + rMinX;
+						rcDirty.top    = m_paperOffsetY + rMinY;
+						rcDirty.right  = m_paperOffsetX + rMaxX;
+						rcDirty.bottom = m_paperOffsetY + rMaxY;
+					}
+				}
 			}
 		}
 
@@ -1211,17 +1230,9 @@ void GpuInk::PropagationThreadLoop()
 			if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
 			if (g_mainWnd && IsWindow(g_mainWnd))
 			{
-				RECT rcPaper;
+				if (rcDirty.right > rcDirty.left && rcDirty.bottom > rcDirty.top)
 				{
-					std::lock_guard<std::mutex> lock(m_mutex);
-					rcPaper.left = m_paperOffsetX;
-					rcPaper.top = m_paperOffsetY;
-					rcPaper.right = m_paperOffsetX + m_width;
-					rcPaper.bottom = m_paperOffsetY + m_height;
-				}
-				if (rcPaper.right > rcPaper.left && rcPaper.bottom > rcPaper.top)
-				{
-					InvalidateRect(g_mainWnd, &rcPaper, FALSE);
+					InvalidateRect(g_mainWnd, &rcDirty, FALSE);
 				}
 				else
 				{

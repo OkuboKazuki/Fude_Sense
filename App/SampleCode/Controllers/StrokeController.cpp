@@ -119,17 +119,21 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double angleDiff = std::sin(event.azimuthRad - (moveAngle + 1.57079632679));
         double absAngleDiff = std::abs(angleDiff);
 
-        // 角度（腹方向/刃方向）に応じた払いの調整:
-        // 太くなる方向（腹側）で払った際にも綺麗に細く伸びるよう、角度に応じて払いの減衰指数を補正
-        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(dist, 10.0);
-        double haraiFactor = std::pow(pressureFactor, angleHaraiPower);
-
         // 筆圧が抜ける（離筆に向かう）際は、ペンの腹の太さ影響が穂先の一点に自然収束する
         double tipConvergence = std::pow(pressureFactor, 0.4);
         double angleFactor = 1.0 + 0.3 * absAngleDiff * tipConvergence;
         double effectiveTiltFactor = tiltFactor * tipConvergence;
 
-        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
+        // 角度（腹方向/刃方向）と離筆に応じた払いの調整:
+        // 筆圧がしっかりかかっている接地運筆中は速度が出ても線が極端に痩せ細らないようにし、
+        // 筆圧が抜けて離筆に向かう際（低筆圧時）に速度・角度と連動して穂先へ綺麗に収束させる
+        double haraiReleaseFactor = (std::max)(0.0, 1.0 - pressureFactor);
+        double speedHaraiEffect = (std::min)(dist / 8.0, 1.0) * haraiReleaseFactor;
+        double haraiPower = 1.0 + (0.3 + 0.4 * absAngleDiff) * speedHaraiEffect;
+        double haraiFactor = std::pow(pressureFactor, haraiPower);
+
+        // 止め（筆を留めた際のわずかな溜まり）
+        double tomeFactor = 1.0 + 0.08 * (1.0 - (std::min)(dist / 4.0, 1.0)) * std::pow(pressureFactor, 0.8);
 
         double baseMaxWidth = state.brush.GetBaseMaxWidth();
         double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + effectiveTiltFactor * 0.6);
@@ -143,11 +147,8 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             startWidth = rawWidth;
             m_strokeActive = true;
         } else {
-            // 線幅減少時（払い・跳ね）または高速移動時はアルファを大きくして即座に追従
-            double alphaWidth = 0.3;
-            if (rawWidth < m_smoothedWidth || dist > 3.0) {
-                alphaWidth = 0.8;
-            }
+            // 急激な線幅変動を平滑化しつつ、払い・跳ねには自然に追従
+            double alphaWidth = (rawWidth < m_smoothedWidth) ? 0.4 : 0.25;
             m_smoothedWidth = m_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
         }
 

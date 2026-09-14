@@ -81,8 +81,9 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
                 || (state.ui.isSubPanelOpen && IntersectRect(&dummy, &rcPaint, &state.ui.rSub) != FALSE);
     bool hitModal = state.ui.showClearConfirm || state.calibration.IsActive();
 
-    // 運筆中など半紙や硯の局所更新で、モーダルや左メニュー、木目余白と交差しない場合は背景を再描画しない
-    if (isFullRedraw || hitModal || hitLeft || (!hitPaper && !hitRight)) {
+    // 運筆中など半紙専用の局所更新で、モーダルや左メニュー、硯パネル、木目余白と交差しない場合のみ背景を再描画しない
+    // （硯パネルは透明テキスト「墨残量: ○○%」を描画するため、木目背景の再描画・クリアが必要）
+    if (isFullRedraw || hitModal || hitLeft || hitRight || !hitPaper) {
         // 1. 和風木製机（文机）の背景描画
         RenderUtils::DrawWoodDesk(memDC, width, height);
 
@@ -117,7 +118,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
         // 画面へ一括転送 (フリッカーフリー)
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
     } else {
-        // 局所更新パス（運筆中の高速描画パス）
+        // 局所更新パス（運筆中の半紙専用高速描画パス）
         if (hitPaper) {
             CanvasView::DrawBackground(memDC, state);
             if (state.ui.leftTab == LeftTab::Analysis) {
@@ -127,10 +128,6 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
             }
             CanvasView::DrawOtehon(memDC, state);
             CanvasView::DrawGrid(memDC, state);
-        }
-
-        if (hitRight) {
-            InkStoneView::Draw(memDC, state);
         }
 
         // 無効化領域のみを画面へ高速転送 (CPU/GPU バス帯域を劇的に節約)
