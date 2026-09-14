@@ -79,7 +79,7 @@ public:
 	bool StepPropagation();
 	// 水分が落ち着くまで（または最大ステップ数まで）にじみをまとめて進める
 	int SettleDiffusion(int maxSteps = 200);
-	bool IsInStroke() const { return m_inStroke; }
+	bool IsInStroke() const { return m_inStroke.load(std::memory_order_relaxed); }
 
 	KinematicsInfo GetKinematicsInfo();
 	void UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering);
@@ -154,7 +154,7 @@ private:
 	std::mutex m_mutex;
 	std::mutex m_kinematicsMutex;
 
-	bool m_inStroke = false;
+	std::atomic<bool> m_inStroke{ false };
 	POINT m_lastPt = { 0, 0 };
 
 	double m_lastSpeed = 0.0;

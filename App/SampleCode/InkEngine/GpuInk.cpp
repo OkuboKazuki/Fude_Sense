@@ -1188,6 +1188,13 @@ void GpuInk::PropagationThreadLoop()
 
 	while (m_runPropagation.load())
 	{
+		// 運筆中（ペン接地中）はメインスレッドのスタンプ描画を最優先し、拡散計算をスキップしてロック競合を回避する
+		if (m_inStroke.load(std::memory_order_relaxed))
+		{
+			std::this_thread::sleep_for(frameTime);
+			continue;
+		}
+
 		bool updated = false;
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
