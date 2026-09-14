@@ -153,10 +153,12 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 運筆に伴うインク・水分の物理消費
-        // WATER_LOSS_RATIO(1.35) を加味し、漢字1文字で約70%消費して25〜30%余るバランスに設定
+        // かすれ前（残量45%以上）の書ける量は完全に維持しつつ、
+        // かすれ中（紙への付着量が減る状態）は物理消費を穏やかにしてカスレの持続距離を伸ばす
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
-        double consumeAmount = stepDist * widthRatio * 0.00035;
+        double drynessFactor = 1.0 - state.ink.GetDryness() * 0.45;
+        double consumeAmount = stepDist * widthRatio * 0.00022 * drynessFactor;
         state.ink.Consume(consumeAmount);
 
         // 運筆データアーカイブへ記録

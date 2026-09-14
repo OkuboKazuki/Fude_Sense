@@ -5,6 +5,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include "AppEnums.h"
 
 // 水分の消費速度（顔料比）。水分は紙への毛管吸収と蒸発があるため顔料より速く失われる。
@@ -45,12 +46,17 @@ struct InkModel {
     }
 
     // 筆の乾き具合 (0.0: 潤沢 ~ 1.0: 渇筆)
-    // 墨残量が30%以上ある間はかすれず潤沢な墨汁で書け、
-    // 残量が30%を切ってから徐々にかすれが出始め、0%に向かって自然な渇筆となる。
+    // 残量45%までは完全に潤沢（かすれなし）を維持し、
+    // 45%を切ってからのかすれをより穏やかな非線形カーブで立ち上げることで、
+    // 味わい深いかすれ（渇筆）が長いストロークにわたって持続するようにする。
     double GetDryness() const {
-        if (brushWater >= 0.30) {
+        if (brushWater >= 0.45) {
             return 0.0;
         }
-        return (0.30 - brushWater) / 0.30;
+        if (brushWater <= 0.0) {
+            return 1.0;
+        }
+        double norm = (0.45 - brushWater) / 0.45;
+        return std::pow(norm, 1.65);
     }
 };

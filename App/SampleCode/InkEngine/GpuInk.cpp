@@ -60,7 +60,7 @@ static constexpr double KASURE_LANE_WIDTH_PX = 2.6;    // 毛束 1 本ぶんの�
 static constexpr double KASURE_GRAIN_SCALE_PX = 2.2;   // 紙目の粒の大きさ (px)
 static constexpr double KASURE_BRISTLE_WEIGHT = 0.62;  // 毛束マスクの寄与
 static constexpr double KASURE_GRAIN_WEIGHT = 0.38;    // 紙目マスクの寄与 (合計 1.0)
-static constexpr double KASURE_THRESHOLD_SCALE = 0.85; // 乾き切っても残る墨の余地
+static constexpr double KASURE_THRESHOLD_SCALE = 1.0;  // 乾き切った(0%)時は完全に墨が出なくなる
 
 static inline double KasureHash(uint32_t h)
 {
@@ -879,6 +879,8 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 {
 	if (radius <= 0.0) radius = 0.5;
 	if (m_ink.empty() || m_pixelBuffer.empty()) return;
+	// 墨が完全に切れている（乾き切っている）場合は描画しない
+	if (m_strokeDryness >= 1.0 || alpha == 0) return;
 
 	uint32_t* pixels = m_pixelBuffer.data();
 
@@ -1048,6 +1050,9 @@ void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 
 	// StampBrush が参照する乾き具合を更新（水分の付着量を決める）
 	m_strokeDryness = seg.dryness;
+
+	// 墨残量が完全に切れている場合はスタンプ計算をスキップ
+	if (seg.dryness >= 1.0 || seg.inkAlpha == 0) return;
 
 	int dx = b.x - a.x;
 	int dy = b.y - a.y;
