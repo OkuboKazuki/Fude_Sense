@@ -12,6 +12,8 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     m_smoothedPressure = 0.0;
     m_smoothedWidth = 0.0;
     m_lastTime = 0;
+    m_hasPendingDirty = false;
+    m_accumDirty = { 0, 0, 0, 0 };
     if (gpuInk.IsInStroke()) {
         gpuInk.EndStroke();
     }
@@ -172,7 +174,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         seg.inkAlpha = 255;
         gpuInk.DrawSegmentLinear(seg);
 
-        // セグメント周辺の Dirty Rect（軸平行境界ボックス + マージン）のみを局所更新
+        // セグメント周辺の Dirty Rect（軸平行境界ボックス + マージン）を累積
         double maxWidth = (std::max)(startWidth, m_smoothedWidth);
         int pad = static_cast<int>(std::ceil(maxWidth * 1.5 + 24.0));
         RECT rcDirty;
@@ -180,18 +182,46 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         rcDirty.top    = (std::max)(rPaper.top,    (std::min)(m_ptOld.y, clientPt.y) - pad);
         rcDirty.right  = (std::min)(rPaper.right,  (std::max)(m_ptOld.x, clientPt.x) + pad);
         rcDirty.bottom = (std::min)(rPaper.bottom, (std::max)(m_ptOld.y, clientPt.y) + pad);
-        InvalidateRect(hWnd, &rcDirty, FALSE);
 
-        // 墨消費に伴う硯パネルの残量表示を更新
+        if (!m_hasPendingDirty) {
+            m_accumDirty = rcDirty;
+            m_hasPendingDirty = true;
+        } else {
+            UnionRect(&m_accumDirty, &m_accumDirty, &rcDirty);
+        }
+
+        // 描画更新要求（InvalidateRect）の頻度を約120Hz（8ms間隔）にレート制御
+        // （物理スタンプ投入は240Hzで即時実行しつつ、再描画の過剰呼び出しを抑制）
+        constexpr DWORD kMinInvalidateIntervalMs = 8;
+        DWORD now = (event.time != 0) ? event.time : GetTickCount();
+        if (now - m_lastInvalidateTick >= kMinInvalidateIntervalMs) {
+            InvalidateRect(hWnd, &m_accumDirty, FALSE);
+            m_accumDirty = { 0, 0, 0, 0 };
+            m_hasPendingDirty = false;
+            m_lastInvalidateTick = now;
+        }
+
+        // 墨消費に伴う硯パネルの残量表示を適正頻度（約16Hz / 60ms間隔）で更新
         if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
-            InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+            if (now - m_lastInkStoneInvalidateTick >= 60) {
+                InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+                m_lastInkStoneInvalidateTick = now;
+            }
         }
     } else {
         bool wasActive = m_strokeActive;
+        if (m_hasPendingDirty) {
+            InvalidateRect(hWnd, &m_accumDirty, FALSE);
+            m_accumDirty = { 0, 0, 0, 0 };
+            m_hasPendingDirty = false;
+        }
         ResetStroke(gpuInk, &state);
         if (wasActive) {
             // ストローク終了時のみ、半紙全体を更新してにじみ・終筆を反映
             InvalidateRect(hWnd, &rPaper, FALSE);
+            if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
+                InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+            }
         }
     }
 
