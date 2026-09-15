@@ -492,16 +492,30 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
     const size_t totalPixels = static_cast<size_t>(pw) * static_cast<size_t>(ph);
     uint32_t* dst = layer.bits;
 
-    // 1. 各画素の筆圧マップ (pressureMap: 0~100, 255=未設定) を構築 (メモリ削減 & キャッシュ効率化)
+    // 1. 各画素の筆圧マップ (pressureMap: 0~100, 255=未設定) とレイヤー状態マップを構築
     std::vector<uint8_t> pressureMap(totalPixels, 255);
+    std::vector<int16_t> strokeIdMap(totalPixels, -1);
+    std::vector<int16_t> pointIdxMap(totalPixels, -1);
+    std::vector<float> minDistMap(totalPixels, 1e9f);
     const auto& strokes = session.GetStrokes();
 
+    double sumSessionPrs = 0.0;
+    size_t countSessionPoints = 0;
+
+    int strokeIdx = 0;
     for (const auto& s : strokes) {
-        if (s.points.empty()) continue;
+        if (s.points.empty()) {
+            ++strokeIdx;
+            continue;
+        }
 
         for (size_t i = 0; i < s.points.size(); ++i) {
             const auto& p = s.points[i];
             const auto& prev = (i > 0) ? s.points[i - 1] : p;
+            int16_t ptIdx = static_cast<int16_t>(i);
+
+            sumSessionPrs += p.pressure;
+            ++countSessionPoints;
 
             double x1 = prev.normX * pw;
             double y1 = prev.normY * ph;
@@ -509,49 +523,141 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
             double y2 = p.normY * ph;
             double prs1 = prev.pressure;
             double prs2 = p.pressure;
-            double rad1 = (std::max)(2.0, prev.width * 0.5 + 3.0);
-            double rad2 = (std::max)(2.0, p.width * 0.5 + 3.0);
+            double w1 = prev.width;
+            double w2 = p.width;
+            double alt1 = prev.altitudeDeg;
+            double alt2 = p.altitudeDeg;
+            double az1 = prev.azimuthDeg;
+            double az2 = p.azimuthDeg;
+            double pf1 = prev.pressureFactor;
+            double pf2 = p.pressureFactor;
 
             double dx = x2 - x1;
             double dy = y2 - y1;
             double dist = std::hypot(dx, dy);
 
-            // ステップ刻みを適正化（過剰な重複計算を削減）
-            double step = (std::max)(2.0, (std::min)(rad1, rad2) * 0.8);
+            // ステップ刻み
+            double minW = (std::min)(w1, w2);
+            double step = (std::max)(1.5, minW * 0.25 + 0.8);
             int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
 
             for (int k = 0; k <= steps; ++k) {
                 double t = (steps == 0) ? 0.0 : static_cast<double>(k) / static_cast<double>(steps);
-                double cx = x1 + dx * t;
-                double cy = y1 + dy * t;
+                double rawCx = x1 + dx * t;
+                double rawCy = y1 + dy * t;
                 double prs = prs1 + (prs2 - prs1) * t;
-                double r = rad1 + (rad2 - rad1) * t;
-                double rSq = r * r;
+                double curW = w1 + (w2 - w1) * t;
+                double curAlt = alt1 + (alt2 - alt1) * t;
+                double curAz = az1 + (az2 - az1) * t;
+                double curPf = pf1 + (pf2 - pf1) * t;
 
-                int minX = (std::max)(0, static_cast<int>(std::floor(cx - r)));
-                int maxX = (std::min)(pw - 1, static_cast<int>(std::ceil(cx + r)));
-                int minY = (std::max)(0, static_cast<int>(std::floor(cy - r)));
-                int maxY = (std::min)(ph - 1, static_cast<int>(std::ceil(cy + r)));
+                // GpuInk::StampBrush と完全一致するチルト楕円形状・方向・オフセット計算
+                double altitudeDegrees = (curAlt > 0.0) ? curAlt : 90.0;
+                double tiltFactor = (90.0 - altitudeDegrees) / 90.0;
+                if (tiltFactor < 0.0) tiltFactor = 0.0;
+                if (tiltFactor > 1.0) tiltFactor = 1.0;
+
+                double azRad = curAz * (3.14159265358979323846 / 180.0);
+                double angRad = azRad + 1.5707963267948966; // 毛束の接地広がり方向
+
+                double rad = (std::max)(0.5, curW * 0.5);
+                double semiMajor = rad * (1.0 + tiltFactor * 1.5);
+                double semiMinor = (std::max)(0.5, rad * (1.0 - tiltFactor * 0.4));
+
+                double tiltDirX = std::sin(azRad);
+                double tiltDirY = -std::cos(azRad);
+
+                double pNorm = curPf;
+                if (pNorm <= 0.0 && rad > 0.5) {
+                    pNorm = (std::min)(1.0, (rad - 0.5) / 18.0);
+                }
+                double offset = semiMajor * tiltFactor * pNorm;
+
+                double cx = rawCx + tiltDirX * offset;
+                double cy = rawCy + tiltDirY * offset;
+
+                // 物理にじみマージン（GpuInkの WET_MARGIN_PX = 4.0）
+                double wetMargin = 4.0;
+                double wetMajor = semiMajor + wetMargin;
+                double wetMinor = semiMinor + wetMargin;
+
+                double ext = wetMajor;
+                int minX = (std::max)(0, static_cast<int>(std::floor(cx - ext)));
+                int maxX = (std::min)(pw - 1, static_cast<int>(std::ceil(cx + ext)));
+                int minY = (std::max)(0, static_cast<int>(std::floor(cy - ext)));
+                int maxY = (std::min)(ph - 1, static_cast<int>(std::ceil(cy + ext)));
+
+                double cosA = std::cos(angRad);
+                double sinA = std::sin(angRad);
+
+                double invMajorSq = 1.0 / (semiMajor * semiMajor);
+                double invMinorSq = 1.0 / (semiMinor * semiMinor);
+                double invWetMajorSq = 1.0 / (wetMajor * wetMajor);
+                double invWetMinorSq = 1.0 / (wetMinor * wetMinor);
 
                 double clampedPrs = (std::max)(0.0, (std::min)(100.0, prs * 100.0));
                 uint8_t uPrs = static_cast<uint8_t>(clampedPrs);
+                int16_t curStrokeId = static_cast<int16_t>(strokeIdx);
 
                 for (int py = minY; py <= maxY; ++py) {
                     double dY = static_cast<double>(py) - cy;
-                    double dYSq = dY * dY;
                     size_t rowOffset = static_cast<size_t>(py) * static_cast<size_t>(pw);
                     for (int px = minX; px <= maxX; ++px) {
                         double dX = static_cast<double>(px) - cx;
-                        if (dX * dX + dYSq <= rSq) {
-                            size_t idx = rowOffset + px;
-                            if (pressureMap[idx] == 255 || uPrs > pressureMap[idx]) {
+
+                        double localX = dX * cosA + dY * sinA;
+                        double localY = -dX * sinA + dY * cosA;
+
+                        // 楕円の正規化二乗距離
+                        double coreNormSq = (localX * localX) * invMajorSq + (localY * localY) * invMinorSq;
+                        double wetNormSq = (localX * localX) * invWetMajorSq + (localY * localY) * invWetMinorSq;
+
+                        if (wetNormSq > 1.0) continue; // にじみ限界外
+
+                        size_t idx = rowOffset + px;
+                        int16_t curOwner = strokeIdMap[idx];
+
+                        if (coreNormSq <= 1.0) {
+                            // 【実体内部】筆の毛が直接触れている領域
+                            float distCore = static_cast<float>(coreNormSq);
+
+                            if (curOwner < curStrokeId) {
+                                // 後から書いたストロークが過去のストローク（または未描画部）の上に覆いかぶさる（後勝ちレイヤリング）
+                                strokeIdMap[idx] = curStrokeId;
+                                pointIdxMap[idx] = ptIdx;
+                                minDistMap[idx] = distCore;
                                 pressureMap[idx] = uPrs;
+                            } else if (curOwner == curStrokeId) {
+                                // 同一ストローク内
+                                int16_t prevPt = pointIdxMap[idx];
+                                // 自己交差（ループ・結びで15ポイント以上離れた運筆が上から重なる場合）
+                                if (ptIdx - prevPt > 15) {
+                                    pointIdxMap[idx] = ptIdx;
+                                    minDistMap[idx] = distCore;
+                                    pressureMap[idx] = uPrs;
+                                } else if (distCore < minDistMap[idx]) {
+                                    // 連続運筆中：より中心線に近い方の筆圧で滑らかに更新
+                                    pointIdxMap[idx] = ptIdx;
+                                    minDistMap[idx] = distCore;
+                                    pressureMap[idx] = uPrs;
+                                }
+                            }
+                        } else {
+                            // 【にじみ領域】筆の毛の外側、墨が紙に染み出た領域
+                            // 過去のストロークの実体（curOwner >= 0）には侵入しない
+                            if (curOwner < 0) {
+                                float distWet = 1.0f + static_cast<float>(wetNormSq);
+                                if (distWet < minDistMap[idx]) {
+                                    minDistMap[idx] = distWet;
+                                    pressureMap[idx] = uPrs;
+                                }
                             }
                         }
                     }
                 }
             }
         }
+        ++strokeIdx;
     }
 
     // 2. 墨テクスチャと筆圧マップを融合して DIBSection へ一括書き込み
@@ -560,27 +666,53 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
     for (int i = 0; i <= 100; ++i) {
         prsTable[i] = RenderUtils::GetPressureColor(static_cast<double>(i) / 100.0);
     }
-    COLORREF defaultPrsColor = prsTable[50];
+
+    uint8_t avgPrsIndex = (countSessionPoints > 0)
+        ? static_cast<uint8_t>(RenderUtils::Clamp(sumSessionPrs / countSessionPoints * 100.0, 0.0, 100.0))
+        : 50;
+    COLORREF defaultPrsColor = prsTable[avgPrsIndex];
+
+    auto getPrsColor = [&](int px, int py, size_t idx) -> COLORREF {
+        uint8_t u = pressureMap[idx];
+        if (u <= 100) return prsTable[u];
+
+        // 5x5 近傍探索で最も近い筆圧を取得（にじみの外縁部でも周囲の筆圧色を確実に継承）
+        for (int dy = -2; dy <= 2; ++dy) {
+            int ny = py + dy;
+            if (ny < 0 || ny >= ph) continue;
+            size_t nRow = static_cast<size_t>(ny) * static_cast<size_t>(pw);
+            for (int dx = -2; dx <= 2; ++dx) {
+                int nx = px + dx;
+                if (nx < 0 || nx >= pw) continue;
+                uint8_t nu = pressureMap[nRow + nx];
+                if (nu <= 100) return prsTable[nu];
+            }
+        }
+        return defaultPrsColor;
+    };
 
     if (inkW == pw && inkH == ph && ink.size() == totalPixels) {
-        for (size_t i = 0; i < totalPixels; ++i) {
-            int inkVal = ink[i];
-            if (inkVal <= 0) {
-                dst[i] = 0x00FFFFFF;
-            } else {
-                int clamped = (inkVal > 255) ? 255 : inkVal;
-                double ratio = static_cast<double>(clamped) / 255.0;
+        for (int y = 0; y < ph; ++y) {
+            size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(pw);
+            for (int x = 0; x < pw; ++x) {
+                size_t i = rowOffset + x;
+                int inkVal = ink[i];
+                if (inkVal <= 0) {
+                    dst[i] = 0x00FFFFFF;
+                } else {
+                    int clamped = (inkVal > 255) ? 255 : inkVal;
+                    double ratio = static_cast<double>(clamped) / 255.0;
 
-                uint8_t uPrs = pressureMap[i];
-                COLORREF prsColor = (uPrs <= 100) ? prsTable[uPrs] : defaultPrsColor;
-                int baseR = GetRValue(prsColor);
-                int baseG = GetGValue(prsColor);
-                int baseB = GetBValue(prsColor);
+                    COLORREF prsColor = getPrsColor(x, y, i);
+                    int baseR = GetRValue(prsColor);
+                    int baseG = GetGValue(prsColor);
+                    int baseB = GetBValue(prsColor);
 
-                int r = 255 - static_cast<int>((255 - baseR) * ratio);
-                int g = 255 - static_cast<int>((255 - baseG) * ratio);
-                int b = 255 - static_cast<int>((255 - baseB) * ratio);
-                dst[i] = (r << 16) | (g << 8) | b;
+                    int r = 255 - static_cast<int>((255 - baseR) * ratio);
+                    int g = 255 - static_cast<int>((255 - baseG) * ratio);
+                    int b = 255 - static_cast<int>((255 - baseB) * ratio);
+                    dst[i] = (r << 16) | (g << 8) | b;
+                }
             }
         }
     } else {
@@ -609,8 +741,7 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
                     int clamped = (inkVal > 255) ? 255 : inkVal;
                     double ratio = static_cast<double>(clamped) / 255.0;
 
-                    uint8_t uPrs = pressureMap[dstIdx];
-                    COLORREF prsColor = (uPrs <= 100) ? prsTable[uPrs] : defaultPrsColor;
+                    COLORREF prsColor = getPrsColor(x, y, dstIdx);
                     int baseR = GetRValue(prsColor);
                     int baseG = GetGValue(prsColor);
                     int baseB = GetBValue(prsColor);
