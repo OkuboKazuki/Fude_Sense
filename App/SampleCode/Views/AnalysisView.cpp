@@ -26,9 +26,9 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     const COLORREF DIS_TEXT   = RGB(88, 95, 110);
 
     // 1. ヘッダー: タイトル & 時刻表示
-    RECT rHeader = { rBox.left + 14, rBox.top + 8, rBox.left + 220, rBox.top + 28 };
+    RECT rHeader = { rBox.left + 14, rBox.top + 8, rBox.left + 280, rBox.top + 28 };
     HFONT fHeader = CreateCustomFont(14, FW_BOLD);
-    DrawTextCustom(dc, rHeader, L"運筆リプレイ（時系列再生・解析）", fHeader, RGB(210, 220, 240));
+    DrawTextCustom(dc, rHeader, L"運筆プロセス再現（筆圧可視化＆解析）", fHeader, RGB(210, 220, 240));
     DeleteObject(fHeader);
 
     double curSec = static_cast<double>(rep.currentTimeMs) / 1000.0;
@@ -96,13 +96,13 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     Box(dc, state.ui.rReplayPrevBtn, !hasRecording ? DIS_BG : (hPrev ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hPrev ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
     Center(dc, state.ui.rReplayPrevBtn, L"⏮", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
-    // 再生 / 一時停止 (▶ / ❚❚)
+    // 再現 / 一時停止 (▶ / ❚❚)
     bool isPlaying = hasRecording && (rep.state == ReplayState::Playing);
     bool hPlay = (state.ui.hoverReplayBtn == 3);
     COLORREF playBg = !hasRecording ? DIS_BG : isPlaying ? (hPlay ? RGB(200, 70, 60) : RGB(170, 50, 45)) : (hPlay ? RGB(40, 160, 230) : RGB(28, 130, 200));
     COLORREF playBorder = !hasRecording ? DIS_BORDER : (isPlaying ? RGB(255, 110, 100) : RGB(80, 190, 255));
     Box(dc, state.ui.rReplayPlayBtn, playBg, playBorder, 1, 6);
-    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 停止" : L"▶ 再生", fBtnIcon, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
+    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 一時停止" : L"▶ 運筆再生", fBtnIcon, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
 
     // 次画 (⏭)
     bool hNext = (state.ui.hoverReplayBtn == 4);
