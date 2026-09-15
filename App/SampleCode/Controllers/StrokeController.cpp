@@ -165,11 +165,26 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed,
             pressureFactor, state.ink.GetDryness(), m_lastMoveAngle);
 
+        // 内部固定論理解像度へのスケーリング変換
+        int inkW = gpuInk.GetWidth();
+        int inkH = gpuInk.GetHeight();
+        int paperW = RenderUtils::RW(rPaper);
+        int paperH = RenderUtils::RH(rPaper);
+        double scaleX = (paperW > 0 && inkW > 0) ? (static_cast<double>(inkW) / static_cast<double>(paperW)) : 1.0;
+        double scaleY = (paperH > 0 && inkH > 0) ? (static_cast<double>(inkH) / static_cast<double>(paperH)) : 1.0;
+        double scaleAvg = (scaleX + scaleY) * 0.5;
+
         StrokeSegment seg;
-        seg.a = oldPaperPt;
-        seg.b = paperPt;
-        seg.startWidth = startWidth;
-        seg.endWidth = m_smoothedWidth;
+        seg.a = {
+            static_cast<LONG>(std::round(oldPaperPt.x * scaleX)),
+            static_cast<LONG>(std::round(oldPaperPt.y * scaleY))
+        };
+        seg.b = {
+            static_cast<LONG>(std::round(paperPt.x * scaleX)),
+            static_cast<LONG>(std::round(paperPt.y * scaleY))
+        };
+        seg.startWidth = startWidth * scaleAvg;
+        seg.endWidth = m_smoothedWidth * scaleAvg;
         seg.dirX = std::cos(m_lastMoveAngle);
         seg.dirY = std::sin(m_lastMoveAngle);
         seg.dryness = state.ink.GetDryness();

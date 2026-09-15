@@ -42,13 +42,6 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 
 void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk) {
     state.Layout(width, height);
-    int pw = RW(state.ui.rPaper);
-    int ph = RH(state.ui.rPaper);
-    if (pw > 0 && ph > 0) {
-        gpuInk.Resize(pw, ph);
-        // 半紙の画素数が変わると控えを書き戻せないので手放す
-        state.undo.Clear();
-    }
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -102,19 +95,20 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 }
 
 
-// 半紙の大きさ・縦横比が変わったあとの後始末をまとめる。
-// 墨は半紙と同じ画素数のバッファへ積み上げているのでリサイズして作り直し、
-// 画素数が変わると書き戻せない「一画戻す」の控えは手放す。
+// 用紙種類・縦横比が変わった際の後始末。
+// 新しい用紙の固定論理解像度で GpuInk を再初期化し、白紙にする。
 static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
     state.Layout(rc.right - rc.left, rc.bottom - rc.top);
 
-    int pw = RW(state.ui.rPaper);
-    int ph = RH(state.ui.rPaper);
-    if (pw > 0 && ph > 0) {
-        gpuInk.Resize(pw, ph);
+    int canvasW = 0, canvasH = 0;
+    state.paper.GetCanvasSize(canvasW, canvasH);
+    if (canvasW > 0 && canvasH > 0) {
+        gpuInk.Initialize(canvasW, canvasH);
         state.undo.Clear();
+        state.trajectory.Clear();
+        state.replay.Reset();
     }
 
     // ボタンを押した直後にペンが接地したままでも運筆を始めないようロックする
@@ -392,18 +386,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 for (int i = 0; i < 4; ++i) {
                     if (PtIn(ui.rPaperTile[i], pt)) {
                         state.paper.type = static_cast<PaperType>(i);
-                        state.Layout(w, h);
                         // マスの割り付けが別物になるので、配置済みのお手本は破棄する
-                        // （残すとどのマスの手本か分からなくなる）
                         state.otehon.ClearCellChars();
-                        int pw = RW(ui.rPaper);
-                        int ph = RH(ui.rPaper);
-                        if (pw > 0 && ph > 0) {
-                            gpuInk.Resize(pw, ph);
-                            // 半紙の画素数が変わるので控えは書き戻せない
-                            state.undo.Clear();
-                        }
-                        InvalidateRect(hWnd, NULL, FALSE);
+                        RelayoutForPaper(hWnd, state, gpuInk);
                         return true;
                     }
                 }

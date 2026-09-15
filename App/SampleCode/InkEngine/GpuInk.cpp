@@ -1141,6 +1141,8 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 
 		m_paperOffsetX = destX;
 		m_paperOffsetY = destY;
+		m_dispWidth = dispW;
+		m_dispHeight = dispH;
 
 		// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
 		if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
@@ -1219,10 +1221,20 @@ void GpuInk::PropagationThreadLoop()
 						int rMaxX = (std::min)(m_width, (std::max)(maxX, m_activeMaxX) + 5);
 						int rMaxY = (std::min)(m_height, (std::max)(maxY, m_activeMaxY) + 5);
 
-						rcDirty.left   = m_paperOffsetX + rMinX;
-						rcDirty.top    = m_paperOffsetY + rMinY;
-						rcDirty.right  = m_paperOffsetX + rMaxX;
-						rcDirty.bottom = m_paperOffsetY + rMaxY;
+						if (m_dispWidth > 0 && m_dispHeight > 0 && m_width > 0 && m_height > 0)
+						{
+							rcDirty.left   = m_paperOffsetX + (rMinX * m_dispWidth) / m_width;
+							rcDirty.top    = m_paperOffsetY + (rMinY * m_dispHeight) / m_height;
+							rcDirty.right  = m_paperOffsetX + ((rMaxX * m_dispWidth + m_width - 1) / m_width);
+							rcDirty.bottom = m_paperOffsetY + ((rMaxY * m_dispHeight + m_height - 1) / m_height);
+						}
+						else
+						{
+							rcDirty.left   = m_paperOffsetX + rMinX;
+							rcDirty.top    = m_paperOffsetY + rMinY;
+							rcDirty.right  = m_paperOffsetX + rMaxX;
+							rcDirty.bottom = m_paperOffsetY + rMaxY;
+						}
 					}
 				}
 			}

@@ -102,6 +102,9 @@ public:
 	// デバッグ用: 現在の墨汁量をスレッドセーフにコピーして取得
 	void GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight);
 
+	int GetWidth() const { return m_width; }
+	int GetHeight() const { return m_height; }
+
 private:
 	void ReleaseResources_NoLock();
 	void ReleaseResources();
@@ -126,6 +129,8 @@ private:
 	int m_height = 0;
 	int m_paperOffsetX = 0;
 	int m_paperOffsetY = 0;
+	int m_dispWidth = 0;
+	int m_dispHeight = 0;
 
 	// Direct2D リソース
 	ID2D1Factory* m_pD2DFactory = nullptr;

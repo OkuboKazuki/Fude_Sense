@@ -529,11 +529,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		int h = g_clientRect.bottom - g_clientRect.top;
 		g_appState.Layout(w, h);
 
-		int pw = RenderUtils::RW(g_appState.ui.rPaper);
-		int ph = RenderUtils::RH(g_appState.ui.rPaper);
-		if (pw > 0 && ph > 0)
+		int canvasW = 0, canvasH = 0;
+		g_appState.paper.GetCanvasSize(canvasW, canvasH);
+		if (canvasW > 0 && canvasH > 0)
 		{
-			g_gpuInk.Initialize(hWnd, pw, ph);
+			g_gpuInk.Initialize(hWnd, canvasW, canvasH);
 		}
 
 		if (!OpenTabletContexts(hWnd))

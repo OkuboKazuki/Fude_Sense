@@ -378,7 +378,11 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
 }
 
 void CanvasView::RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state) {
-    gpuInk.Render(dc, state.ui.rPaper.left, state.ui.rPaper.top);
+    int dispW = RenderUtils::RW(state.ui.rPaper);
+    int dispH = RenderUtils::RH(state.ui.rPaper);
+    if (dispW > 0 && dispH > 0) {
+        gpuInk.Render(dc, state.ui.rPaper.left, state.ui.rPaper.top, dispW, dispH);
+    }
 }
 
 // ---------------------------------------------------------------------------
