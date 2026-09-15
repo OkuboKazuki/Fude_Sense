@@ -25,5 +25,8 @@ private:
     double m_smoothedPressure = 0.0;
     double m_smoothedWidth = 0.0;
     double m_lastMoveAngle = 0.0;
+    double m_smoothedDist = 0.0;
+    double m_smoothedDirX = 0.0;
+    double m_smoothedDirY = 0.0;
     bool m_strokeActive = false;
 };

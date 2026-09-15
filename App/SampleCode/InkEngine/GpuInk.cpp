@@ -1088,7 +1088,7 @@ void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 	double minRadius = std::min(startRadius, endRadius);
 	double maxRadius = std::max(startRadius, endRadius);
 	// 打刻刻み幅: 細い部分や払いの減衰時は特にスタンプを密にして段差（ガタガタ）を排除
-	double step = std::max(0.5, std::min(maxRadius * 0.25, minRadius * 0.4 + 0.3));
+	double step = std::max(0.5, std::min(maxRadius * 0.08, minRadius * 0.4 + 0.3));
 	int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
 
 	for (int i = 0; i <= steps; ++i)

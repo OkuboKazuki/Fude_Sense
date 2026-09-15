@@ -23,7 +23,7 @@ bool WintabAdapter::ConvertPacket(HWND hWnd, WPARAM wParam, LPARAM lParam, Winta
     if (maxPrs <= 0.0) maxPrs = 1024.0;
 
     UINT rawPrs = pkt.pkNormalPressure;
-    UINT minThreshold = static_cast<UINT>(maxPrs * 0.01);
+    UINT minThreshold = 0;//static_cast<UINT>(maxPrs * 0.01);
     if (rawPrs <= minThreshold) {
         rawPrs = 0;
     }
