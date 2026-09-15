@@ -138,8 +138,8 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double absAngleDiff = std::abs(angleDiff);
 
         // 角度（腹方向/刃方向）に応じた払いの調整:
-        // 太くなる方向（腹側）で払った際にも綺麗に細く伸びるよう、角度に応じて払いの減衰指数を補正
-        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(dist, 10.0);
+        // 平滑化した移動距離 m_smoothedDist を使用し、パケットごとの乱高下を抑止
+        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(m_smoothedDist, 8.0);
         double haraiFactor = std::pow(pressureFactor, angleHaraiPower);
 
         // 筆圧が抜ける（離筆に向かう）際は、ペンの腹の太さ影響が穂先の一点に自然収束する
@@ -147,7 +147,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double angleFactor = 1.0 + 0.3 * absAngleDiff * tipConvergence;
         double effectiveTiltFactor = tiltFactor * tipConvergence;
 
-        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
+        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(m_smoothedDist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
 
         double baseMaxWidth = state.brush.GetBaseMaxWidth();
         double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + effectiveTiltFactor * 0.6);
@@ -161,10 +161,13 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             startWidth = rawWidth;
             m_strokeActive = true;
         } else {
-            // 線幅減少時（払い・跳ね）または高速移動時はアルファを大きくして即座に追従
-            double alphaWidth = 0.3;
-            if (rawWidth < m_smoothedWidth || dist > 3.0) {
-                alphaWidth = 0.8;
+            // 線幅変化の追従
+            // 急激な線幅減少（払い・跳ね）時は素直に追従しつつ、通常の運筆では滑らかな粘りを維持
+            double alphaWidth = 0.25;
+            if (rawWidth < m_smoothedWidth) {
+                alphaWidth = 0.45;
+            } else if (dist > 6.0) {
+                alphaWidth = 0.35;
             }
             m_smoothedWidth = m_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
         }
