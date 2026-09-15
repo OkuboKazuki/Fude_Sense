@@ -274,8 +274,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                             state.replay.currentTimeMs = 0;
                         }
                         state.replay.state = ReplayState::Playing;
-                        // 再生中だけタイマを回す。停めるのは WM_TIMER 側。
-                        SetTimer(hWnd, REPLAY_TIMER_ID, 16, NULL);
+                        // 再生中だけタイマを回す。適正間隔（20ms / 50fps）で描画詰まりを防止。
+                        SetTimer(hWnd, REPLAY_TIMER_ID, 20, NULL);
                     }
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();

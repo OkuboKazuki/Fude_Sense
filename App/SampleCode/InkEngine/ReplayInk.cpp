@@ -7,14 +7,14 @@
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 
-// にじみ1段階分の時間。書いているときの拡散スレッドと同じ刻み。
-constexpr DWORD kDiffusionStepMs = 16;
+// にじみ1段階分の時間。適正レートで滑らかさを保ちつつ負荷を半減。
+constexpr DWORD kDiffusionStepMs = 32;
 // 1フレームで進める段数の上限。通常再生時のフレーム落ち連鎖を防ぎ滑らかさを維持。
-constexpr int kMaxDiffusionStepsPerFrame = 2;
+constexpr int kMaxDiffusionStepsPerFrame = 1;
 // 引き直した直後にまとめて進める段数。シーク先でも自然なにじみを即座に乗せる。
-constexpr int kRebuildDiffusionSteps = 8;
+constexpr int kRebuildDiffusionSteps = 4;
 // 画と画の間（空中移動時）でまとめて進める段数の上限。画の切り替わりスパイクを解消。
-constexpr int kMaxGapDiffusionSteps = 10;
+constexpr int kMaxGapDiffusionSteps = 4;
 // 巻き戻し用に控える墨の状態の最大数と、その合計サイズの上限。
 constexpr size_t kMaxCheckpoints = 12;
 constexpr size_t kCheckpointByteBudget = 64u * 1024u * 1024u;
@@ -36,8 +36,10 @@ void ReplayInk::Release() {
     m_fedCount.clear();
     ClearCheckpoints();
     m_revision = 0;
-    m_paperW = 0;
-    m_paperH = 0;
+    m_canvasW = 0;
+    m_canvasH = 0;
+    m_dispW = 0;
+    m_dispH = 0;
     m_timeMs = 0;
     m_ready = false;
     m_openStroke = -1;
@@ -74,27 +76,30 @@ void ReplayInk::CaptureCheckpoint(DWORD timeMs) {
     m_checkpoints.push_back(std::move(cp));
 }
 
-bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int paperW, int paperH, bool scrubbing) {
-    if (paperW <= 0 || paperH <= 0) return false;
+bool ReplayInk::Update(const TrajectorySession& session, DWORD timeMs, int canvasW, int canvasH, int dispW, int dispH, bool scrubbing) {
+    if (canvasW <= 0 || canvasH <= 0) return false;
 
     if (!m_ink) {
         m_ink.reset(new GpuInk());
         m_ready = false;
     }
 
-    // 初回、または半紙の大きさが変わったとき。
-    if (!m_ready || m_paperW != paperW || m_paperH != paperH) {
-        if (!m_ink->Initialize(paperW, paperH, false)) {
+    // 初回、または半紙の固定論理解像度が変わったとき。
+    if (!m_ready || m_canvasW != canvasW || m_canvasH != canvasH) {
+        if (!m_ink->Initialize(canvasW, canvasH, false)) {
             m_ready = false;
             return false;
         }
-        m_paperW = paperW;
-        m_paperH = paperH;
+        m_canvasW = canvasW;
+        m_canvasH = canvasH;
         m_ready = true;
         m_revision = 0;
         m_fedCount.clear();
         ClearCheckpoints();
     }
+
+    m_dispW = dispW;
+    m_dispH = dispH;
 
     const size_t strokeCount = session.GetStrokes().size();
     bool rewound = (timeMs < m_timeMs);
@@ -213,6 +218,10 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
             m_openStroke = static_cast<int>(si);
         }
 
+        double scaleX = (m_dispW > 0 && m_canvasW > 0) ? (static_cast<double>(m_canvasW) / static_cast<double>(m_dispW)) : 1.0;
+        double scaleY = (m_dispH > 0 && m_canvasH > 0) ? (static_cast<double>(m_canvasH) / static_cast<double>(m_dispH)) : 1.0;
+        double scaleAvg = (scaleX + scaleY) * 0.5;
+
         for (size_t i = m_fedCount[si]; i < visible; ++i) {
             const StrokePoint& p = pts[i];
             const StrokePoint& prev = (i > 0) ? pts[i - 1] : p;
@@ -223,10 +232,10 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
             m_ink->SetPressureFactor(p.pressureFactor);
 
             StrokeSegment seg;
-            seg.a = { static_cast<LONG>(prev.normX * m_paperW), static_cast<LONG>(prev.normY * m_paperH) };
-            seg.b = { static_cast<LONG>(p.normX * m_paperW),    static_cast<LONG>(p.normY * m_paperH) };
-            seg.startWidth = prev.width;
-            seg.endWidth = p.width;
+            seg.a = { static_cast<LONG>(std::round(prev.normX * m_canvasW)), static_cast<LONG>(std::round(prev.normY * m_canvasH)) };
+            seg.b = { static_cast<LONG>(std::round(p.normX * m_canvasW)),    static_cast<LONG>(std::round(p.normY * m_canvasH)) };
+            seg.startWidth = prev.width * scaleAvg;
+            seg.endWidth = p.width * scaleAvg;
             seg.dirX = std::cos(p.moveAngleRad);
             seg.dirY = std::sin(p.moveAngleRad);
             seg.dryness = p.dryness;
@@ -251,7 +260,7 @@ void ReplayInk::AdvanceDiffusion(int steps) {
     }
 }
 
-void ReplayInk::Render(HDC dc, int destX, int destY) {
+void ReplayInk::Render(HDC dc, int destX, int destY, int dispW, int dispH) {
     if (!m_ready || !m_ink) return;
-    m_ink->Render(dc, destX, destY);
+    m_ink->Render(dc, destX, destY, dispW, dispH);
 }

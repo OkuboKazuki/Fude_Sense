@@ -601,18 +601,25 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
             }
         }
     } else {
-        // スケーリング補間
+        // スケーリング補間（X方向ルックアップテーブルを事前構築して内側ループの除算を全廃）
+        std::vector<int> sxTable(pw);
+        for (int x = 0; x < pw; ++x) {
+            int sx = (x * inkW) / pw;
+            if (sx >= inkW) sx = inkW - 1;
+            sxTable[x] = sx;
+        }
+
+        const int* srcInkData = ink.data();
         for (int y = 0; y < ph; ++y) {
             int sy = (y * inkH) / ph;
             if (sy >= inkH) sy = inkH - 1;
-            size_t srcRow = static_cast<size_t>(sy) * static_cast<size_t>(inkW);
-            size_t dstRow = static_cast<size_t>(y) * static_cast<size_t>(pw);
+            const int* srcRow = srcInkData + (static_cast<size_t>(sy) * static_cast<size_t>(inkW));
+            size_t dstRowOffset = static_cast<size_t>(y) * static_cast<size_t>(pw);
 
             for (int x = 0; x < pw; ++x) {
-                int sx = (x * inkW) / pw;
-                if (sx >= inkW) sx = inkW - 1;
-                int inkVal = ink[srcRow + sx];
-                size_t dstIdx = dstRow + x;
+                int sx = sxTable[x];
+                int inkVal = srcRow[sx];
+                size_t dstIdx = dstRowOffset + x;
                 if (inkVal <= 0) {
                     dst[dstIdx] = 0x00FFFFFF;
                 } else {
@@ -656,9 +663,11 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
     const auto& strokes = state.trajectory.GetStrokes();
     if (!strokes.empty()) {
         // 1. 再生済みの墨（時系列アニメーション）
+        int canvasW = 0, canvasH = 0;
+        state.paper.GetCanvasSize(canvasW, canvasH);
         bool scrubbing = (state.replay.isDraggingSeekBar || state.replay.isDraggingWaveform);
-        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph, scrubbing)) {
-            g_replayInk.Render(dc, rPaper.left, rPaper.top);
+        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, canvasW, canvasH, pw, ph, scrubbing)) {
+            g_replayInk.Render(dc, rPaper.left, rPaper.top, pw, ph);
         }
 
         // 2. 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト（かすれ・にじみ完全保持）
