@@ -51,6 +51,21 @@ struct PaperModel {
         case PaperType::Hanshi:   outW = 242.0; outH = 333.0; break;
         }
     }
+
+    // キャンバスの内部固定論理解像度（長辺 1200px 基準）
+    // ウィンドウサイズに関わらず固定サイズで保持することで、リサイズ時の劣化を防ぐ
+    void GetCanvasSize(int& outW, int& outH) const {
+        double ratioW = 242.0, ratioH = 333.0;
+        GetAspectRatio(ratioW, ratioH);
+        constexpr int BASE_LONG_EDGE = 1200;
+        if (ratioH >= ratioW) {
+            outH = BASE_LONG_EDGE;
+            outW = static_cast<int>(std::round(BASE_LONG_EDGE * (ratioW / ratioH)));
+        } else {
+            outW = BASE_LONG_EDGE;
+            outH = static_cast<int>(std::round(BASE_LONG_EDGE * (ratioH / ratioW)));
+        }
+    }
 };
 
 // お手本の候補文字数（入力欄から取り込む上限＝タイルの数）

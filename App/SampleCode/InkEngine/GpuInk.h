@@ -79,7 +79,7 @@ public:
 	bool StepPropagation();
 	// 水分が落ち着くまで（または最大ステップ数まで）にじみをまとめて進める
 	int SettleDiffusion(int maxSteps = 200);
-	bool IsInStroke() const { return m_inStroke; }
+	bool IsInStroke() const { return m_inStroke.load(std::memory_order_relaxed); }
 
 	KinematicsInfo GetKinematicsInfo();
 	void UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering);
@@ -101,6 +101,9 @@ public:
 
 	// デバッグ用: 現在の墨汁量をスレッドセーフにコピーして取得
 	void GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight);
+
+	int GetWidth() const { return m_width; }
+	int GetHeight() const { return m_height; }
 
 private:
 	void ReleaseResources_NoLock();
@@ -126,6 +129,8 @@ private:
 	int m_height = 0;
 	int m_paperOffsetX = 0;
 	int m_paperOffsetY = 0;
+	int m_dispWidth = 0;
+	int m_dispHeight = 0;
 
 	// Direct2D リソース
 	ID2D1Factory* m_pD2DFactory = nullptr;
@@ -154,7 +159,7 @@ private:
 	std::mutex m_mutex;
 	std::mutex m_kinematicsMutex;
 
-	bool m_inStroke = false;
+	std::atomic<bool> m_inStroke{ false };
 	POINT m_lastPt = { 0, 0 };
 
 	double m_lastSpeed = 0.0;

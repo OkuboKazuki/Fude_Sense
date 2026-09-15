@@ -25,15 +25,13 @@ public:
     ~ReplayInk();
 
     // timeMs 時点までの墨を用意する。
-    // 時刻が進んだときは差分のセグメントを描き足すだけ。巻き戻したときは、
-    // 手前の控え（チェックポイント）まで書き戻してから、そこだけ引き直す。
-    // scrubbing はシークバー等をドラッグ中かどうか。ドラッグ中は毎フレーム
-    // 引き直しが走るので、重い処理（にじみのまとめ進めと控えの取得）を省く。
-    bool Update(const TrajectorySession& session, DWORD timeMs, int paperW, int paperH, bool scrubbing);
+    // canvasW, canvasH: 内部固定論理解像度（GpuInkと同じ）
+    // dispW, dispH: 画面表示サイズ（線幅スケーリング用）
+    bool Update(const TrajectorySession& session, DWORD timeMs, int canvasW, int canvasH, int dispW, int dispH, bool scrubbing);
 
     // 半紙の位置へ墨を転送する。GpuInk の墨テクスチャは不透明なので、
     // 下敷きやゴースト筆跡はこの後に重ねる。
-    void Render(HDC dc, int destX, int destY);
+    void Render(HDC dc, int destX, int destY, int dispW = -1, int dispH = -1);
 
     void Release();
 
@@ -57,8 +55,10 @@ private:
 
     std::unique_ptr<GpuInk> m_ink;
     unsigned m_revision = 0;            // 流し込み済みの記録リビジョン
-    int m_paperW = 0;
-    int m_paperH = 0;
+    int m_canvasW = 0;                  // 内部固定論理解像度
+    int m_canvasH = 0;
+    int m_dispW = 0;                    // 画面表示解像度
+    int m_dispH = 0;
     DWORD m_timeMs = 0;                 // 流し込み済みの時刻
     bool m_ready = false;
     std::vector<size_t> m_fedCount;     // 画ごとの、流し込み済み記録点数
@@ -68,4 +68,5 @@ private:
     size_t m_checkpointBytes = 0;
     DWORD m_checkpointIntervalMs = 0;
     bool m_wasScrubbing = false;
+    bool m_settled = false;
 };

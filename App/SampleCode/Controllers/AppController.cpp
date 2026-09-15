@@ -42,13 +42,6 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 
 void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk) {
     state.Layout(width, height);
-    int pw = RW(state.ui.rPaper);
-    int ph = RH(state.ui.rPaper);
-    if (pw > 0 && ph > 0) {
-        gpuInk.Resize(pw, ph);
-        // 半紙の画素数が変わると控えを書き戻せないので手放す
-        state.undo.Clear();
-    }
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -120,12 +113,21 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
 
     state.ui.paperOnly = on;
 
+// 用紙種類・縦横比が変わった際の後始末。
+// 新しい用紙の固定論理解像度で GpuInk を再初期化し、白紙にする。
+static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
     state.Layout(rc.right - rc.left, rc.bottom - rc.top);
-    int pw = RW(state.ui.rPaper);
-    int ph = RH(state.ui.rPaper);
-    if (pw > 0 && ph > 0) gpuInk.Resize(pw, ph);
+
+    int canvasW = 0, canvasH = 0;
+    state.paper.GetCanvasSize(canvasW, canvasH);
+    if (canvasW > 0 && canvasH > 0) {
+        gpuInk.Initialize(canvasW, canvasH);
+        state.undo.Clear();
+        state.trajectory.Clear();
+        state.replay.Reset();
+    }
 
     // 墨・記録・控えを消し、ペンが接地したままでも運筆を始めないようロックする
     ClearAllInk(hWnd, state, gpuInk);
@@ -303,8 +305,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                             state.replay.currentTimeMs = 0;
                         }
                         state.replay.state = ReplayState::Playing;
-                        // 再生中だけタイマを回す。停めるのは WM_TIMER 側。
-                        SetTimer(hWnd, REPLAY_TIMER_ID, 16, NULL);
+                        // 再生中だけタイマを回す。適正間隔（20ms / 50fps）で描画詰まりを防止。
+                        SetTimer(hWnd, REPLAY_TIMER_ID, 20, NULL);
                     }
                     state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
@@ -411,6 +413,17 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
             } else if (ui.leftTab == LeftTab::Paper) {
+                // 用紙種類切り替え
+                for (int i = 0; i < 4; ++i) {
+                    if (PtIn(ui.rPaperTile[i], pt)) {
+                        state.paper.type = static_cast<PaperType>(i);
+                        // マスの割り付けが別物になるので、配置済みのお手本は破棄する
+                        state.otehon.ClearCellChars();
+                        RelayoutForPaper(hWnd, state, gpuInk);
+                        return true;
+                    }
+                }
+
                 // 下敷き・升目切り替え
                 for (int i = 0; i < GRID_PATTERN_COUNT; ++i) {
                     if (PtIn(ui.rGridTile[i], pt)) {

@@ -361,7 +361,11 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
 }
 
 void CanvasView::RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state) {
-    gpuInk.Render(dc, state.ui.rPaper.left, state.ui.rPaper.top);
+    int dispW = RenderUtils::RW(state.ui.rPaper);
+    int dispH = RenderUtils::RH(state.ui.rPaper);
+    if (dispW > 0 && dispH > 0) {
+        gpuInk.Render(dc, state.ui.rPaper.left, state.ui.rPaper.top, dispW, dispH);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -488,8 +492,8 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
     const size_t totalPixels = static_cast<size_t>(pw) * static_cast<size_t>(ph);
     uint32_t* dst = layer.bits;
 
-    // 1. 各画素の筆圧マップ (pressureMap) を構築
-    std::vector<float> pressureMap(totalPixels, -1.0f);
+    // 1. 各画素の筆圧マップ (pressureMap: 0~100, 255=未設定) を構築 (メモリ削減 & キャッシュ効率化)
+    std::vector<uint8_t> pressureMap(totalPixels, 255);
     const auto& strokes = session.GetStrokes();
 
     for (const auto& s : strokes) {
@@ -505,14 +509,15 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
             double y2 = p.normY * ph;
             double prs1 = prev.pressure;
             double prs2 = p.pressure;
-            double rad1 = (std::max)(2.0, prev.width * 0.5 + 4.0);
-            double rad2 = (std::max)(2.0, p.width * 0.5 + 4.0);
+            double rad1 = (std::max)(2.0, prev.width * 0.5 + 3.0);
+            double rad2 = (std::max)(2.0, p.width * 0.5 + 3.0);
 
             double dx = x2 - x1;
             double dy = y2 - y1;
             double dist = std::hypot(dx, dy);
 
-            double step = (std::max)(1.0, (std::min)(rad1, rad2) * 0.4);
+            // ステップ刻みを適正化（過剰な重複計算を削減）
+            double step = (std::max)(2.0, (std::min)(rad1, rad2) * 0.8);
             int steps = static_cast<int>(std::max(1.0, std::ceil(dist / step)));
 
             for (int k = 0; k <= steps; ++k) {
@@ -528,17 +533,19 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
                 int minY = (std::max)(0, static_cast<int>(std::floor(cy - r)));
                 int maxY = (std::min)(ph - 1, static_cast<int>(std::ceil(cy + r)));
 
-                float fPrs = static_cast<float>(prs);
+                double clampedPrs = (std::max)(0.0, (std::min)(100.0, prs * 100.0));
+                uint8_t uPrs = static_cast<uint8_t>(clampedPrs);
 
                 for (int py = minY; py <= maxY; ++py) {
                     double dY = static_cast<double>(py) - cy;
+                    double dYSq = dY * dY;
                     size_t rowOffset = static_cast<size_t>(py) * static_cast<size_t>(pw);
                     for (int px = minX; px <= maxX; ++px) {
                         double dX = static_cast<double>(px) - cx;
-                        if (dX * dX + dY * dY <= rSq) {
+                        if (dX * dX + dYSq <= rSq) {
                             size_t idx = rowOffset + px;
-                            if (pressureMap[idx] < 0.0f || fPrs > pressureMap[idx]) {
-                                pressureMap[idx] = fPrs;
+                            if (pressureMap[idx] == 255 || uPrs > pressureMap[idx]) {
+                                pressureMap[idx] = uPrs;
                             }
                         }
                     }
@@ -548,6 +555,13 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
     }
 
     // 2. 墨テクスチャと筆圧マップを融合して DIBSection へ一括書き込み
+    // （筆圧カラーの事前ルックアップテーブルを作成して高速化）
+    COLORREF prsTable[101];
+    for (int i = 0; i <= 100; ++i) {
+        prsTable[i] = RenderUtils::GetPressureColor(static_cast<double>(i) / 100.0);
+    }
+    COLORREF defaultPrsColor = prsTable[50];
+
     if (inkW == pw && inkH == ph && ink.size() == totalPixels) {
         for (size_t i = 0; i < totalPixels; ++i) {
             int inkVal = ink[i];
@@ -557,14 +571,12 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
                 int clamped = (inkVal > 255) ? 255 : inkVal;
                 double ratio = static_cast<double>(clamped) / 255.0;
 
-                // その画素の筆圧に応じたカラーを取得
-                double prs = (pressureMap[i] >= 0.0f) ? static_cast<double>(pressureMap[i]) : 0.5;
-                COLORREF prsColor = RenderUtils::GetPressureColor(prs);
+                uint8_t uPrs = pressureMap[i];
+                COLORREF prsColor = (uPrs <= 100) ? prsTable[uPrs] : defaultPrsColor;
                 int baseR = GetRValue(prsColor);
                 int baseG = GetGValue(prsColor);
                 int baseB = GetBValue(prsColor);
 
-                // 墨の濃淡・かすれ・にじみに応じて白から筆圧カラーへ階調変換
                 int r = 255 - static_cast<int>((255 - baseR) * ratio);
                 int g = 255 - static_cast<int>((255 - baseG) * ratio);
                 int b = 255 - static_cast<int>((255 - baseB) * ratio);
@@ -572,26 +584,33 @@ void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, i
             }
         }
     } else {
-        // スケーリング補間
+        // スケーリング補間（X方向ルックアップテーブルを事前構築して内側ループの除算を全廃）
+        std::vector<int> sxTable(pw);
+        for (int x = 0; x < pw; ++x) {
+            int sx = (x * inkW) / pw;
+            if (sx >= inkW) sx = inkW - 1;
+            sxTable[x] = sx;
+        }
+
+        const int* srcInkData = ink.data();
         for (int y = 0; y < ph; ++y) {
             int sy = (y * inkH) / ph;
             if (sy >= inkH) sy = inkH - 1;
-            size_t srcRow = static_cast<size_t>(sy) * static_cast<size_t>(inkW);
-            size_t dstRow = static_cast<size_t>(y) * static_cast<size_t>(pw);
+            const int* srcRow = srcInkData + (static_cast<size_t>(sy) * static_cast<size_t>(inkW));
+            size_t dstRowOffset = static_cast<size_t>(y) * static_cast<size_t>(pw);
 
             for (int x = 0; x < pw; ++x) {
-                int sx = (x * inkW) / pw;
-                if (sx >= inkW) sx = inkW - 1;
-                int inkVal = ink[srcRow + sx];
-                size_t dstIdx = dstRow + x;
+                int sx = sxTable[x];
+                int inkVal = srcRow[sx];
+                size_t dstIdx = dstRowOffset + x;
                 if (inkVal <= 0) {
                     dst[dstIdx] = 0x00FFFFFF;
                 } else {
                     int clamped = (inkVal > 255) ? 255 : inkVal;
                     double ratio = static_cast<double>(clamped) / 255.0;
 
-                    double prs = (pressureMap[dstIdx] >= 0.0f) ? static_cast<double>(pressureMap[dstIdx]) : 0.5;
-                    COLORREF prsColor = RenderUtils::GetPressureColor(prs);
+                    uint8_t uPrs = pressureMap[dstIdx];
+                    COLORREF prsColor = (uPrs <= 100) ? prsTable[uPrs] : defaultPrsColor;
                     int baseR = GetRValue(prsColor);
                     int baseG = GetGValue(prsColor);
                     int baseB = GetBValue(prsColor);
@@ -627,9 +646,11 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
     const auto& strokes = state.trajectory.GetStrokes();
     if (!strokes.empty()) {
         // 1. 再生済みの墨（時系列アニメーション）
+        int canvasW = 0, canvasH = 0;
+        state.paper.GetCanvasSize(canvasW, canvasH);
         bool scrubbing = (state.replay.isDraggingSeekBar || state.replay.isDraggingWaveform);
-        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, pw, ph, scrubbing)) {
-            g_replayInk.Render(dc, rPaper.left, rPaper.top);
+        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, canvasW, canvasH, pw, ph, scrubbing)) {
+            g_replayInk.Render(dc, rPaper.left, rPaper.top, pw, ph);
         }
 
         // 2. 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト（かすれ・にじみ完全保持）

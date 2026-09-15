@@ -133,7 +133,7 @@ void AppState::Layout(int w, int h) {
         int btnH = 46;
         ui.rReplayResetBtn = { repLeft + 16, btnY, repLeft + 16 + 42, btnY + btnH };
         ui.rReplayPrevBtn  = { ui.rReplayResetBtn.right + 8, btnY, ui.rReplayResetBtn.right + 8 + 44, btnY + btnH };
-        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, btnY, ui.rReplayPrevBtn.right + 8 + 68, btnY + btnH };
+        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, btnY, ui.rReplayPrevBtn.right + 8 + 88, btnY + btnH };
         ui.rReplayNextBtn  = { ui.rReplayPlayBtn.right + 8, btnY, ui.rReplayPlayBtn.right + 8 + 44, btnY + btnH };
 
         int spdW = 48;

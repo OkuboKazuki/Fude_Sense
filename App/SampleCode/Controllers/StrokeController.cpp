@@ -12,9 +12,6 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     m_smoothedPressure = 0.0;
     m_smoothedWidth = 0.0;
     m_lastTime = 0;
-    m_smoothedDist = 0.0;
-    m_smoothedDirX = 0.0;
-    m_smoothedDirY = 0.0;
     if (gpuInk.IsInStroke()) {
         gpuInk.EndStroke();
     }
@@ -141,8 +138,8 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double absAngleDiff = std::abs(angleDiff);
 
         // 角度（腹方向/刃方向）に応じた払いの調整:
-        // 平滑化した移動距離 m_smoothedDist を使用し、パケットごとの乱高下を抑止
-        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(m_smoothedDist, 8.0);
+        // 太くなる方向（腹側）で払った際にも綺麗に細く伸びるよう、角度に応じて払いの減衰指数を補正
+        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(dist, 10.0);
         double haraiFactor = std::pow(pressureFactor, angleHaraiPower);
 
         // 筆圧が抜ける（離筆に向かう）際は、ペンの腹の太さ影響が穂先の一点に自然収束する
@@ -150,7 +147,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double angleFactor = 1.0 + 0.3 * absAngleDiff * tipConvergence;
         double effectiveTiltFactor = tiltFactor * tipConvergence;
 
-        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(m_smoothedDist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
+        double tomeFactor = 1.0 + 0.1 * (1.0 - (std::min)(dist / 3.0, 1.0)) * std::pow(pressureFactor, 0.8);
 
         double baseMaxWidth = state.brush.GetBaseMaxWidth();
         double rawWidth = baseMaxWidth * haraiFactor * tomeFactor * angleFactor * (1.0 + effectiveTiltFactor * 0.6);
@@ -164,41 +161,54 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             startWidth = rawWidth;
             m_strokeActive = true;
         } else {
-            // 線幅変化の追従
-            // 急激な線幅減少（払い・跳ね）時は素直に追従しつつ、通常の運筆では滑らかな粘りを維持
-            double alphaWidth = 0.25;
-            if (rawWidth < m_smoothedWidth) {
-                alphaWidth = 0.45;
-            } else if (dist > 6.0) {
-                alphaWidth = 0.35;
+            // 線幅減少時（払い・跳ね）または高速移動時はアルファを大きくして即座に追従
+            double alphaWidth = 0.3;
+            if (rawWidth < m_smoothedWidth || dist > 3.0) {
+                alphaWidth = 0.8;
             }
             m_smoothedWidth = m_smoothedWidth * (1.0 - alphaWidth) + rawWidth * alphaWidth;
         }
 
         // 運筆に伴うインク・水分の物理消費
-        // アーカイブ記録より先に行う。直後の seg.dryness はこの消費を織り込んだ
-        // 値を読むため、順序を入れ替えるとかすれが1セグメント分遅れる。
+        // かすれ前（残量45%以上）の書ける量は完全に維持しつつ、
+        // かすれ中（紙への付着量が減る状態）は物理消費を穏やかにしてカスレの持続距離を伸ばす
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
-        double consumeAmount = stepDist * widthRatio * 0.00015;
+        double drynessFactor = 1.0 - state.ink.GetDryness() * 0.45;
+        double consumeAmount = stepDist * widthRatio * 0.00022 * drynessFactor;
         state.ink.Consume(consumeAmount);
 
         // 運筆データアーカイブへ記録
         state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed,
             pressureFactor, state.ink.GetDryness(), m_lastMoveAngle);
 
+        // 内部固定論理解像度へのスケーリング変換
+        int inkW = gpuInk.GetWidth();
+        int inkH = gpuInk.GetHeight();
+        int paperW = RenderUtils::RW(rPaper);
+        int paperH = RenderUtils::RH(rPaper);
+        double scaleX = (paperW > 0 && inkW > 0) ? (static_cast<double>(inkW) / static_cast<double>(paperW)) : 1.0;
+        double scaleY = (paperH > 0 && inkH > 0) ? (static_cast<double>(inkH) / static_cast<double>(paperH)) : 1.0;
+        double scaleAvg = (scaleX + scaleY) * 0.5;
+
         StrokeSegment seg;
-        seg.a = oldPaperPt;
-        seg.b = paperPt;
-        seg.startWidth = startWidth;
-        seg.endWidth = m_smoothedWidth;
+        seg.a = {
+            static_cast<LONG>(std::round(oldPaperPt.x * scaleX)),
+            static_cast<LONG>(std::round(oldPaperPt.y * scaleY))
+        };
+        seg.b = {
+            static_cast<LONG>(std::round(paperPt.x * scaleX)),
+            static_cast<LONG>(std::round(paperPt.y * scaleY))
+        };
+        seg.startWidth = startWidth * scaleAvg;
+        seg.endWidth = m_smoothedWidth * scaleAvg;
         seg.dirX = std::cos(m_lastMoveAngle);
         seg.dirY = std::sin(m_lastMoveAngle);
         seg.dryness = state.ink.GetDryness();
         seg.inkAlpha = 255;
         gpuInk.DrawSegmentLinear(seg);
 
-        // セグメント周辺の Dirty Rect（軸平行境界ボックス + マージン）のみを局所更新
+        // セグメント周辺の Dirty Rect（軸平行境界ボックス + マージン）を累積
         double maxWidth = (std::max)(startWidth, m_smoothedWidth);
         int pad = static_cast<int>(std::ceil(maxWidth * 1.5 + 24.0));
         RECT rcDirty;
@@ -206,11 +216,37 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         rcDirty.top    = (std::max)(rPaper.top,    (std::min)(m_ptOld.y, clientPt.y) - pad);
         rcDirty.right  = (std::min)(rPaper.right,  (std::max)(m_ptOld.x, clientPt.x) + pad);
         rcDirty.bottom = (std::min)(rPaper.bottom, (std::max)(m_ptOld.y, clientPt.y) + pad);
-        InvalidateRect(hWnd, &rcDirty, FALSE);
 
-        // 墨消費に伴う硯パネルの残量表示を更新
+        if (!m_hasPendingDirty) {
+            m_accumDirty = rcDirty;
+            m_hasPendingDirty = true;
+        } else {
+            UnionRect(&m_accumDirty, &m_accumDirty, &rcDirty);
+        }
+
+        // 描画更新要求（InvalidateRect）の頻度を約120Hz（8ms間隔）にレート制御
+        // （物理スタンプ投入は240Hzで即時実行しつつ、再描画の過剰呼び出しを抑制）
+        constexpr DWORD kMinInvalidateIntervalMs = 8;
+        DWORD now = (event.time != 0) ? event.time : GetTickCount();
+        if (now - m_lastInvalidateTick >= kMinInvalidateIntervalMs) {
+            InvalidateRect(hWnd, &m_accumDirty, FALSE);
+            m_accumDirty = { 0, 0, 0, 0 };
+            m_hasPendingDirty = false;
+            m_lastInvalidateTick = now;
+        }
+
+        // 墨消費に伴う硯パネル（液面＋墨残量テキスト）をリアルタイムに滑らかに更新（約30Hz / 33ms間隔）
         if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
-            InvalidateRect(hWnd, &state.ui.rInkStoneLarge, FALSE);
+            if (now - m_lastInkStoneInvalidateTick >= 33) {
+                RECT rcStoneArea = {
+                    state.ui.rInkStoneLarge.left,
+                    state.ui.rInkStoneLarge.top - 36,
+                    state.ui.rInkStoneLarge.right,
+                    state.ui.rInkStoneLarge.bottom
+                };
+                InvalidateRect(hWnd, &rcStoneArea, FALSE);
+                m_lastInkStoneInvalidateTick = now;
+            }
         }
         // 紙だけ表示では残量を「墨を補充」ボタンに出している
         if (state.ui.paperOnly) {
@@ -218,10 +254,24 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
     } else {
         bool wasActive = m_strokeActive;
+        if (m_hasPendingDirty) {
+            InvalidateRect(hWnd, &m_accumDirty, FALSE);
+            m_accumDirty = { 0, 0, 0, 0 };
+            m_hasPendingDirty = false;
+        }
         ResetStroke(gpuInk, &state);
         if (wasActive) {
             // ストローク終了時のみ、半紙全体を更新してにじみ・終筆を反映
             InvalidateRect(hWnd, &rPaper, FALSE);
+            if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
+                RECT rcStoneArea = {
+                    state.ui.rInkStoneLarge.left,
+                    state.ui.rInkStoneLarge.top - 36,
+                    state.ui.rInkStoneLarge.right,
+                    state.ui.rInkStoneLarge.bottom
+                };
+                InvalidateRect(hWnd, &rcStoneArea, FALSE);
+            }
         }
     }
 

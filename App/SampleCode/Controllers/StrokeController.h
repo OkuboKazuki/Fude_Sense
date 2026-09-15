@@ -29,4 +29,9 @@ private:
     double m_smoothedDirX = 0.0;
     double m_smoothedDirY = 0.0;
     bool m_strokeActive = false;
+
+    DWORD m_lastInvalidateTick = 0;
+    DWORD m_lastInkStoneInvalidateTick = 0;
+    RECT m_accumDirty = { 0, 0, 0, 0 };
+    bool m_hasPendingDirty = false;
 };

@@ -60,7 +60,7 @@ static constexpr double KASURE_LANE_WIDTH_PX = 2.6;    // 毛束 1 本ぶんの�
 static constexpr double KASURE_GRAIN_SCALE_PX = 2.2;   // 紙目の粒の大きさ (px)
 static constexpr double KASURE_BRISTLE_WEIGHT = 0.62;  // 毛束マスクの寄与
 static constexpr double KASURE_GRAIN_WEIGHT = 0.38;    // 紙目マスクの寄与 (合計 1.0)
-static constexpr double KASURE_THRESHOLD_SCALE = 0.85; // 乾き切っても残る墨の余地
+static constexpr double KASURE_THRESHOLD_SCALE = 1.0;  // 乾き切った(0%)時は完全に墨が出なくなる
 
 static inline double KasureHash(uint32_t h)
 {
@@ -879,6 +879,8 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 {
 	if (radius <= 0.0) radius = 0.5;
 	if (m_ink.empty() || m_pixelBuffer.empty()) return;
+	// 墨が完全に切れている（乾き切っている）場合は描画しない
+	if (m_strokeDryness >= 1.0 || alpha == 0) return;
 
 	uint32_t* pixels = m_pixelBuffer.data();
 
@@ -1049,6 +1051,9 @@ void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 	// StampBrush が参照する乾き具合を更新（水分の付着量を決める）
 	m_strokeDryness = seg.dryness;
 
+	// 墨残量が完全に切れている場合はスタンプ計算をスキップ
+	if (seg.dryness >= 1.0 || seg.inkAlpha == 0) return;
+
 	int dx = b.x - a.x;
 	int dy = b.y - a.y;
 	double dist = std::hypot(static_cast<double>(dx), static_cast<double>(dy));
@@ -1136,6 +1141,8 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 
 		m_paperOffsetX = destX;
 		m_paperOffsetY = destY;
+		m_dispWidth = dispW;
+		m_dispHeight = dispH;
 
 		// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
 		if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
@@ -1189,11 +1196,47 @@ void GpuInk::PropagationThreadLoop()
 	while (m_runPropagation.load())
 	{
 		bool updated = false;
+		RECT rcDirty = { 0, 0, 0, 0 };
+
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
-			if (m_width > 0 && m_height > 0 && !m_ink.empty())
+			// 運筆中（メインスレッド）のスタンプ描画を最優先するため try_to_lock を使用
+			// ロック競合時はブロックせずにスキップし、運筆レイテンシへの影響を回避しながら
+			// 運筆中もリアルタイムに墨汁浸透・物理にじみを進める
+			std::unique_lock<std::mutex> lock(m_mutex, std::try_to_lock);
+			if (lock.owns_lock())
 			{
-				updated = PropagateInk_NoLock();
+				if (m_width > 0 && m_height > 0 && !m_ink.empty())
+				{
+					int minX = m_activeMinX;
+					int minY = m_activeMinY;
+					int maxX = m_activeMaxX;
+					int maxY = m_activeMaxY;
+
+					updated = PropagateInk_NoLock();
+
+					if (updated)
+					{
+						int rMinX = (std::max)(0, (std::min)(minX, m_activeMinX) - 4);
+						int rMinY = (std::max)(0, (std::min)(minY, m_activeMinY) - 4);
+						int rMaxX = (std::min)(m_width, (std::max)(maxX, m_activeMaxX) + 5);
+						int rMaxY = (std::min)(m_height, (std::max)(maxY, m_activeMaxY) + 5);
+
+						if (m_dispWidth > 0 && m_dispHeight > 0 && m_width > 0 && m_height > 0)
+						{
+							rcDirty.left   = m_paperOffsetX + (rMinX * m_dispWidth) / m_width;
+							rcDirty.top    = m_paperOffsetY + (rMinY * m_dispHeight) / m_height;
+							rcDirty.right  = m_paperOffsetX + ((rMaxX * m_dispWidth + m_width - 1) / m_width);
+							rcDirty.bottom = m_paperOffsetY + ((rMaxY * m_dispHeight + m_height - 1) / m_height);
+						}
+						else
+						{
+							rcDirty.left   = m_paperOffsetX + rMinX;
+							rcDirty.top    = m_paperOffsetY + rMinY;
+							rcDirty.right  = m_paperOffsetX + rMaxX;
+							rcDirty.bottom = m_paperOffsetY + rMaxY;
+						}
+					}
+				}
 			}
 		}
 
@@ -1204,17 +1247,9 @@ void GpuInk::PropagationThreadLoop()
 			if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
 			if (g_mainWnd && IsWindow(g_mainWnd))
 			{
-				RECT rcPaper;
+				if (rcDirty.right > rcDirty.left && rcDirty.bottom > rcDirty.top)
 				{
-					std::lock_guard<std::mutex> lock(m_mutex);
-					rcPaper.left = m_paperOffsetX;
-					rcPaper.top = m_paperOffsetY;
-					rcPaper.right = m_paperOffsetX + m_width;
-					rcPaper.bottom = m_paperOffsetY + m_height;
-				}
-				if (rcPaper.right > rcPaper.left && rcPaper.bottom > rcPaper.top)
-				{
-					InvalidateRect(g_mainWnd, &rcPaper, FALSE);
+					InvalidateRect(g_mainWnd, &rcDirty, FALSE);
 				}
 				else
 				{
