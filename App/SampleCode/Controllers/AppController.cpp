@@ -103,6 +103,20 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 
     int canvasW = 0, canvasH = 0;
     state.paper.GetCanvasSize(canvasW, canvasH);
+    // 紙だけ表示の半紙は画面に合わせた横長なので、縦長の固定解像度のままだと
+    // 墨が横へ引き伸ばされる。長辺をそろえたまま、表示中の半紙と同じ縦横比にする。
+    int pw = RW(state.ui.rPaper);
+    int ph = RH(state.ui.rPaper);
+    if (state.ui.paperOnly && pw > 0 && ph > 0) {
+        int longEdge = (std::max)(canvasW, canvasH);
+        if (pw >= ph) {
+            canvasW = longEdge;
+            canvasH = static_cast<int>(std::round(static_cast<double>(longEdge) * ph / pw));
+        } else {
+            canvasH = longEdge;
+            canvasW = static_cast<int>(std::round(static_cast<double>(longEdge) * pw / ph));
+        }
+    }
     if (canvasW > 0 && canvasH > 0) {
         gpuInk.Initialize(canvasW, canvasH);
         state.undo.Clear();

@@ -83,15 +83,20 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
     // 運筆中など半紙専用の局所更新で、モーダルや左メニュー、硯パネル、木目余白と交差しない場合のみ背景を再描画しない
     // （硯パネルは透明テキスト「墨残量: ○○%」を描画するため、木目背景の再描画・クリアが必要）
+    // 紙だけ表示では解析パネルが無いので、常に書いている墨を出す。
+    bool showReplay = (state.ui.leftTab == LeftTab::Analysis && !state.ui.paperOnly);
+
     if (isFullRedraw || hitModal || hitLeft || hitRight || !hitPaper) {
-        // 1. 和風木製机（文机）の背景描画
-        RenderUtils::DrawWoodDesk(memDC, width, height);
+        // 1. 和風木製机（文机）の背景描画。紙だけ表示では半紙が画面を覆うので描かない。
+        if (!state.ui.paperOnly) {
+            RenderUtils::DrawWoodDesk(memDC, width, height);
+        }
 
         // 2. 半紙背景
         CanvasView::DrawBackground(memDC, state);
 
         // 3. 墨汁の描画（解析タブ表示中はリプレイ墨＆3D筆姿勢、通常時は GPU 墨汁テクスチャ）
-        if (state.ui.leftTab == LeftTab::Analysis) {
+        if (showReplay) {
             CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
         } else {
             CanvasView::RenderInk(memDC, gpuInk, state);
@@ -102,6 +107,13 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
         // 4. 下敷き・升目格子ガイド
         CanvasView::DrawGrid(memDC, state);
+
+        if (state.ui.paperOnly) {
+            // 5. 紙だけ表示。操作は半紙の右の「墨を補充」「通常表示に戻る」「筆跡を消す」だけ。
+            InkStoneView::DrawPaperOnlyBar(memDC, state);
+            BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
+            return;
+        }
 
         // 5. 右側 硯パネル
         InkStoneView::Draw(memDC, state);
@@ -121,7 +133,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
         // 局所更新パス（運筆中の半紙専用高速描画パス）
         if (hitPaper) {
             CanvasView::DrawBackground(memDC, state);
-            if (state.ui.leftTab == LeftTab::Analysis) {
+            if (showReplay) {
                 CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
             } else {
                 CanvasView::RenderInk(memDC, gpuInk, state);
