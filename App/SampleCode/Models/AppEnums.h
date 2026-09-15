@@ -55,9 +55,16 @@ enum class GridColorTheme {
     InkGray         // 薄墨点線
 };
 
+// 画面状態（タイトル画面 / スタジオ画面）
+enum class AppScreen {
+    Title,      // タイトル・モード選択画面
+    Studio      // 習字制作ワークスペース
+};
+
 // ツールバー・ナビゲーションボタン
 enum class TbButton {
     None,
+    Home,           // タイトル画面へ戻る
     NavToggle,
     Brush,
     Paper,
@@ -83,6 +90,8 @@ constexpr double INK_MAX_VALUE = 1.0;
 // 用紙の縦横比によって仮想的な行数が伸びる。その上限を与える。
 constexpr int MAX_GRID_CELLS = 32;
 
-// リプレイ再生用タイマの ID。再生中だけ回すため、
-// 開始側（コントローラ）と停止側（WM_TIMER）の両方から触る。
-constexpr UINT_PTR REPLAY_TIMER_ID = 101;
+// 各種タイマの ID
+constexpr UINT_PTR REPLAY_TIMER_ID = 101;       // 運筆再生用
+constexpr UINT_PTR TRANSITION_TIMER_ID = 102;   // タイトル→スタジオ画面遷移用
+constexpr UINT_PTR TITLE_ANIM_TIMER_ID = 103;   // タイトル画面ブレスアニメーション用
+

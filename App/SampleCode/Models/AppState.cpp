@@ -64,7 +64,8 @@ void AppState::Layout(int w, int h) {
 
     // 1. フローティングメニュー & メニュー開閉ボタン（大きめサイズ・一回り拡大）
     if (!ui.isSubPanelOpen) {
-        ui.rTbNavToggle = { 20, 20, 84, 72 };
+        ui.rTbHomeBtn = { 20, 20, 72, 72 };
+        ui.rTbNavToggle = { 80, 20, 144, 72 };
         ui.rSub = { 0, 0, 0, 0 };
         ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = { 0, 0, 0, 0 };
     } else {
@@ -73,10 +74,11 @@ void AppState::Layout(int w, int h) {
         if (menuH < 600) menuH = 600;
         ui.rSub = { 20, 20, 20 + menuW, 20 + menuH };
 
-        ui.rTbNavToggle = { ui.rSub.left + 14, ui.rSub.top + 14, ui.rSub.left + 74, ui.rSub.top + 66 };
+        ui.rTbHomeBtn = { ui.rSub.left + 16, ui.rSub.top + 14, ui.rSub.left + 64, ui.rSub.top + 66 };
+        ui.rTbNavToggle = { ui.rSub.right - 64, ui.rSub.top + 14, ui.rSub.right - 16, ui.rSub.top + 66 };
 
-        int tabStartX = ui.rTbNavToggle.right + 10;
-        int tabAvailW = ui.rSub.right - 14 - tabStartX;
+        int tabStartX = ui.rTbHomeBtn.right + 12;
+        int tabAvailW = (ui.rTbNavToggle.left - 12) - tabStartX;
         int tabW = (tabAvailW - 4 * 8) / 5;
         int tabH = 52;
         int tabY = ui.rSub.top + 14;

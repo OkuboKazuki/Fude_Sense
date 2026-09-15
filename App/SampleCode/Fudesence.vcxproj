@@ -126,6 +126,7 @@
     <ClInclude Include="Views\MainView.h" />
     <ClInclude Include="Views\ModalView.h" />
     <ClInclude Include="Views\RenderUtils.h" />
+    <ClInclude Include="Views\TitleView.h" />
     <ClInclude Include="WacomMT_Scribble.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouch.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouchTypes.h" />
@@ -155,6 +156,7 @@
     <ClCompile Include="Views\MainView.cpp" />
     <ClCompile Include="Views\ModalView.cpp" />
     <ClCompile Include="Views\RenderUtils.cpp" />
+    <ClCompile Include="Views\TitleView.cpp" />
     <ClCompile Include="WacomMT_Scribble.cpp" />
     <ClCompile Include="Wacom_Feel_SDK\src\cpp\WacomMultiTouch.cpp" />
   </ItemGroup>

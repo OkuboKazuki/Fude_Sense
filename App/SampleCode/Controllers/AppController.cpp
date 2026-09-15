@@ -130,6 +130,22 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
 
+    // 0. タイトル画面でのクリック / タップ処理
+    if (state.currentScreen == AppScreen::Title) {
+        if (state.isTransitioning) return true;
+
+        state.pendingStartTab = LeftTab::Brush;
+
+        // 墨染めフェード遷移を開始
+        state.isTransitioning = true;
+        state.transitionStartTime = GetTickCount();
+        state.transitionProgress = 0.0f;
+        SetTimer(hWnd, TRANSITION_TIMER_ID, 16, NULL);
+        KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
+        InvalidateRect(hWnd, NULL, FALSE);
+        return true;
+    }
+
     // 入力欄以外を押したら文字入力を終える
     if (state.otehon.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
         state.otehon.isTyping = false;
@@ -182,6 +198,19 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
+        return true;
+    }
+
+    // 1.8 ホームボタン「🏠」（タイトル画面へ戻る）
+    if (PtIn(ui.rTbHomeBtn, pt)) {
+        state.currentScreen = AppScreen::Title;
+        state.isTransitioning = false;
+        state.transitionProgress = 0.0f;
+        state.replay.state = ReplayState::Stopped;
+        KillTimer(hWnd, REPLAY_TIMER_ID);
+        KillTimer(hWnd, TRANSITION_TIMER_ID);
+        SetTimer(hWnd, TITLE_ANIM_TIMER_ID, 33, NULL);
+        InvalidateRect(hWnd, NULL, FALSE);
         return true;
     }
 
@@ -574,6 +603,11 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
 
+    // タイトル画面表示中はマウス移動での追加処理なし
+    if (state.currentScreen == AppScreen::Title) {
+        return true;
+    }
+
     // スライダードラッグ中の更新
     if (state.brush.isDraggingHardness && (wParam & MK_LBUTTON)) {
         double trackW = static_cast<double>(RW(ui.rHardnessTrack));
@@ -640,7 +674,8 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rCalibRetryBtn, pt)) ui.hoverCalib = 2;
         else if (PtIn(ui.rCalibCloseBtn, pt)) ui.hoverCalib = 3;
     } else {
-        if (PtIn(ui.rTbNavToggle, pt)) ui.hoverTb = TbButton::NavToggle;
+        if (PtIn(ui.rTbHomeBtn, pt)) ui.hoverTb = TbButton::Home;
+        else if (PtIn(ui.rTbNavToggle, pt)) ui.hoverTb = TbButton::NavToggle;
         else if (ui.isSubPanelOpen) {
             if (PtIn(ui.rTbBrush, pt)) ui.hoverTb = TbButton::Brush;
             else if (PtIn(ui.rTbPaper, pt)) ui.hoverTb = TbButton::Paper;

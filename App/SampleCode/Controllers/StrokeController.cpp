@@ -56,11 +56,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     const RECT& rPaper = state.ui.rPaper;
     const RECT& rSub = state.ui.rSub;
 
-    // 半紙領域内かつモーダルやサブパネルに遮られていないか判定
-    // 解析タブはリプレイ（過去の運筆の再生）を半紙へ描く。そのままだと新しい運筆が
-    // GpuInk へ入っても画面に出ず、記録だけが増えてタイムラインとずれるため、
-    // 解析タブ表示中は運筆そのものを受け付けない。
-    bool canDrawInk = !state.ui.showClearConfirm
+    // タイトル画面表示中や遷移アニメーション中、モーダル表示中、解析タブ表示中は運筆を受け付けない
+    bool canDrawInk = (state.currentScreen == AppScreen::Studio)
+        && !state.isTransitioning
+        && !state.ui.showClearConfirm
         && !state.calibration.IsResult()
         && state.ui.leftTab != LeftTab::Analysis
         && PtInRect(&rPaper, clientPt)

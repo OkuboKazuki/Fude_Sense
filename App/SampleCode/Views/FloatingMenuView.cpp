@@ -292,6 +292,12 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
     const UIState& ui = state.ui;
 
     if (!ui.isSubPanelOpen) {
+        bool hovHome = (ui.hoverTb == TbButton::Home);
+        Box(dc, ui.rTbHomeBtn, hovHome ? RGB(52, 62, 84) : RGB(34, 38, 50), hovHome ? RGB(100, 165, 255) : RGB(62, 72, 92), 2, 8);
+        HFONT fHome = CreateCustomFont(22, FW_BOLD);
+        Center(dc, ui.rTbHomeBtn, L"🏠", fHome, hovHome ? RGB(255, 255, 255) : RGB(210, 220, 240));
+        DeleteObject(fHome);
+
         bool hov = (ui.hoverTb == TbButton::NavToggle);
         Box(dc, ui.rTbNavToggle, hov ? RGB(52, 62, 84) : RGB(34, 38, 50), hov ? RGB(100, 165, 255) : RGB(62, 72, 92), 2, 8);
         HFONT f = CreateCustomFont(22, FW_BOLD);
@@ -308,6 +314,12 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
     LineTo(dc, ui.rSub.right - 16, ui.rSub.top + 74);
     SelectObject(dc, osp);
     DeleteObject(sp);
+
+    bool hovHome = (ui.hoverTb == TbButton::Home);
+    Box(dc, ui.rTbHomeBtn, hovHome ? RGB(52, 62, 84) : RGB(34, 38, 50), hovHome ? RGB(100, 165, 255) : RGB(62, 72, 92), 1, 8);
+    HFONT fHome = CreateCustomFont(20, FW_BOLD);
+    Center(dc, ui.rTbHomeBtn, L"🏠", fHome, hovHome ? RGB(255, 255, 255) : RGB(210, 220, 240));
+    DeleteObject(fHome);
 
     bool hovTog = (ui.hoverTb == TbButton::NavToggle);
     Box(dc, ui.rTbNavToggle, hovTog ? RGB(52, 62, 84) : RGB(34, 38, 50), hovTog ? RGB(100, 165, 255) : RGB(62, 72, 92), 1, 8);
