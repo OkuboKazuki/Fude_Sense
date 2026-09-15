@@ -94,6 +94,26 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     return true;
 }
 
+// 用紙種類・縦横比が変わった際の後始末。
+// 新しい用紙の固定論理解像度で GpuInk を再初期化し、白紙にする。
+static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
+    RECT rc = { 0, 0, 0, 0 };
+    GetClientRect(hWnd, &rc);
+    state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+
+    int canvasW = 0, canvasH = 0;
+    state.paper.GetCanvasSize(canvasW, canvasH);
+    if (canvasW > 0 && canvasH > 0) {
+        gpuInk.Initialize(canvasW, canvasH);
+        state.undo.Clear();
+        state.trajectory.Clear();
+        state.replay.Reset();
+    }
+
+    // 墨・記録・控えを消し、ペンが接地したままでも運筆を始めないようロックする
+    AppController::ClearAllInk(hWnd, state, gpuInk);
+}
+
 // 紙だけ表示の出入り。
 // 墨は半紙と同じ画素数のバッファに積んでおり、縦横が入れ替わると引き伸ばされて
 // 字が歪むため、墨・運筆記録・控えはまとめて消して新しい紙にする。
@@ -113,24 +133,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
 
     state.ui.paperOnly = on;
 
-// 用紙種類・縦横比が変わった際の後始末。
-// 新しい用紙の固定論理解像度で GpuInk を再初期化し、白紙にする。
-static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
-    RECT rc = { 0, 0, 0, 0 };
-    GetClientRect(hWnd, &rc);
-    state.Layout(rc.right - rc.left, rc.bottom - rc.top);
-
-    int canvasW = 0, canvasH = 0;
-    state.paper.GetCanvasSize(canvasW, canvasH);
-    if (canvasW > 0 && canvasH > 0) {
-        gpuInk.Initialize(canvasW, canvasH);
-        state.undo.Clear();
-        state.trajectory.Clear();
-        state.replay.Reset();
-    }
-
-    // 墨・記録・控えを消し、ペンが接地したままでも運筆を始めないようロックする
-    ClearAllInk(hWnd, state, gpuInk);
+    RelayoutForPaper(hWnd, state, gpuInk);
 }
 
 bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk) {
@@ -413,17 +416,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
             } else if (ui.leftTab == LeftTab::Paper) {
-                // 用紙種類切り替え
-                for (int i = 0; i < 4; ++i) {
-                    if (PtIn(ui.rPaperTile[i], pt)) {
-                        state.paper.type = static_cast<PaperType>(i);
-                        // マスの割り付けが別物になるので、配置済みのお手本は破棄する
-                        state.otehon.ClearCellChars();
-                        RelayoutForPaper(hWnd, state, gpuInk);
-                        return true;
-                    }
-                }
-
                 // 下敷き・升目切り替え
                 for (int i = 0; i < GRID_PATTERN_COUNT; ++i) {
                     if (PtIn(ui.rGridTile[i], pt)) {
