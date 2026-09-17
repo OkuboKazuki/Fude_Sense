@@ -265,6 +265,9 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
 
 void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     if (!state.otehon.isVisible) return;
+    // 紙だけ表示は画面を倒して使うので、お手本が横向きになる。出さない。
+    // 表示設定（isVisible）は残すので、通常表示に戻ればそのまま出る。
+    if (state.ui.paperOnly) return;
 
     const UIState& ui = state.ui;
     const double opacity = state.otehon.opacity;
