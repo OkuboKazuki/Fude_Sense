@@ -145,6 +145,12 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
             CanvasView::DrawGrid(memDC, state);
         }
 
+        // 紙だけ表示では墨の残量を「墨を補充」ボタンに出しているので、
+        // 運筆中もボタンの帯を描き直して残量を追従させる
+        if (state.ui.paperOnly && IntersectRect(&dummy, &rcPaint, &state.ui.rPaperOnlyBar)) {
+            InkStoneView::DrawPaperOnlyBar(memDC, state);
+        }
+
         // 無効化領域のみを画面へ高速転送 (CPU/GPU バス帯域を劇的に節約)
         int bltX = (std::max)(0, static_cast<int>(rcPaint.left));
         int bltY = (std::max)(0, static_cast<int>(rcPaint.top));

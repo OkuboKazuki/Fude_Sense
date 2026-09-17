@@ -252,9 +252,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
                 m_lastInkStoneInvalidateTick = now;
             }
         }
-        // 紙だけ表示では残量を「墨を補充」ボタンに出している
-        if (state.ui.paperOnly) {
+        // 紙だけ表示では残量を「墨を補充」ボタンに出している（硯パネルと同じく約30Hz）
+        if (state.ui.paperOnly && now - m_lastInkStoneInvalidateTick >= 33) {
             InvalidateRect(hWnd, &state.ui.rInkRefillBtn, FALSE);
+            m_lastInkStoneInvalidateTick = now;
         }
     } else {
         bool wasActive = m_strokeActive;
