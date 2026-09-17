@@ -280,7 +280,7 @@ void AppState::Layout(int w, int h) {
     ui.rCalibCloseBtn = { cStartX + cApplyW + 12 + cRetryW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW + 12 + cCloseW, cBtnY + cBtnH };
 }
 
-// 紙だけ表示。机や毛氈は描かず、横長の半紙を画面いっぱいに広げ、
+// 紙だけ表示。机や毛氈は描かず、横に倒した半紙を比率を保って画面いっぱいに広げ、
 // 右端の帯へ「墨を補充」「通常表示に戻る」「筆跡を消す」を並べる。
 // 画面を右回りに90度倒して使う前提で、右端の帯が半紙の「下」になる。
 // 倒した向きで見て、補充ボタンが下の中央、戻るボタンが右端（画面では上端）、
@@ -298,8 +298,26 @@ void AppState::LayoutPaperOnly(int w, int h) {
     ui.rCanvasArea = { 0, 0, w, h };
 
     const int barW = 96;
-    ui.rPaper = { 0, 0, (std::max)(100, w - barW), h };
-    ui.rPaperOnlyBar = { ui.rPaper.right, 0, w, h };
+    ui.rPaperOnlyBar = { (std::max)(100, w - barW), 0, w, h };
+
+    // 半紙の縦横比を保ったまま、帯の左の領域へ収めて中央に置く。
+    // 倒して使うので、画面上では半紙の長辺が横になる。
+    double ratioW = 242.0, ratioH = 333.0;
+    paper.GetAspectRatio(ratioW, ratioH);
+    double longSide = (std::max)(ratioW, ratioH);
+    double shortSide = (std::min)(ratioW, ratioH);
+
+    int areaW = static_cast<int>(ui.rPaperOnlyBar.left);
+    int areaH = (std::max)(100, h);
+    int paperW = areaW;
+    int paperH = static_cast<int>(areaW * shortSide / longSide);
+    if (paperH > areaH) {
+        paperH = areaH;
+        paperW = static_cast<int>(areaH * longSide / shortSide);
+    }
+    int paperX = (areaW - paperW) / 2;
+    int paperY = (h - paperH) / 2;
+    ui.rPaper = { paperX, paperY, paperX + paperW, paperY + paperH };
 
     LayoutGridGeometry();
 

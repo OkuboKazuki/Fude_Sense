@@ -87,8 +87,11 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     bool showReplay = (state.ui.leftTab == LeftTab::Analysis && !state.ui.paperOnly);
 
     if (isFullRedraw || hitModal || hitLeft || hitRight || !hitPaper) {
-        // 1. 和風木製机（文机）の背景描画。紙だけ表示では半紙が画面を覆うので描かない。
-        if (!state.ui.paperOnly) {
+        // 1. 和風木製机（文机）の背景描画。紙だけ表示では机を描かず、
+        //    半紙の比率に合わせて空いた余白をボタンの帯と同じ無地で塗る。
+        if (state.ui.paperOnly) {
+            RenderUtils::Fill(memDC, rcFull, RGB(24, 26, 34));
+        } else {
             RenderUtils::DrawWoodDesk(memDC, width, height);
         }
 
