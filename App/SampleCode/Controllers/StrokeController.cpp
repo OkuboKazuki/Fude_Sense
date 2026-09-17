@@ -137,13 +137,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double angleDiff = std::sin(event.azimuthRad - (moveAngle + 1.57079632679));
         double absAngleDiff = std::abs(angleDiff);
 
-        // 角度（腹方向/刃方向）と離筆に応じた払いの調整:
-        // 筆圧がしっかりかかっている接地運筆中は速度が出ても線が極端に痩せ細らないようにし、
-        // 筆圧が抜けて離筆に向かう際（低筆圧時）に速度・角度と連動して穂先へ綺麗に収束させる
-        double haraiReleaseFactor = (std::max)(0.0, 1.0 - pressureFactor);
-        double speedHaraiEffect = (std::min)(m_smoothedDist / 8.0, 1.0) * haraiReleaseFactor;
-        double haraiPower = 1.0 + (0.3 + 0.4 * absAngleDiff) * speedHaraiEffect;
-        double haraiFactor = std::pow(pressureFactor, haraiPower);
+        // 角度（腹方向/刃方向）に応じた払いの調整:
+        // 太くなる方向（腹側）で払った際にも綺麗に細く伸びるよう、角度に応じて払いの減衰指数を補正
+        double angleHaraiPower = 1.3 + (0.2 + 0.3 * absAngleDiff) * (std::min)(dist, 10.0);
+        double haraiFactor = std::pow(pressureFactor, angleHaraiPower);
 
         // 筆圧が抜ける（離筆に向かう）際は、ペンの腹の太さ影響が穂先の一点に自然収束する
         double tipConvergence = std::pow(pressureFactor, 0.4);
