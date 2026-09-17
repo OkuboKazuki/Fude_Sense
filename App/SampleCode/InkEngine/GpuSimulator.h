@@ -53,6 +53,9 @@ public:
     bool DownloadInkAndWetRegion(int* dstInk, uint8_t* dstWet, int width, int height, int minX, int minY, int maxX, int maxY);
 
     bool IsAvailable() const { return m_available; }
+    // ドライバの更新・GPU のリセット・スリープ復帰などでデバイスが失われたか。
+    // 失われたデバイスへの呼び出しは黙って何もしないので、呼び出し側で見て作り直す。
+    bool IsDeviceLost() const { return m_device && FAILED(m_device->GetDeviceRemovedReason()); }
 
 private:
     bool CreateDeviceAndShader();

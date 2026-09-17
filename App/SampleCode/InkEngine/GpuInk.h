@@ -110,6 +110,8 @@ private:
 	void ReleaseResources();
 
 	bool Initialize_NoLock(int width, int height);
+	// 描画先と墨のビットマップを作り直す。ビットマップの中身は m_pixelBuffer から取る。
+	bool CreateRenderTarget_NoLock();
 	void EnsureInitialized();
 
 	void StampBrush(double cx, double cy, double radius, unsigned char alpha);

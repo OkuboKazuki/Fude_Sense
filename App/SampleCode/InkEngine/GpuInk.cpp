@@ -305,6 +305,30 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 		if (!m_pD2DFactory) return false;
 	}
 
+	// Dynamic Bitmap 描画用バッファ
+	size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+	m_pixelBuffer.assign(pixels, 0xFFFFFFFF);
+	m_ink.assign(pixels, 0);
+	m_deltaInk.assign(pixels, 0);
+	m_wetField.assign(pixels, 0);
+
+	bool created = CreateRenderTarget_NoLock();
+
+	ResetDirtyRect_NoLock();
+	m_gpuSim.Initialize(m_width, m_height);
+	m_needsGpuUpload = true;
+	return created;
+}
+
+bool GpuInk::CreateRenderTarget_NoLock()
+{
+	if (m_pInkBitmap) { m_pInkBitmap->Release(); m_pInkBitmap = nullptr; }
+	if (m_pDCRenderTarget) { m_pDCRenderTarget->Release(); m_pDCRenderTarget = nullptr; }
+
+	if (!m_pD2DFactory || m_width <= 0 || m_height <= 0) return false;
+	size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+	if (m_pixelBuffer.size() != pixels) return false;
+
 	// DC Render Target プロパティ
 	D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
 		D2D1_RENDER_TARGET_TYPE_DEFAULT,
@@ -315,18 +339,7 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 	);
 
 	HRESULT hr = m_pD2DFactory->CreateDCRenderTarget(&props, &m_pDCRenderTarget);
-	if (FAILED(hr) || !m_pDCRenderTarget)
-	{
-		return false;
-	}
-
-
-	// Dynamic Bitmap 描画用バッファ
-	size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
-	m_pixelBuffer.assign(pixels, 0xFFFFFFFF);
-	m_ink.assign(pixels, 0);
-	m_deltaInk.assign(pixels, 0);
-	m_wetField.assign(pixels, 0);
+	if (FAILED(hr) || !m_pDCRenderTarget) return false;
 
 	D2D1_BITMAP_PROPERTIES bitmapProps = D2D1::BitmapProperties(
 		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
@@ -339,11 +352,7 @@ bool GpuInk::Initialize_NoLock(int width, int height)
 		&bitmapProps,
 		&m_pInkBitmap
 	);
-
-	ResetDirtyRect_NoLock();
-	m_gpuSim.Initialize(m_width, m_height);
-	m_needsGpuUpload = true;
-	return SUCCEEDED(hr);
+	return SUCCEEDED(hr) && m_pInkBitmap;
 }
 
 bool GpuInk::Initialize(HWND /*hWnd*/, int width, int height)
@@ -399,9 +408,6 @@ void GpuInk::Resize(int width, int height)
 	std::vector<uint8_t> oldWet = std::move(m_wetField);
 	std::vector<uint32_t> oldPixels = std::move(m_pixelBuffer);
 
-	if (m_pInkBitmap) { m_pInkBitmap->Release(); m_pInkBitmap = nullptr; }
-	if (m_pDCRenderTarget) { m_pDCRenderTarget->Release(); m_pDCRenderTarget = nullptr; }
-
 	m_width = width;
 	m_height = height;
 	size_t newPixels = static_cast<size_t>(width) * static_cast<size_t>(height);
@@ -430,26 +436,7 @@ void GpuInk::Resize(int width, int height)
 		}
 	}
 
-	D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
-		D2D1_RENDER_TARGET_TYPE_DEFAULT,
-		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-		0, 0, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_FEATURE_LEVEL_DEFAULT
-	);
-	m_pD2DFactory->CreateDCRenderTarget(&props, &m_pDCRenderTarget);
-
-	D2D1_BITMAP_PROPERTIES bitmapProps = D2D1::BitmapProperties(
-		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
-	);
-	if (m_pDCRenderTarget)
-	{
-		m_pDCRenderTarget->CreateBitmap(
-			D2D1::SizeU(m_width, m_height),
-			m_pixelBuffer.data(),
-			m_width * sizeof(uint32_t),
-			&bitmapProps,
-			&m_pInkBitmap
-		);
-	}
+	CreateRenderTarget_NoLock();
 
 	ResetDirtyRect_NoLock();
 	m_gpuSim.Resize(width, height);
@@ -605,6 +592,14 @@ bool GpuInk::PropagateInk_NoLock()
 	if (m_wetField.size() != m_ink.size()) return false;
 
 	// 1. Direct3D 11 Compute Shader GPU 加速パス
+	// GPU が失われていたら作り直し、CPU 側の墨・水分（正本）を載せ直す。
+	// 作り直せなければ m_gpuSim は使えない状態になり、下の CPU 計算へ回る。
+	if (m_gpuSim.IsDeviceLost())
+	{
+		m_gpuSim.Initialize(m_width, m_height);
+		m_needsGpuUpload = true;
+	}
+
 	if (m_gpuSim.IsAvailable())
 	{
 		if (m_needsGpuUpload)
@@ -623,8 +618,14 @@ bool GpuInk::PropagateInk_NoLock()
 				int rMaxY = std::min(m_height - 1, m_activeMaxY + 2);
 
 				// 全画面ではなく、にじみ進行領域（Dirty Rect）のみ局所リードバック（GPU-CPU転送最適化）
-				m_gpuSim.DownloadToPixelsRegion(m_pixelBuffer.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
-				m_gpuSim.DownloadInkAndWetRegion(m_ink.data(), m_wetField.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+				bool pixelsOk = m_gpuSim.DownloadToPixelsRegion(m_pixelBuffer.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+				bool inkOk = m_gpuSim.DownloadInkAndWetRegion(m_ink.data(), m_wetField.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
+				if (!pixelsOk || !inkOk || m_gpuSim.IsDeviceLost())
+				{
+					// 読み戻せなかった。CPU 側は手付かずなので、次の回に GPU を作り直して続ける
+					m_needsGpuUpload = true;
+					return false;
+				}
 
 				// Direct2D へのアップロード範囲も Dirty Rect に限定
 				m_uploadMinX = std::min(m_uploadMinX, rMinX);
@@ -632,10 +633,30 @@ bool GpuInk::PropagateInk_NoLock()
 				m_uploadMaxX = std::max(m_uploadMaxX, rMaxX);
 				m_uploadMaxY = std::max(m_uploadMaxY, rMaxY);
 
-				m_activeMinX = std::max(0, m_activeMinX - 1);
-				m_activeMinY = std::max(0, m_activeMinY - 1);
-				m_activeMaxX = std::min(m_width - 1, m_activeMaxX + 1);
-				m_activeMaxY = std::min(m_height - 1, m_activeMaxY + 1);
+				// 次の回に墨を送り出せる画素（濃く、まだ濡れている）の範囲を取り直す。
+				// 墨が動くのはその周囲 1 画素までで、それは今読み戻した範囲に収まっている。
+				// 送り出す画素が無くなれば、にじみは止まったので計算をやめる。
+				// （範囲を広げるだけだと、乾いた後も半紙全体の計算と読み戻しが延々と続く）
+				int nextMinX = INT_MAX, nextMinY = INT_MAX, nextMaxX = -1, nextMaxY = -1;
+				for (int y = rMinY; y <= rMaxY; ++y)
+				{
+					size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(m_width);
+					for (int x = rMinX; x <= rMaxX; ++x)
+					{
+						size_t i = rowOffset + x;
+						if (m_ink[i] > PROPAGATION_THRESHOLD && m_wetField[i] > WET_THRESHOLD)
+						{
+							if (x < nextMinX) nextMinX = x;
+							if (x > nextMaxX) nextMaxX = x;
+							if (y < nextMinY) nextMinY = y;
+							if (y > nextMaxY) nextMaxY = y;
+						}
+					}
+				}
+				m_activeMinX = nextMinX;
+				m_activeMinY = nextMinY;
+				m_activeMaxX = nextMaxX;
+				m_activeMaxY = nextMaxY;
 
 				return true;
 			}
@@ -1167,16 +1188,32 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 
 	// Direct2D の GPU / DC 描画は CPU バッファに依存しないため、m_mutex 解放後に実行
 	RECT rc = { destX, destY, destX + dispW, destY + dispH };
-	HRESULT hr = m_pDCRenderTarget->BindDC(hdc, &rc);
-	if (SUCCEEDED(hr))
+	D2D1_RECT_F srcRect  = D2D1::RectF(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
+	D2D1_RECT_F destRect = D2D1::RectF(0.0f, 0.0f, static_cast<float>(dispW),   static_cast<float>(dispH));
+
+	// 画面のスリープ・表示の切り替え・GPU のリセットで描画先が失われると、
+	// 以後の描画は黙って捨てられ、墨が画面に出なくなる（書いた字が消え、
+	// 新しく書いても見えない）。失われたら墨の画素から作り直して描き直す。
+	for (int attempt = 0; attempt < 2; ++attempt)
 	{
-		m_pDCRenderTarget->SetDpi(96.0f, 96.0f);
-		m_pDCRenderTarget->BeginDraw();
-		D2D1_RECT_F srcRect  = D2D1::RectF(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
-		D2D1_RECT_F destRect = D2D1::RectF(0.0f, 0.0f, static_cast<float>(dispW),   static_cast<float>(dispH));
-		m_pDCRenderTarget->DrawBitmap(m_pInkBitmap, &destRect, 1.0f,
-			D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, &srcRect);
-		m_pDCRenderTarget->EndDraw();
+		HRESULT hr = m_pDCRenderTarget->BindDC(hdc, &rc);
+		if (SUCCEEDED(hr))
+		{
+			m_pDCRenderTarget->SetDpi(96.0f, 96.0f);
+			m_pDCRenderTarget->BeginDraw();
+			m_pDCRenderTarget->DrawBitmap(m_pInkBitmap, &destRect, 1.0f,
+				D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, &srcRect);
+			hr = m_pDCRenderTarget->EndDraw();
+		}
+		if (hr != D2DERR_RECREATE_TARGET) return;
+
+		std::lock_guard<std::mutex> lock(m_mutex);
+		if (!CreateRenderTarget_NoLock()) return;
+		// ビットマップは m_pixelBuffer 全体から作り直したので、未転送分はもう無い
+		m_uploadMinX = INT_MAX;
+		m_uploadMinY = INT_MAX;
+		m_uploadMaxX = -1;
+		m_uploadMaxY = -1;
 	}
 }
 
