@@ -77,17 +77,18 @@ struct InkModel {
     }
 
     // 筆の乾き具合 (0.0: 潤沢 ~ 1.0: 渇筆)
-    // 残量45%までは完全に潤沢（かすれなし）を維持し、
-    // 45%を切ってからのかすれをより穏やかな非線形カーブで立ち上げることで、
+    // 残量 KASURE_START_LEVEL までは完全に潤沢（かすれなし）を維持し、
+    // それを切ってからのかすれを穏やかな非線形カーブで立ち上げることで、
     // 味わい深いかすれ（渇筆）が長いストロークにわたって持続するようにする。
+    static constexpr double KASURE_START_LEVEL = 0.60;
     double GetDryness() const {
-        if (brushWater >= 0.45) {
+        if (brushWater >= KASURE_START_LEVEL) {
             return 0.0;
         }
         if (brushWater <= 0.0) {
             return 1.0;
         }
-        double norm = (0.45 - brushWater) / 0.45;
+        double norm = (KASURE_START_LEVEL - brushWater) / KASURE_START_LEVEL;
         return std::pow(norm, 1.65);
     }
 };
