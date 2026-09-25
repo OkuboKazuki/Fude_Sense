@@ -214,17 +214,37 @@ void AppState::Layout(int w, int h) {
     LayoutGridGeometry();
 
     // 3. 右側 硯・墨量・全消し（★ 半紙の右端と画面の右端との真ん中 ★）
-    int stoneW = 210;
-    int stoneH = (int)(stoneW * 1.34);
-    int refillBtnH = 46;
-    int undoBtnH = 46;
-    int redoBtnH = 46;
-    int clearBtnH = 46;
-    int viewBtnH = 44;    // 紙だけ表示に入るボタン
-    int spacing = 12;
-    int headerSpace = 32; // 墨残量ヘッダー用スペース
+    // 基準の大きさ（拡大率 1.0）。ペンで押しやすいよう、空きがあれば最大 INK_STONE_MAX_SCALE 倍まで広げる。
+    const int baseStoneW = 210;
+    const int baseBtnH = 46;
+    const int baseViewBtnH = 44;
+    const int baseSpacing = 12;
+    const int baseHeaderSpace = 32;
+    const int baseViewGap = 20;
+    const double INK_STONE_MAX_SCALE = 1.35;
+    int baseTotalH = baseHeaderSpace + (int)(baseStoneW * 1.34) + 4 * (baseSpacing + baseBtnH)
+                   + baseViewGap + baseViewBtnH;
 
-    int viewGap = 20;     // 硯まわりの操作と表示切り替えの間の区切り
+    // 半紙の右の空き（左右に余白を残す）と、上下に余白を残した高さに収まる倍率
+    int rightSpaceW = w - ui.rPaper.right;
+    double fitW = (double)(rightSpaceW - 40) / baseStoneW;
+    double fitH = (double)(h - 48) / baseTotalH;
+    double scale = (std::min)(INK_STONE_MAX_SCALE, (std::min)(fitW, fitH));
+    if (scale < 1.0) scale = 1.0;  // 狭い窓では従来の大きさのまま
+    ui.inkStoneScale = scale;
+    auto S = [scale](int v) { return (int)(v * scale + 0.5); };
+
+    int stoneW = S(baseStoneW);
+    int stoneH = (int)(stoneW * 1.34);
+    int refillBtnH = S(baseBtnH);
+    int undoBtnH = S(baseBtnH);
+    int redoBtnH = S(baseBtnH);
+    int clearBtnH = S(baseBtnH);
+    int viewBtnH = S(baseViewBtnH);    // 紙だけ表示に入るボタン
+    int spacing = S(baseSpacing);
+    int headerSpace = S(baseHeaderSpace); // 墨残量ヘッダー用スペース
+
+    int viewGap = S(baseViewGap);     // 硯まわりの操作と表示切り替えの間の区切り
     int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
                     + spacing + redoBtnH + spacing + clearBtnH
                     + viewGap + viewBtnH;

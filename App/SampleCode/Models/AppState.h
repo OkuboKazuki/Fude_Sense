@@ -204,6 +204,8 @@ struct UIState {
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
     int hoverInkStone = 0;
+    // 右の硯パネル（硯・ボタン・文字）の拡大率。Layout で空きに収まる範囲で決める。
+    double inkStoneScale = 1.0;
     int hoverReplayBtn = 0; // 1: Reset, 2: Prev, 3: Play/Pause, 4: Next, 5: Speed0.5, 6: Speed1.0, 7: Speed2.0, 8: SeekTrack
 
     std::wstring saveFeedback = L"";
