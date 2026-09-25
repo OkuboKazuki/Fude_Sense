@@ -19,10 +19,14 @@ public:
     // ストロークのリセット / ペンが離れたときの処理
     void ResetStroke(GpuInk& gpuInk, AppState* pState = nullptr);
 
+    // 直近に届いたペンの生の筆圧（平滑化前）。UI ボタンを押した瞬間の筆圧に使う。
+    double GetLastRawPressure() const { return m_lastRawPressure; }
+
 private:
     POINT m_ptOld = { 0, 0 };
     DWORD m_lastTime = 0;
     double m_smoothedPressure = 0.0;
+    double m_lastRawPressure = 0.0;
     double m_smoothedWidth = 0.0;
     double m_lastMoveAngle = 0.0;
     double m_smoothedDist = 0.0;

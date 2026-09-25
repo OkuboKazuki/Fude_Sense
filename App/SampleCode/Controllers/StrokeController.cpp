@@ -24,6 +24,20 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
 void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, AppState& state, GpuInk& gpuInk) {
     // ペンのZ高度・傾き・方位角情報をGPU墨汁エンジンへ通知
     gpuInk.UpdatePen(event.z, event.altitudeDegrees, event.azimuthRad, event.pressure <= 0.0);
+    m_lastRawPressure = event.pressure;
+
+    // 硯・「墨を補充」をペンで押している間は、強く押し込むほど墨を継ぎ足す
+    if (state.ui.isPenRefilling) {
+        if (event.pressure > 0.0) {
+            double before = state.ink.stoneAmount;
+            state.ink.PressRefill(event.pressure);
+            if (state.ink.stoneAmount != before) {
+                InvalidateRect(hWnd, state.ui.paperOnly ? &state.ui.rInkRefillBtn : &state.ui.rRight, FALSE);
+            }
+        } else {
+            state.ui.isPenRefilling = false;
+        }
+    }
 
     // UI操作（半紙に重なる全消しモーダル等）の直後は、ペンが紙から一度離れるまで
     // 運筆を受け付けない。接地したままのペンのパケットで墨が落ちるのを防ぐ。

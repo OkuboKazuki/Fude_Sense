@@ -194,6 +194,9 @@ struct UIState {
     // （筆圧0 / 圏外）まで運筆入力を無視する。
     bool suppressPenUntilLift = false;
 
+    // ペンで硯・「墨を補充」を押している最中。離すまでの筆圧に応じて墨を含ませる。
+    bool isPenRefilling = false;
+
     // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
     // 硯が無いので、墨の補充は半紙の右のボタンから行う。
     bool paperOnly = false;

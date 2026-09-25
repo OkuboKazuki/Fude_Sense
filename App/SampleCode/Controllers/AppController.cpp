@@ -21,6 +21,21 @@ static void SetOtehonImePosition(HWND hWnd, const RECT& inputBox) {
     ImmReleaseContext(hWnd, hImc);
 }
 
+// 硯・「墨を補充」を押したときの補充。
+// マウスは筆圧が無いので満タンにする。ペンは押した筆圧に応じた量だけ含ませ、
+// 離すまでの間に強く押し込めば StrokeController 側で継ぎ足す。
+static void RefillByPress(AppState& state, double penPressure) {
+    if (penPressure < 0.0) {
+        state.ink.Refill();
+        return;
+    }
+    state.ink.BeginPressRefill();
+    state.ink.PressRefill(penPressure);
+    state.ui.isPenRefilling = true;
+    // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
+    state.ui.suppressPenUntilLift = true;
+}
+
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.trajectory.Clear();
@@ -150,7 +165,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     RelayoutForPaper(hWnd, state, gpuInk);
 }
 
-bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk) {
+bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure) {
     UIState& ui = state.ui;
     RECT clientRect = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &clientRect);
@@ -170,7 +185,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             return true;
         }
         if (PtIn(ui.rInkRefillBtn, pt)) {
-            state.ink.Refill();
+            RefillByPress(state, penPressure);
             ui.suppressPenUntilLift = true;
             InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
             return true;
@@ -536,7 +551,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
 
     // 4. 右側 硯・墨補充・一画戻す・一画復元・全消し
     if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
-        state.ink.Refill();
+        RefillByPress(state, penPressure);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     } else if (PtIn(ui.rUndoBtn, pt)) {

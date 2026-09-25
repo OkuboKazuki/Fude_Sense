@@ -11,7 +11,9 @@
 class AppController {
 public:
     // UIイベントハンドリング
-    static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk);
+    // penPressure: ペンで押したときの筆圧 (0.0 ~ 1.0)。マウスなど筆圧の無い入力は負値。
+    // 硯・「墨を補充」はこの筆圧で補充量を変える。
+    static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure = -1.0);
     static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state);
     static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state);
     // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。

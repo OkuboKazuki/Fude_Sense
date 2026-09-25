@@ -717,7 +717,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_LBUTTONDOWN:
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-		if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk))
+		// ペン (Wintab) 入力の直後なら、このクリックはペンによるもの
+		extern DWORD g_lastWintabTick;
+		bool isPenActive = (GetTickCount() - g_lastWintabTick <= 500);
+		// ペンなら直近の筆圧を渡す（硯の補充量に使う）。マウスは筆圧なし（負値）。
+		double penPressure = isPenActive ? g_strokeCtrl.GetLastRawPressure() : -1.0;
+		if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk, penPressure))
 		{
 			// UI を操作したクリックは運筆ではない。進行中のストロークがあれば
 			// ここで打ち切る（運筆ロック解除はペンが紙から離れたときに行う）。
@@ -729,8 +734,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_appState.ui.suppressPenUntilLift = false;
 
 			// ペン (Wintab) 入力の直後でない場合のみマウスによる運筆描画を開始
-			extern DWORD g_lastWintabTick;
-			bool isPenActive = (GetTickCount() - g_lastWintabTick <= 500);
 			if (!isPenActive && RenderUtils::PtIn(g_appState.ui.rPaper, pt))
 			{
 				SetCapture(hWnd);
@@ -820,7 +823,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				if (message == WM_POINTERDOWN)
 				{
 					POINT pt = { penEvent.x, penEvent.y };
-					if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk))
+					if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk, penEvent.pressure))
 					{
 						g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 						break;
@@ -854,6 +857,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
 			// ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
 			g_appState.ui.suppressPenUntilLift = false;
+			g_appState.ui.isPenRefilling = false;
 		}
 		if (g_hMonitorWnd && IsWindow(g_hMonitorWnd)) InvalidateRect(g_hMonitorWnd, NULL, FALSE);
 		break;
