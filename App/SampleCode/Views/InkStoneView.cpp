@@ -157,7 +157,7 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     bool hovPaperOnly = (ui.hoverInkStone == 6);
     Box(dc, ui.rPaperOnlyBtn, hovPaperOnly ? RGB(42, 72, 110) : RGB(30, 36, 46), hovPaperOnly ? RGB(85, 145, 235) : RGB(54, 62, 78), 1, 8);
     HFONT fView = CreateCustomFont(S(17), FW_BOLD);
-    Center(dc, ui.rPaperOnlyBtn, L"🖼️ 紙だけ表示（横向き）", fView, hovPaperOnly ? RGB(255, 255, 255) : RGB(220, 230, 245));
+    Center(dc, ui.rPaperOnlyBtn, L"🖼️ 紙を大きくする（横向き）", fView, hovPaperOnly ? RGB(255, 255, 255) : RGB(220, 230, 245));
     DeleteObject(fView);
 }
 
