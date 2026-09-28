@@ -844,10 +844,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PenInputEvent penEvent;
 		if (WintabAdapter::ConvertPacket(hWnd, wParam, lParam, g_wintab, penEvent))
 		{
+			if (penEvent.pressure <= 0.0)
+			{
+				g_appState.ui.suppressPenUntilLift = false;
+			}
+
 			if (penEvent.pressure > 0.0 && g_appState.currentScreen == AppScreen::Title)
 			{
-				POINT pt = { penEvent.x, penEvent.y };
-				AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk);
+				if (!g_appState.ui.suppressPenUntilLift)
+				{
+					POINT pt = { penEvent.x, penEvent.y };
+					AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk);
+				}
 				break;
 			}
 			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
@@ -879,6 +887,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
 				if (message == WM_POINTERUP)
 				{
+					g_appState.ui.suppressPenUntilLift = false;
 					g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 				}
 				return 0;

@@ -133,8 +133,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 0. タイトル画面でのクリック / タップ処理
     if (state.currentScreen == AppScreen::Title) {
         if (state.isTransitioning) return true;
+        if (state.ui.suppressPenUntilLift) return true;
 
         state.pendingStartTab = LeftTab::Brush;
+        state.ui.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
 
         // 墨染めフェード遷移を開始
         state.isTransitioning = true;
@@ -207,6 +209,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         state.isTransitioning = false;
         state.transitionProgress = 0.0f;
         state.replay.state = ReplayState::Stopped;
+        state.ui.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
         KillTimer(hWnd, REPLAY_TIMER_ID);
         KillTimer(hWnd, TRANSITION_TIMER_ID);
         SetTimer(hWnd, TITLE_ANIM_TIMER_ID, 33, NULL);

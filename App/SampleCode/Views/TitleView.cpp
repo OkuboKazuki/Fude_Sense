@@ -1,10 +1,129 @@
 #include "stdafx.h"
 #include "TitleView.h"
 #include "RenderUtils.h"
+#include <wincodec.h>
+#include <vector>
+#include <string>
 #include <cmath>
 #include <algorithm>
 
 #pragma comment(lib, "msimg32.lib")
+#pragma comment(lib, "windowscodecs.lib")
+
+static HBITMAP s_hLogoBmp = nullptr;
+static HDC     s_logoDC = nullptr;
+static HBITMAP s_oldLogoBmp = nullptr;
+static int     s_logoSourceW = 0;
+static int     s_logoSourceH = 0;
+static bool    s_logoLoadAttempted = false;
+
+void TitleView::ReleaseResources() {
+    if (s_logoDC) {
+        if (s_oldLogoBmp) {
+            SelectObject(s_logoDC, s_oldLogoBmp);
+            s_oldLogoBmp = nullptr;
+        }
+        DeleteDC(s_logoDC);
+        s_logoDC = nullptr;
+    }
+    if (s_hLogoBmp) {
+        DeleteObject(s_hLogoBmp);
+        s_hLogoBmp = nullptr;
+    }
+    s_logoSourceW = 0;
+    s_logoSourceH = 0;
+    s_logoLoadAttempted = false;
+}
+
+void TitleView::EnsureLogoLoaded() {
+    if (s_logoLoadAttempted) return;
+    s_logoLoadAttempted = true;
+
+    std::vector<std::wstring> candidates;
+
+    // 1. exe と同じ場所 (PostBuildEvent でコピーされる)
+    wchar_t exePath[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0) {
+        wchar_t* lastSlash = wcsrchr(exePath, L'\\');
+        if (lastSlash) {
+            *(lastSlash + 1) = L'\0';
+            candidates.push_back(std::wstring(exePath) + L"title_logo.png");
+            candidates.push_back(std::wstring(exePath) + L"..\\title_logo.png");
+            candidates.push_back(std::wstring(exePath) + L"..\\..\\title_logo.png");
+        }
+    }
+
+    // 2. カレントディレクトリ基準
+    candidates.push_back(L"title_logo.png");
+    candidates.push_back(L"App\\SampleCode\\title_logo.png");
+    candidates.push_back(L"SampleCode\\title_logo.png");
+
+    std::wstring foundPath;
+    for (const auto& path : candidates) {
+        DWORD attr = GetFileAttributesW(path.c_str());
+        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            foundPath = path;
+            break;
+        }
+    }
+
+    if (foundPath.empty()) return;
+
+    // WIC 画像デコード
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    IWICImagingFactory* pFactory = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFactory));
+    if (FAILED(hr) || !pFactory) return;
+
+    IWICBitmapDecoder* pDecoder = nullptr;
+    hr = pFactory->CreateDecoderFromFilename(foundPath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &pDecoder);
+    if (SUCCEEDED(hr) && pDecoder) {
+        IWICBitmapFrameDecode* pFrame = nullptr;
+        hr = pDecoder->GetFrame(0, &pFrame);
+        if (SUCCEEDED(hr) && pFrame) {
+            IWICFormatConverter* pConverter = nullptr;
+            hr = pFactory->CreateFormatConverter(&pConverter);
+            if (SUCCEEDED(hr) && pConverter) {
+                // Premultiplied BGRA (AlphaBlend に最適)
+                hr = pConverter->Initialize(pFrame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
+                if (SUCCEEDED(hr)) {
+                    UINT w = 0, h = 0;
+                    pConverter->GetSize(&w, &h);
+                    if (w > 0 && h > 0) {
+                        s_logoSourceW = static_cast<int>(w);
+                        s_logoSourceH = static_cast<int>(h);
+
+                        BITMAPINFO bmi = {};
+                        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                        bmi.bmiHeader.biWidth = s_logoSourceW;
+                        bmi.bmiHeader.biHeight = -s_logoSourceH; // Top-down
+                        bmi.bmiHeader.biPlanes = 1;
+                        bmi.bmiHeader.biBitCount = 32;
+                        bmi.bmiHeader.biCompression = BI_RGB;
+
+                        void* pBits = nullptr;
+                        HDC screenDC = GetDC(nullptr);
+                        s_hLogoBmp = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+                        if (s_hLogoBmp && pBits) {
+                            UINT stride = s_logoSourceW * 4;
+                            UINT bufferSize = stride * s_logoSourceH;
+                            pConverter->CopyPixels(nullptr, stride, bufferSize, static_cast<BYTE*>(pBits));
+
+                            s_logoDC = CreateCompatibleDC(screenDC);
+                            s_oldLogoBmp = (HBITMAP)SelectObject(s_logoDC, s_hLogoBmp);
+                        }
+                        ReleaseDC(nullptr, screenDC);
+                    }
+                }
+                pConverter->Release();
+            }
+            pFrame->Release();
+        }
+        pDecoder->Release();
+    }
+    pFactory->Release();
+}
 
 void TitleView::Draw(HDC dc, int width, int height, const AppState& state) {
     DrawBackground(dc, width, height);
@@ -14,76 +133,83 @@ void TitleView::Draw(HDC dc, int width, int height, const AppState& state) {
 void TitleView::DrawBackground(HDC dc, int width, int height) {
     using namespace RenderUtils;
 
-    // 深みのある濃紺・墨染めの縦グラデーション
-    TRIVERTEX v[2];
-    v[0].x = 0;
-    v[0].y = 0;
-    v[0].Red   = 0x0E00; // RGB(14, 17, 24)
-    v[0].Green = 0x1100;
-    v[0].Blue  = 0x1800;
-    v[0].Alpha = 0x0000;
+    // 半紙と同じ清らかな白背景（生成りの温かみを持たせた純白）
+    RECT rBg = { 0, 0, width, height };
+    Fill(dc, rBg, RGB(255, 255, 255));
 
-    v[1].x = width;
-    v[1].y = height;
-    v[1].Red   = 0x1A00; // RGB(26, 32, 44)
-    v[1].Green = 0x2000;
-    v[1].Blue  = 0x2C00;
-    v[1].Alpha = 0x0000;
-
-    GRADIENT_RECT gr = { 0, 1 };
-    GradientFill(dc, v, 2, &gr, 1, GRADIENT_FILL_RECT_V);
-
-    // 和風の繊細な背景装飾（中央の薄い円弧と格子ライン）
-    HPEN pLine = CreatePen(PS_SOLID, 1, RGB(32, 40, 56));
-    HPEN oldP = (HPEN)SelectObject(dc, pLine);
-
-    int cx = width / 2;
-    int cy = height / 2 - 20;
-
-    // 薄い円環（禅円・円相の幾何学モチーフ）
+    // ごく繊細な和モダン・外枠アクセント（上品な極細ライン）
+    HPEN pBorder = CreatePen(PS_SOLID, 1, RGB(235, 238, 245));
+    HPEN oldP = (HPEN)SelectObject(dc, pBorder);
     HBRUSH oldB = (HBRUSH)SelectObject(dc, GetStockObject(HOLLOW_BRUSH));
-    Ellipse(dc, cx - 340, cy - 340, cx + 340, cy + 340);
-    Ellipse(dc, cx - 240, cy - 240, cx + 240, cy + 240);
 
-    // 水平・垂直の繊細なガイドライン
-    MoveToEx(dc, cx - 420, cy, nullptr); LineTo(dc, cx + 420, cy);
-    MoveToEx(dc, cx, cy - 420, nullptr); LineTo(dc, cx, cy + 420);
+    int pad = 24;
+    Rectangle(dc, pad, pad, width - pad, height - pad);
 
     SelectObject(dc, oldB);
     SelectObject(dc, oldP);
-    DeleteObject(pLine);
+    DeleteObject(pBorder);
 }
 
 void TitleView::DrawCenterContent(HDC dc, int width, int height, const AppState& state) {
     using namespace RenderUtils;
 
-    int cx = width / 2;
-    int cy = height / 2 - 10;
+    EnsureLogoLoaded();
 
-    // 1. メインタイトルロゴ「Fude Sense」
-    RECT rMainTitle = { cx - 400, cy - 60, cx + 400, cy + 10 };
-    HFONT fMainTitle = CreateCustomFont(54, FW_BOLD);
-    DrawTextCustom(dc, rMainTitle, L"Fude Sense", fMainTitle, RGB(245, 248, 255), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DeleteObject(fMainTitle);
+    int cx = width / 2;
+    int cy = height / 2;
+
+    int logoY = cy - 100;
+    int logoH = 0;
+
+    // 1. 手書き毛筆ロゴ「Fude Sense」の描画（画面いっぱいに迫力ある大判表示）
+    if (s_logoDC && s_logoSourceW > 0 && s_logoSourceH > 0) {
+        // 画面幅・高さに応じたダイナミックなサイズ調整（最大幅1080px、最大高さ画面の52%）
+        float maxW = (std::min)(static_cast<float>(width) * 0.85f, 1080.0f);
+        float maxH = static_cast<float>(height) * 0.52f;
+        float scaleW = maxW / static_cast<float>(s_logoSourceW);
+        float scaleH = maxH / static_cast<float>(s_logoSourceH);
+        float scale = (std::min)(scaleW, scaleH);
+
+        int targetW = static_cast<int>(s_logoSourceW * scale);
+        int targetH = static_cast<int>(s_logoSourceH * scale);
+        logoH = targetH;
+
+        int logoX = cx - targetW / 2;
+        logoY = cy - targetH / 2 - 40;
+
+        BLENDFUNCTION bf = {};
+        bf.BlendOp = AC_SRC_OVER;
+        bf.BlendFlags = 0;
+        bf.SourceConstantAlpha = 255;
+        bf.AlphaFormat = AC_SRC_ALPHA;
+
+        AlphaBlend(dc, logoX, logoY, targetW, targetH, s_logoDC, 0, 0, s_logoSourceW, s_logoSourceH, bf);
+    } else {
+        // フォールバック（画像がまだない場合のテキスト描画）
+        RECT rMainTitle = { cx - 500, cy - 90, cx + 500, cy + 20 };
+        HFONT fMainTitle = CreateCustomFont(72, FW_BOLD);
+        DrawTextCustom(dc, rMainTitle, L"Fude Sense", fMainTitle, RGB(24, 26, 34), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+        DeleteObject(fMainTitle);
+        logoH = 90;
+        logoY = cy - 45;
+    }
 
     // 2. 「タップして硯に向かう」ブレスアニメーション
-    int promptY = cy + 45;
-    RECT rPrompt = { cx - 220, promptY, cx + 220, promptY + 50 };
+    int promptY = (std::min)(logoY + logoH + 40, height - 90);
+    RECT rPrompt = { cx - 190, promptY, cx + 190, promptY + 48 };
 
     // 呼吸するようにゆったり明滅するブレスアニメーション (sin波)
     DWORD tick = GetTickCount();
     double pulse = (std::sin(static_cast<double>(tick) * 0.0035) + 1.0) * 0.5; // 0.0 ~ 1.0
-    int brightness = 140 + static_cast<int>(pulse * 95.0); // 140 ~ 235
+    int borderVal = 190 - static_cast<int>(pulse * 65.0); // 190 ~ 125
 
-    COLORREF textColor = RGB(brightness - 15, brightness, brightness + 20);
+    COLORREF textColor = RGB(28, 32, 42);
+    COLORREF frameBg = RGB(250, 252, 255);
+    COLORREF frameBorder = RGB(borderVal, borderVal + 5, borderVal + 18);
 
-    // ほんのり光るカード状の囲み枠
-    int frameAlpha = 35 + static_cast<int>(pulse * 45.0);
-    COLORREF frameBg = RGB(22, 28, 40);
-    COLORREF frameBorder = RGB(frameAlpha, frameAlpha + 15, frameAlpha + 45);
     Box(dc, rPrompt, frameBg, frameBorder, 1, 24);
 
-    HFONT fPrompt = CreateCustomFont(18, FW_BOLD);
+    HFONT fPrompt = CreateCustomFont(16, FW_BOLD);
     Center(dc, rPrompt, L"— タップして硯に向かう —", fPrompt, textColor);
     DeleteObject(fPrompt);
 }

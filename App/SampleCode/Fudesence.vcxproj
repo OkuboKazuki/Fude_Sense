@@ -63,8 +63,9 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)desk_texture.jpg" "$(OutDir)"</Command>
-      <Message>机の木目テクスチャを出力先へコピー</Message>
+      <Command>xcopy /Y /D "$(ProjectDir)desk_texture.jpg" "$(OutDir)"
+xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
+      <Message>アセットファイル（木目テクスチャ・タイトルロゴ）を出力先へコピー</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -90,8 +91,9 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)desk_texture.jpg" "$(OutDir)"</Command>
-      <Message>机の木目テクスチャを出力先へコピー</Message>
+      <Command>xcopy /Y /D "$(ProjectDir)desk_texture.jpg" "$(OutDir)"
+xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
+      <Message>アセットファイル（木目テクスチャ・タイトルロゴ）を出力先へコピー</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

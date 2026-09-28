@@ -62,6 +62,7 @@ BackBuffer g_titleBuffer;
 void MainView::ReleaseBackBuffer() {
     g_backBuffer.Release();
     g_titleBuffer.Release();
+    TitleView::ReleaseResources();
 }
 
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
