@@ -82,6 +82,12 @@ static void DestroyInkWindow();
 // ===== 全画面表示（F11 で切り替え） =====
 // 枠なしウィンドウをモニタいっぱいに広げる方式。元へ戻せるよう、切り替え前の
 // ウィンドウスタイルと配置（最大化状態を含む）を控えておく。
+// ショートカットキーを受け付けてよいか。タイトル画面と遷移中は F11 以外を止める。
+static bool IsStudioAcceptingKeys()
+{
+	return g_appState.currentScreen == AppScreen::Studio && !g_appState.isTransitioning;
+}
+
 static bool g_isFullscreen = false;
 static WINDOWPLACEMENT g_prevPlacement = { sizeof(WINDOWPLACEMENT) };
 static LONG_PTR g_prevStyle = 0;
@@ -652,7 +658,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_CHAR:
 	{
-		// お手本の文字入力（IME 変換確定後の文字がここへ届く）
+		// お手本の文字入力（IME 変換確定後の文字がここへ届く）。
+		// タイトル画面では入力欄が見えないので受け付けない。
+		if (!IsStudioAcceptingKeys()) break;
 		AppController::OnChar(hWnd, (wchar_t)wParam, g_appState);
 		break;
 	}
@@ -665,6 +673,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ToggleFullscreen(hWnd);
 			break;
 		}
+
+		// タイトル画面と遷移中は、ほかのショートカットを受け付けない。
+		// 見えないスタジオ画面の状態（紙だけ表示・一画戻す等）が裏で変わってしまうため。
+		if (!IsStudioAcceptingKeys()) break;
 
 		// F9 は「紙だけ表示（横向き）」の切り替え。硯パネルのボタンと同じ働き。
 		if (wParam == VK_F9)
@@ -681,9 +693,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case VK_ESCAPE:
 		{
-			// タイトル画面や遷移中は消す対象の筆跡がないので何もしない
-			if (g_appState.currentScreen != AppScreen::Studio || g_appState.isTransitioning) break;
-
 			// 確認モーダル表示中の Esc は「キャンセル」として閉じる
 			if (g_appState.ui.showClearConfirm)
 			{
@@ -749,6 +758,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case IDM_ABOUT:
 		{
+			// Alt+/ ・ Alt+? のショートカットで届くので、タイトル画面では開かない
+			if (!IsStudioAcceptingKeys()) break;
 			if (!IsWindow(g_hWndAbout))
 			{
 				CreateDialog(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
