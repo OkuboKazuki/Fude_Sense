@@ -110,6 +110,12 @@ public:
     // 取り消した1画を記録へ積み直す（「一画復元」用）
     void RedoStroke(const StrokeData& stroke);
     void Clear();
+    // 記録を半紙ごと90度回す（紙だけ表示の出入り用。墨の書き戻しと同じ向きに回す）。
+    // counterClockwise は左回り（通常表示 → 紙だけ表示）。
+    // oldPaper / newPaper は回す前後の画面上の半紙。線幅・速度・半紙内ピクセル座標は
+    // 画面上の大きさで持っているので、新しい半紙の大きさへ直す。
+    // タイムラインは作り直さないので、呼び出し側で BuildReplayTimeline し直すこと。
+    void RotateQuarter(bool counterClockwise, const RECT& oldPaper, const RECT& newPaper);
 
     // ゲッター
     const std::vector<StrokeData>& GetStrokes() const { return m_strokes; }

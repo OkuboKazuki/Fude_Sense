@@ -47,6 +47,50 @@ void TrajectorySession::RedoStroke(const StrokeData& stroke) {
     ++m_revision;
 }
 
+void TrajectorySession::RotateQuarter(bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
+    const double kPi = 3.14159265358979323846;
+    int oldLong = (std::max)(RenderUtils::RW(oldPaper), RenderUtils::RH(oldPaper));
+    int newLong = (std::max)(RenderUtils::RW(newPaper), RenderUtils::RH(newPaper));
+    // 線幅・速度は画面上のピクセルで持っている。墨の半紙は長辺をそろえて回すので、
+    // 画面上の長辺の比で直せば、書いたときと同じ太さで引き直せる。
+    double scale = (oldLong > 0 && newLong > 0) ? static_cast<double>(newLong) / static_cast<double>(oldLong) : 1.0;
+    int newW = (std::max)(1, RenderUtils::RW(newPaper));
+    int newH = (std::max)(1, RenderUtils::RH(newPaper));
+
+    auto rotatePoint = [&](StrokePoint& p) {
+        // 左回り: 元の (u, v) は (v, 1 - u) へ移る。右回り: 元の (u, v) は (1 - v, u) へ移る。
+        // （GpuInk::RestoreSnapshotRotated と同じ対応）
+        double u = p.normX;
+        double v = p.normY;
+        if (counterClockwise) { p.normX = v;       p.normY = 1.0 - u; }
+        else                  { p.normX = 1.0 - v; p.normY = u; }
+        p.paperX = static_cast<int>(p.normX * newW);
+        p.paperY = static_cast<int>(p.normY * newH);
+
+        // 向きを持つ値も半紙と一緒に回す。画面の y は下向きなので、左回りは角度が 90 度減る。
+        double turnDeg = counterClockwise ? -90.0 : 90.0;
+        p.azimuthDeg += turnDeg;
+        while (p.azimuthDeg < 0.0) p.azimuthDeg += 360.0;
+        while (p.azimuthDeg >= 360.0) p.azimuthDeg -= 360.0;
+        p.moveAngleRad += turnDeg * (kPi / 180.0);
+
+        p.width *= scale;
+        p.speedPxPerSec *= scale;
+    };
+
+    auto rotateStroke = [&](StrokeData& s) {
+        for (StrokePoint& p : s.points) rotatePoint(p);
+        s.maxSpeed *= scale;
+        s.avgSpeed *= scale;
+    };
+
+    for (StrokeData& s : m_strokes) rotateStroke(s);
+    rotateStroke(m_currentStroke);
+    m_realtime.currentSpeed *= scale;
+    m_realtime.currentWidth *= scale;
+    ++m_revision;
+}
+
 void TrajectorySession::OnStrokeBegin(DWORD time) {
     m_isRecordingStroke = true;
     m_currentStroke = StrokeData();

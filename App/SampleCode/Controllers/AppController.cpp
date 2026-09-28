@@ -109,8 +109,9 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     return true;
 }
 
-// 用紙種類・縦横比が変わった際の後始末。
-// 新しい用紙の固定論理解像度で GpuInk を再初期化し、白紙にする。
+// 半紙の縦横比が変わった際の後始末。
+// 新しい半紙の固定論理解像度で GpuInk を作り直す（白紙になる）。
+// 運筆記録は呼び出し側で扱うのでここでは消さない。
 static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
@@ -134,20 +135,22 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     }
     if (canvasW > 0 && canvasH > 0) {
         gpuInk.Initialize(canvasW, canvasH);
-        state.undo.Clear();
-        state.trajectory.Clear();
-        state.replay.Reset();
     }
 
-    // 墨・記録・控えを消し、ペンが接地したままでも運筆を始めないようロックする
-    AppController::ClearAllInk(hWnd, state, gpuInk);
+    // 「一画戻す」の控えは元の縦横の寸法で持っているので、作り直した半紙へは書き戻せない
+    state.undo.Clear();
+    state.ui.showClearConfirm = false;
+    // ペンが接地したままでも、新しい半紙で運筆を始めないようロックする
+    state.ui.suppressPenUntilLift = true;
+    InvalidateRect(hWnd, NULL, FALSE);
 }
 
 // 紙だけ表示の出入り。
 // 紙だけ表示の半紙は、通常表示の半紙を画面の上で左回りに90度倒したもの
 // （画面を右回りに倒して見ると元の向きに戻る）。墨のバッファも縦横が入れ替わるので、
 // 切り替える前の墨を控えておき、新しい半紙へ回して書き戻す。書いていた字はそのまま残る。
-// 運筆記録と「一画戻す」の控えは元の向きの座標で持っているので、これまでどおり消す。
+// 運筆記録も同じ向きへ回して残す（解析タブのリプレイは記録から描くため、消すと字が消える）。
+// 「一画戻す」の控えは元の縦横の寸法で持っているので、これまでどおり消す。
 void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk) {
     if (state.ui.paperOnly == on) return;
 
@@ -165,6 +168,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     // 書いていた墨を控える（半紙を作り直すと消えるため）
     InkSnapshot keep;
     bool hasInk = gpuInk.CaptureSnapshot(keep);
+    const RECT oldPaper = state.ui.rPaper;
 
     state.ui.paperOnly = on;
 
@@ -173,6 +177,18 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     // 紙だけ表示へ入るときは左回り、戻るときは右回りに回して書き戻す
     if (hasInk && gpuInk.RestoreSnapshotRotated(keep, on)) {
         InvalidateRect(hWnd, NULL, FALSE);
+    }
+
+    // 運筆記録も墨と同じ向きへ回し、リプレイのタイムラインと再生位置を取り直す。
+    // 書き上がった状態（末尾）を見ていたなら、紙だけ表示で書き足した画も含めて末尾に合わせる。
+    bool wasAtEnd = (state.replay.currentTimeMs >= state.replay.totalDurationMs);
+    state.trajectory.RotateQuarter(on, oldPaper, state.ui.rPaper);
+    SyncReplayTimeline(hWnd, state);
+    if (wasAtEnd) {
+        state.replay.currentTimeMs = state.replay.totalDurationMs;
+        state.replay.hasValidSample = state.trajectory.GetReplaySample(
+            state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+        state.UpdateReplaySeekThumb();
     }
 }
 

@@ -29,6 +29,7 @@ public:
     static void SyncReplayTimeline(HWND hWnd, AppState& state);
 
     // 紙だけ表示（横向きの半紙を画面いっぱいに出す）の出入り。
-    // 半紙の縦横が入れ替わるので、書いた墨と記録は消して新しい紙から始める。
+    // 半紙の縦横が入れ替わるので、書いた墨と運筆記録は90度回して引き継ぐ。
+    // 「一画戻す」の控えだけは書き戻せないので消す。
     static void SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk);
 };
