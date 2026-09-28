@@ -5,6 +5,29 @@
 void ModalView::DrawClearConfirm(HDC dc, int width, int height, const AppState& state) {
     if (!state.ui.showClearConfirm) return;
 
+    if (!state.ui.paperOnly) {
+        DrawClearConfirmBody(dc, width, height, state);
+        return;
+    }
+
+    // 紙だけ表示は画面を右回りに90度倒して見るので、倒した向きで読めるよう
+    // 座標系ごと左回りに90度回して描く（倒した向きの (u, v) → 画面の (v, height - u)）。
+    // モーダルの矩形も AppState::LayoutPaperOnly で倒した向きに組んである。
+    int oldMode = SetGraphicsMode(dc, GM_ADVANCED);
+    XFORM xf = {};
+    xf.eM11 = 0.0f;  xf.eM12 = -1.0f;
+    xf.eM21 = 1.0f;  xf.eM22 = 0.0f;
+    xf.eDx = 0.0f;   xf.eDy = static_cast<FLOAT>(height);
+    SetWorldTransform(dc, &xf);
+
+    DrawClearConfirmBody(dc, height, width, state);
+
+    // GM_COMPATIBLE へ戻すには先に変換を単位行列へ戻しておく必要がある
+    ModifyWorldTransform(dc, nullptr, MWT_IDENTITY);
+    SetGraphicsMode(dc, oldMode);
+}
+
+void ModalView::DrawClearConfirmBody(HDC dc, int width, int height, const AppState& state) {
     using namespace RenderUtils;
     const UIState& ui = state.ui;
 

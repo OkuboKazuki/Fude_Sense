@@ -21,7 +21,28 @@ void GetGridDivision(GridPattern pattern, int& cols, int& rows) {
     }
 }
 
+// 全消し確認モーダル。w×h の領域の中央に置く。
+// 紙だけ表示では倒した向き（幅と高さを入れ替えた座標系）で組む。
+void LayoutClearModal(UIState& ui, int w, int h) {
+    int modalW = 660;
+    int modalH = 260;
+    ui.rClearModalBox = { w / 2 - modalW / 2, h / 2 - modalH / 2, w / 2 + modalW / 2, h / 2 + modalH / 2 };
+    int btnW = 140;
+    int btnH = 40;
+    int btnY = ui.rClearModalBox.bottom - 56;
+    ui.rModalCancelBtn = { ui.rClearModalBox.left + 40, btnY, ui.rClearModalBox.left + 40 + btnW, btnY + btnH };
+    ui.rModalClearBtn  = { ui.rClearModalBox.right - 40 - btnW, btnY, ui.rClearModalBox.right - 40, btnY + btnH };
+}
+
 } // namespace
+
+// 画面上の点を全消し確認モーダルの座標系へ移す。
+// 紙だけ表示は画面を右回りに90度倒して見るので、倒した向きの右が画面の上、
+// 下が画面の右になる。モーダルはその向きで組んであるため、点も同じ向きへ直す。
+POINT AppState::ToClearModalSpace(POINT pt, int clientHeight) const {
+    if (!ui.paperOnly) return pt;
+    return { clientHeight - pt.y, pt.x };
+}
 
 // シークバーのツマミだけを再生時刻から置き直す。
 // 再生中は毎フレーム動くが、他のレイアウトは変わらないため、
@@ -276,14 +297,7 @@ void AppState::Layout(int w, int h) {
     ui.rPaperOnlyExitBtn = ui.rPaperOnlyClearBtn = ui.rPaperOnlyBar = { 0, 0, 0, 0 };
 
     // 4. 全消し確認モーダルダイアログ
-    int modalW = 660;
-    int modalH = 260;
-    ui.rClearModalBox = { w / 2 - modalW / 2, h / 2 - modalH / 2, w / 2 + modalW / 2, h / 2 + modalH / 2 };
-    int btnW = 140;
-    int btnH = 40;
-    int btnY = ui.rClearModalBox.bottom - 56;
-    ui.rModalCancelBtn = { ui.rClearModalBox.left + 40, btnY, ui.rClearModalBox.left + 40 + btnW, btnY + btnH };
-    ui.rModalClearBtn  = { ui.rClearModalBox.right - 40 - btnW, btnY, ui.rClearModalBox.right - 40, btnY + btnH };
+    LayoutClearModal(ui, w, h);
 
     // 5. 筆圧キャリブレーション結果モーダル
     int calibModalW = 540;
@@ -316,7 +330,8 @@ void AppState::LayoutPaperOnly(int w, int h) {
     ui.rSub = ui.rRight = kNone;
     ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
     ui.rInkStoneLarge = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = ui.rPaperOnlyBtn = kNone;
-    ui.rClearModalBox = ui.rModalClearBtn = ui.rModalCancelBtn = kNone;
+    // 全消し確認モーダル（Esc・筆跡を消すボタンで出す）は倒した向きで読めるよう、幅と高さを入れ替えて組む
+    LayoutClearModal(ui, h, w);
     ui.rCanvasArea = { 0, 0, w, h };
 
     const int barW = 96;

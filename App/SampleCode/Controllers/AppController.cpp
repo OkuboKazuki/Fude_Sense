@@ -190,12 +190,33 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         return true;
     }
 
+    // 1. 全消し確認モーダル表示中のクリック（紙だけ表示でも出る）
+    if (ui.showClearConfirm) {
+        // モーダルは半紙の上に重なっている。どのボタンを押した場合でも、
+        // モーダルを閉じた直後に接地したままのペンが運筆を始めないようロックする。
+        ui.suppressPenUntilLift = true;
+        POINT mp = state.ToClearModalSpace(pt, h);
+        if (PtIn(ui.rModalClearBtn, mp)) {
+            ClearAllInk(hWnd, state, gpuInk);
+            return true;
+        } else if (PtIn(ui.rModalCancelBtn, mp) || !PtIn(ui.rClearModalBox, mp)) {
+            ui.showClearConfirm = false;
+            InvalidateRect(hWnd, NULL, FALSE);
+            return true;
+        }
+        return true;
+    }
+
     // 紙だけ表示中は半紙の右の3ボタンだけを見る。
     // それ以外は false を返して素通しし、半紙への運筆をそのまま通す。
     if (ui.paperOnly) {
-        // 紙だけ表示では確認モーダルを出さず、押したらすぐ消す
+        // 通常表示の「全消し」ボタンと同じ確認モーダルを出す（倒した向きで描く）
         if (PtIn(ui.rPaperOnlyClearBtn, pt)) {
-            ClearAllInk(hWnd, state, gpuInk);
+            ui.hoverPaperOnly = 0;
+            ui.hoverClearModal = 0;
+            ui.showClearConfirm = true;
+            ui.suppressPenUntilLift = true;
+            InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
         if (PtIn(ui.rPaperOnlyExitBtn, pt)) {
@@ -215,22 +236,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     if (state.otehon.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
         state.otehon.isTyping = false;
         InvalidateRect(hWnd, &ui.rSub, FALSE);
-    }
-
-    // 1. 全消し確認モーダル表示中のクリック
-    if (ui.showClearConfirm) {
-        // モーダルは半紙の上に重なっている。どのボタンを押した場合でも、
-        // モーダルを閉じた直後に接地したままのペンが運筆を始めないようロックする。
-        ui.suppressPenUntilLift = true;
-        if (PtIn(ui.rModalClearBtn, pt)) {
-            ClearAllInk(hWnd, state, gpuInk);
-            return true;
-        } else if (PtIn(ui.rModalCancelBtn, pt) || !PtIn(ui.rClearModalBox, pt)) {
-            ui.showClearConfirm = false;
-            InvalidateRect(hWnd, NULL, FALSE);
-            return true;
-        }
-        return true;
     }
 
     // 1.5 筆圧キャリブレーション結果モーダル表示中のクリック
@@ -664,6 +669,17 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
 
     // 紙だけ表示中は半紙の右の3ボタンだけがホバー対象
     if (ui.paperOnly) {
+        // 全消し確認モーダルが開いている間は、そのボタンだけを見る
+        if (ui.showClearConfirm) {
+            int oldModal = ui.hoverClearModal;
+            POINT mp = state.ToClearModalSpace(pt, h);
+            ui.hoverClearModal = 0;
+            if (PtIn(ui.rModalClearBtn, mp)) ui.hoverClearModal = 1;
+            else if (PtIn(ui.rModalCancelBtn, mp)) ui.hoverClearModal = 2;
+            if (oldModal != ui.hoverClearModal) InvalidateRect(hWnd, NULL, FALSE);
+            return true;
+        }
+
         int oldPaperOnly = ui.hoverPaperOnly;
         ui.hoverPaperOnly = 0;
         if (PtIn(ui.rPaperOnlyExitBtn, pt)) ui.hoverPaperOnly = 1;

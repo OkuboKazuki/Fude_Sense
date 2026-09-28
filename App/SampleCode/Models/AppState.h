@@ -286,6 +286,9 @@ public:
     // シークバーのツマミ位置だけを再計算する
     void UpdateReplaySeekThumb();
 
+    // 画面上の点を全消し確認モーダルの座標系へ移す（紙だけ表示では倒した向き）
+    POINT ToClearModalSpace(POINT pt, int clientHeight) const;
+
     void SetSaveFeedback(const std::wstring& message) {
         ui.saveFeedback = message;
         ui.saveFeedbackTime = GetTickCount();

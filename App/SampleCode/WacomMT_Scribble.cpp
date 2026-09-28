@@ -664,7 +664,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		}
 
-		// 文字入力中はショートカット（Esc=全消し / I=インクウィンドウ）を止める。
+		// 文字入力中はショートカット（Esc=全消しの確認 / I=インクウィンドウ）を止める。
 		// Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
 		if (g_appState.otehon.isTyping) break;
 
@@ -672,7 +672,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case VK_ESCAPE:
 		{
-			AppController::ClearAllInk(hWnd, g_appState, g_gpuInk);
+			// タイトル画面や遷移中は消す対象の筆跡がないので何もしない
+			if (g_appState.currentScreen != AppScreen::Studio || g_appState.isTransitioning) break;
+
+			// 確認モーダル表示中の Esc は「キャンセル」として閉じる
+			if (g_appState.ui.showClearConfirm)
+			{
+				g_appState.ui.showClearConfirm = false;
+				InvalidateRect(hWnd, NULL, FALSE);
+				break;
+			}
+
+			// キャリブレーション結果モーダルと重ねない
+			if (g_appState.calibration.IsResult()) break;
+
+			// 硯パネルの「全消し」ボタンと同じ確認モーダルを出す。
+			// 紙だけ表示では倒した向きで読めるよう回して描く（ModalView::DrawClearConfirm）。
+			g_appState.ui.hoverClearModal = 0;
+			g_appState.ui.showClearConfirm = true;
+			InvalidateRect(hWnd, NULL, FALSE);
 			break;
 		}
 		case 'Z':
