@@ -47,7 +47,7 @@ void Cleanup(void);
 
 // Global Variables
 HINSTANCE hInst = NULL;
-std::wstring szTitle = L"SHUJI STUDIO - 習字制作ワークスペース";
+std::wstring szTitle = L"Fude Sense";
 std::wstring szWindowClass = L"FUDESENCE";
 HWND g_mainWnd = NULL;
 HDC g_hdc = NULL;
@@ -541,11 +541,62 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			OutputDebugStringA("Could Not Open Wintab Tablet Contexts.\n");
 		}
 
+		// タイトル画面のブレスアニメーションタイマ開始
+		SetTimer(hWnd, TITLE_ANIM_TIMER_ID, 33, NULL);
+
 		break;
 	}
 
 	case WM_TIMER:
 	{
+		if (wParam == TRANSITION_TIMER_ID)
+		{
+			if (!g_appState.isTransitioning)
+			{
+				KillTimer(hWnd, TRANSITION_TIMER_ID);
+				return 0;
+			}
+
+			DWORD now = GetTickCount();
+			DWORD elapsed = now - g_appState.transitionStartTime;
+			if (elapsed >= g_appState.transitionDurationMs)
+			{
+				g_appState.isTransitioning = false;
+				g_appState.transitionProgress = 1.0f;
+				g_appState.currentScreen = AppScreen::Studio;
+				g_appState.ui.leftTab = g_appState.pendingStartTab;
+				if (g_appState.pendingStartTab == LeftTab::Analysis)
+				{
+					AppController::SyncReplayTimeline(hWnd, g_appState);
+					if (g_appState.replay.currentTimeMs == 0)
+					{
+						g_appState.replay.currentTimeMs = g_appState.replay.totalDurationMs;
+						g_appState.replay.hasValidSample = g_appState.trajectory.GetReplaySample(
+							g_appState.replay.currentTimeMs, g_appState.ui.rPaper, g_appState.replay.currentSample);
+					}
+					g_appState.replay.state = ReplayState::Paused;
+				}
+				KillTimer(hWnd, TRANSITION_TIMER_ID);
+			}
+			else
+			{
+				g_appState.transitionProgress = static_cast<float>(elapsed) / static_cast<float>(g_appState.transitionDurationMs);
+			}
+			InvalidateRect(hWnd, NULL, FALSE);
+			return 0;
+		}
+
+		if (wParam == TITLE_ANIM_TIMER_ID)
+		{
+			if (g_appState.currentScreen != AppScreen::Title || g_appState.isTransitioning)
+			{
+				KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
+				return 0;
+			}
+			InvalidateRect(hWnd, NULL, FALSE);
+			return 0;
+		}
+
 		if (wParam == REPLAY_TIMER_ID)
 		{
 			// 再生中でなくなったらタイマを止める。再び張るのは再生ボタン側。
@@ -803,6 +854,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PenInputEvent penEvent;
 		if (WintabAdapter::ConvertPacket(hWnd, wParam, lParam, g_wintab, penEvent))
 		{
+			if (penEvent.pressure <= 0.0)
+			{
+				g_appState.ui.suppressPenUntilLift = false;
+			}
+
+			if (penEvent.pressure > 0.0 && g_appState.currentScreen == AppScreen::Title)
+			{
+				if (!g_appState.ui.suppressPenUntilLift)
+				{
+					POINT pt = { penEvent.x, penEvent.y };
+					AppController::OnLButtonDown(hWnd, pt, g_appState, g_gpuInk);
+				}
+				break;
+			}
 			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
 		}
 		break;
@@ -832,6 +897,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
 				if (message == WM_POINTERUP)
 				{
+					g_appState.ui.suppressPenUntilLift = false;
 					g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 				}
 				return 0;

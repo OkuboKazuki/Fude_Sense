@@ -172,6 +172,24 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
 
+    // 0. タイトル画面でのクリック / タップ処理
+    if (state.currentScreen == AppScreen::Title) {
+        if (state.isTransitioning) return true;
+        if (state.ui.suppressPenUntilLift) return true;
+
+        state.pendingStartTab = LeftTab::Brush;
+        state.ui.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
+
+        // 墨染めフェード遷移を開始
+        state.isTransitioning = true;
+        state.transitionStartTime = GetTickCount();
+        state.transitionProgress = 0.0f;
+        SetTimer(hWnd, TRANSITION_TIMER_ID, 16, NULL);
+        KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
+        InvalidateRect(hWnd, NULL, FALSE);
+        return true;
+    }
+
     // 紙だけ表示中は半紙の右の3ボタンだけを見る。
     // それ以外は false を返して素通しし、半紙への運筆をそのまま通す。
     if (ui.paperOnly) {
@@ -245,6 +263,20 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
+        return true;
+    }
+
+    // 1.8 ホームボタン「🏠」（タイトル画面へ戻る）
+    if (PtIn(ui.rTbHomeBtn, pt)) {
+        state.currentScreen = AppScreen::Title;
+        state.isTransitioning = false;
+        state.transitionProgress = 0.0f;
+        state.replay.state = ReplayState::Stopped;
+        state.ui.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
+        KillTimer(hWnd, REPLAY_TIMER_ID);
+        KillTimer(hWnd, TRANSITION_TIMER_ID);
+        SetTimer(hWnd, TITLE_ANIM_TIMER_ID, 33, NULL);
+        InvalidateRect(hWnd, NULL, FALSE);
         return true;
     }
 
@@ -625,6 +657,11 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     int w = clientRect.right - clientRect.left;
     int h = clientRect.bottom - clientRect.top;
 
+    // タイトル画面表示中はマウス移動での追加処理なし
+    if (state.currentScreen == AppScreen::Title) {
+        return true;
+    }
+
     // 紙だけ表示中は半紙の右の3ボタンだけがホバー対象
     if (ui.paperOnly) {
         int oldPaperOnly = ui.hoverPaperOnly;
@@ -706,7 +743,8 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rCalibRetryBtn, pt)) ui.hoverCalib = 2;
         else if (PtIn(ui.rCalibCloseBtn, pt)) ui.hoverCalib = 3;
     } else {
-        if (PtIn(ui.rTbNavToggle, pt)) ui.hoverTb = TbButton::NavToggle;
+        if (PtIn(ui.rTbHomeBtn, pt)) ui.hoverTb = TbButton::Home;
+        else if (PtIn(ui.rTbNavToggle, pt)) ui.hoverTb = TbButton::NavToggle;
         else if (ui.isSubPanelOpen) {
             if (PtIn(ui.rTbBrush, pt)) ui.hoverTb = TbButton::Brush;
             else if (PtIn(ui.rTbPaper, pt)) ui.hoverTb = TbButton::Paper;

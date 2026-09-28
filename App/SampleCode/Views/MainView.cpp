@@ -6,6 +6,9 @@
 #include "InkStoneView.h"
 #include "ModalView.h"
 #include "CalibrationView.h"
+#include "TitleView.h"
+
+#pragma comment(lib, "msimg32.lib")
 
 namespace {
 
@@ -52,11 +55,14 @@ struct BackBuffer {
 };
 
 BackBuffer g_backBuffer;
+BackBuffer g_titleBuffer;
 
 } // namespace
 
 void MainView::ReleaseBackBuffer() {
     g_backBuffer.Release();
+    g_titleBuffer.Release();
+    TitleView::ReleaseResources();
 }
 
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
@@ -71,6 +77,48 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     if (!g_backBuffer.Ensure(hdc, width, height)) return;
     HDC memDC = g_backBuffer.dc;
 
+    // ★ タイトル画面の単独描画
+    if (state.currentScreen == AppScreen::Title && !state.isTransitioning) {
+        TitleView::Draw(memDC, width, height, state);
+        BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
+        return;
+    }
+
+    // ★ タイトルからスタジオ画面へのアルファブレンド遷移演出
+    if (state.isTransitioning) {
+        // 1. 背景バッファ（memDC）にスタジオ画面を描画
+        RenderUtils::DrawWoodDesk(memDC, width, height);
+        CanvasView::DrawBackground(memDC, state);
+        if (state.pendingStartTab == LeftTab::Analysis) {
+            CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
+        } else {
+            CanvasView::RenderInk(memDC, gpuInk, state);
+        }
+        CanvasView::DrawOtehon(memDC, state);
+        CanvasView::DrawGrid(memDC, state);
+        InkStoneView::Draw(memDC, state);
+        FloatingMenuView::Draw(memDC, state);
+
+        // 2. 一時バッファにタイトル画面を描画
+        if (g_titleBuffer.Ensure(hdc, width, height)) {
+            TitleView::Draw(g_titleBuffer.dc, width, height, state);
+
+            // 3. アルファブレンドでタイトル画面を徐々にフェードアウト
+            BLENDFUNCTION bf = {};
+            bf.BlendOp = AC_SRC_OVER;
+            bf.BlendFlags = 0;
+            float alphaFactor = (std::max)(0.0f, (std::min)(1.0f, 1.0f - state.transitionProgress));
+            bf.SourceConstantAlpha = static_cast<BYTE>(alphaFactor * 255.0f);
+            bf.AlphaFormat = 0;
+
+            AlphaBlend(memDC, 0, 0, width, height, g_titleBuffer.dc, 0, 0, width, height, bf);
+        }
+
+        // 4. 画面へ一括転送
+        BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
+        return;
+    }
+
     RECT rcFull = { 0, 0, width, height };
     bool isFullRedraw = (rcPaint.left <= 0 && rcPaint.top <= 0 && rcPaint.right >= width && rcPaint.bottom >= height);
 
@@ -78,6 +126,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     bool hitPaper = (IntersectRect(&dummy, &rcPaint, &state.ui.rPaper) != FALSE);
     bool hitRight = (IntersectRect(&dummy, &rcPaint, &state.ui.rRight) != FALSE);
     bool hitLeft = (IntersectRect(&dummy, &rcPaint, &state.ui.rTbNavToggle) != FALSE)
+                || (IntersectRect(&dummy, &rcPaint, &state.ui.rTbHomeBtn) != FALSE)
                 || (state.ui.isSubPanelOpen && IntersectRect(&dummy, &rcPaint, &state.ui.rSub) != FALSE);
     bool hitModal = state.ui.showClearConfirm || state.calibration.IsActive();
 
@@ -161,3 +210,4 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
         }
     }
 }
+
