@@ -340,11 +340,15 @@ static bool CreateInkWindow()
 		NULL, NULL, hInst, NULL);
 	if (!g_hInkWnd) return false;
 
-	g_hMonitorWnd = CreateWindowExW(WS_EX_TOOLWINDOW, (LPCWSTR)(ULONG_PTR)(WORD)(g_monitorWndClassAtom),
-		L"Kinematics Monitor",
-		WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX,
-		750, 100, 440, 480,
-		NULL, NULL, hInst, NULL);
+	// モニタだけを × で閉じずに残していた場合は、作り直さずそれを使う
+	if (!g_hMonitorWnd)
+	{
+		g_hMonitorWnd = CreateWindowExW(WS_EX_TOOLWINDOW, (LPCWSTR)(ULONG_PTR)(WORD)(g_monitorWndClassAtom),
+			L"Kinematics Monitor",
+			WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX,
+			750, 100, 440, 480,
+			NULL, NULL, hInst, NULL);
+	}
 
 	ShowWindow(g_hInkWnd, SW_SHOW);
 	UpdateWindow(g_hInkWnd);
@@ -357,11 +361,12 @@ static bool CreateInkWindow()
 	return true;
 }
 
+// 後始末（ハンドルを戻す・モニタも閉じる）は InkWndProc の WM_DESTROY で行う。
+// × で閉じられたときも同じ経路を通すため。
 static void DestroyInkWindow()
 {
 	if (!g_hInkWnd) return;
 	DestroyWindow(g_hInkWnd);
-	g_hInkWnd = NULL;
 }
 
 LRESULT CALLBACK InkWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -380,6 +385,10 @@ LRESULT CALLBACK InkWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 	{
 		HFONT hFont = (HFONT)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
 		if (hFont) DeleteObject(hFont);
+		// × で閉じられた場合もハンドルを戻す。残すと次の I キーが閉じる処理として空振りする。
+		g_hInkWnd = NULL;
+		// モニタは Ink Viewer と対で開くので一緒に閉じる（g_hMonitorWnd は MonitorWndProc の WM_DESTROY で戻る）
+		if (g_hMonitorWnd && IsWindow(g_hMonitorWnd)) DestroyWindow(g_hMonitorWnd);
 		return 0;
 	}
 	case WM_PAINT:
