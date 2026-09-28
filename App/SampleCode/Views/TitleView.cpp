@@ -58,45 +58,16 @@ void TitleView::DrawCenterContent(HDC dc, int width, int height, const AppState&
     using namespace RenderUtils;
 
     int cx = width / 2;
-    int cy = height / 2 - 20;
+    int cy = height / 2 - 10;
 
-    // 1. 落款印（朱色モダン角丸印鑑）
-    int sealSize = 52;
-    int sealY = cy - 160;
-    RECT rSeal = { cx - sealSize / 2, sealY, cx + sealSize / 2, sealY + sealSize };
-    Box(dc, rSeal, RGB(190, 48, 42), RGB(235, 90, 85), 2, 8);
-    HFONT fSeal = CreateCustomFont(22, FW_BOLD);
-    Center(dc, rSeal, L"書", fSeal, RGB(255, 245, 240));
-    DeleteObject(fSeal);
-
-    // 2. メインタイトルロゴ「SHUJI STUDIO」
-    RECT rMainTitle = { cx - 450, cy - 96, cx + 450, cy - 32 };
-    HFONT fMainTitle = CreateCustomFont(48, FW_BOLD);
-    DrawTextCustom(dc, rMainTitle, L"SHUJI STUDIO", fMainTitle, RGB(245, 248, 255), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    // 1. メインタイトルロゴ「Fude Sense」
+    RECT rMainTitle = { cx - 400, cy - 60, cx + 400, cy + 10 };
+    HFONT fMainTitle = CreateCustomFont(54, FW_BOLD);
+    DrawTextCustom(dc, rMainTitle, L"Fude Sense", fMainTitle, RGB(245, 248, 255), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
     DeleteObject(fMainTitle);
 
-    // 3. サブタイトル「習字制作ワークスペース」
-    RECT rSubTitle = { cx - 350, cy - 28, cx + 350, cy + 4 };
-    HFONT fSubTitle = CreateCustomFont(18, FW_NORMAL);
-    DrawTextCustom(dc, rSubTitle, L"習 字 制 作 ワ ー ク ス ペ ー ス", fSubTitle, RGB(165, 185, 215), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DeleteObject(fSubTitle);
-
-    // 4. 英字サブ
-    RECT rDesc = { cx - 350, cy + 8, cx + 350, cy + 30 };
-    HFONT fDesc = CreateCustomFont(12, FW_BOLD);
-    DrawTextCustom(dc, rDesc, L"— PHYSICAL INK SIMULATION & STROKE ANALYSIS —", fDesc, RGB(95, 115, 145), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DeleteObject(fDesc);
-
-    // 5. 繊細な区切り線
-    HPEN pDiv = CreatePen(PS_SOLID, 1, RGB(45, 56, 78));
-    HPEN oldP = (HPEN)SelectObject(dc, pDiv);
-    MoveToEx(dc, cx - 120, cy + 54, nullptr);
-    LineTo(dc, cx + 120, cy + 54);
-    SelectObject(dc, oldP);
-    DeleteObject(pDiv);
-
-    // 6. 「タップして硯に向かう」ブレスアニメーション
-    int promptY = cy + 90;
+    // 2. 「タップして硯に向かう」ブレスアニメーション
+    int promptY = cy + 45;
     RECT rPrompt = { cx - 220, promptY, cx + 220, promptY + 50 };
 
     // 呼吸するようにゆったり明滅するブレスアニメーション (sin波)

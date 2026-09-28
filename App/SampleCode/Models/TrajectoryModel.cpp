@@ -189,7 +189,7 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
     ofs << "  \"format\": \"FudesenceStrokeArchive\",\n";
     ofs << "  \"version\": \"1.1\",\n";
     ofs << "  \"metadata\": {\n";
-    ofs << "    \"application\": \"SHUJI STUDIO (Fudesence)\",\n";
+    ofs << "    \"application\": \"Fude Sense\",\n";
     ofs << "    \"recordedAt\": \"" << GetCurrentISOTimestamp() << "\",\n";
     ofs << "    \"paperType\": \"" << paperNameStr << "\",\n";
     ofs << "    \"brushType\": \"" << brushNameStr << "\",\n";

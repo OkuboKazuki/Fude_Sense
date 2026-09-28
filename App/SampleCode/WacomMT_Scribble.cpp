@@ -47,7 +47,7 @@ void Cleanup(void);
 
 // Global Variables
 HINSTANCE hInst = NULL;
-std::wstring szTitle = L"SHUJI STUDIO - 習字制作ワークスペース";
+std::wstring szTitle = L"Fude Sense";
 std::wstring szWindowClass = L"FUDESENCE";
 HWND g_mainWnd = NULL;
 HDC g_hdc = NULL;
