@@ -338,10 +338,16 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     }
     case GridPattern::Div2:
     {
-        // 中央の縦線は字の中心を示す点線ガイド（セル境界ではない）
-        int mx = rBorder.left + bw / 2;
+        // 中央の縦線は字の中心を示す点線ガイド（セル境界ではない）。
+        // 紙だけ表示では半紙を左回りに倒しているので、画面上では横線になる。
         SelectObject(dc, gpDash);
-        MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
+        if (ui.paperOnly) {
+            int my = rBorder.top + bh / 2;
+            MoveToEx(dc, rBorder.left, my, nullptr); LineTo(dc, rBorder.right, my);
+        } else {
+            int mx = rBorder.left + bw / 2;
+            MoveToEx(dc, mx, rBorder.top, nullptr); LineTo(dc, mx, rBorder.bottom);
+        }
         SelectObject(dc, gp);
         break;
     }

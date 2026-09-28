@@ -382,7 +382,8 @@ void AppState::LayoutGridGeometry() {
     using namespace RenderUtils;
 
     {
-        int margin = (std::max)(6, RW(ui.rPaper) / 48);
+        // 余白は半紙の短辺から決める。紙だけ表示で倒しても通常表示と同じ幅になる。
+        int margin = (std::max)(6, (std::min)(RW(ui.rPaper), RH(ui.rPaper)) / 48);
         if (paper.gridPattern == GridPattern::None) {
             // 罫線なしのときは半紙全体を1マスとして扱う
             ui.rGridBorder = ui.rPaper;
@@ -393,19 +394,40 @@ void AppState::LayoutGridGeometry() {
 
         int bw = RW(ui.rGridBorder);
         int bh = RH(ui.rGridBorder);
-        GetGridDivision(paper.gridPattern, ui.gridCols, ui.gridRows);
+
+        // 列数・行数は半紙を縦に置いた向きで決める
+        int cols = 1, rows = 1;
+        GetGridDivision(paper.gridPattern, cols, rows);
+
+        // 紙だけ表示の半紙は、通常表示の半紙を左回りに90度倒したもの。
+        // 升目も一緒に倒すので、画面上の列と行が入れ替わる。
+        // gridCols / gridRows は画面上の分割数（CanvasView::DrawGrid が罫線を引くのに使う）。
+        const bool rotated = ui.paperOnly;
+        ui.gridCols = rotated ? rows : cols;
+        ui.gridRows = rotated ? cols : rows;
 
         ui.gridCellCount = 0;
-        for (int i = 0; i < ui.gridCols; ++i) {
-            int col = ui.gridCols - 1 - i; // 縦書きは右列から左列へ
-            for (int row = 0; row < ui.gridRows; ++row) {
+        for (int i = 0; i < cols; ++i) {
+            int col = cols - 1 - i; // 縦書きは右列から左列へ
+            for (int row = 0; row < rows; ++row) {
                 if (ui.gridCellCount >= MAX_GRID_CELLS) break;
-                ui.rGridCell[ui.gridCellCount++] = {
-                    ui.rGridBorder.left + (bw * col) / ui.gridCols,
-                    ui.rGridBorder.top + (bh * row) / ui.gridRows,
-                    ui.rGridBorder.left + (bw * (col + 1)) / ui.gridCols,
-                    ui.rGridBorder.top + (bh * (row + 1)) / ui.gridRows
-                };
+                if (!rotated) {
+                    ui.rGridCell[ui.gridCellCount++] = {
+                        ui.rGridBorder.left + (bw * col) / cols,
+                        ui.rGridBorder.top + (bh * row) / rows,
+                        ui.rGridBorder.left + (bw * (col + 1)) / cols,
+                        ui.rGridBorder.top + (bh * (row + 1)) / rows
+                    };
+                } else {
+                    // 左回りに倒すと、縦置きの (u, v) は画面の (v, 1 - u) へ移る。
+                    // 縦置きの行が画面の列に、縦置きの右の列が画面の上になる。
+                    ui.rGridCell[ui.gridCellCount++] = {
+                        ui.rGridBorder.left + (bw * row) / rows,
+                        ui.rGridBorder.top + (bh * (cols - col - 1)) / cols,
+                        ui.rGridBorder.left + (bw * (row + 1)) / rows,
+                        ui.rGridBorder.top + (bh * (cols - col)) / cols
+                    };
+                }
             }
         }
 
