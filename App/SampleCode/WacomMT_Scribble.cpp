@@ -836,6 +836,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		AppController::OnLButtonUp(hWnd, pt, g_appState);
 
+		// ボタンが離れた＝紙から離れたので運筆ロックを解除（マウス操作時の解除経路）。
+		// これがないとホームボタンでタイトルへ戻った後、マウスのクリックが
+		// ロックに阻まれてスタジオ画面へ入れなくなる。
+		g_appState.ui.suppressPenUntilLift = false;
+
 		if (s_isMouseDrawing)
 		{
 			s_isMouseDrawing = false;
