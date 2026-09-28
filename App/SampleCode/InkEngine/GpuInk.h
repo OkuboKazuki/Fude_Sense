@@ -98,6 +98,9 @@ public:
 	// ミューテックスで守る。半紙の寸法が変わっていると書き戻せない。
 	bool CaptureSnapshot(InkSnapshot& out);
 	bool RestoreSnapshot(const InkSnapshot& snap);
+	// 控えを90度回して書き戻す（紙だけ表示の出入りで半紙が倒れるとき用）。
+	// counterClockwise = true で左回り。寸法は今の半紙に合わせて拾い直す。
+	bool RestoreSnapshotRotated(const InkSnapshot& snap, bool counterClockwise);
 
 	// デバッグ用: 現在の墨汁量をスレッドセーフにコピーして取得
 	void GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight);
@@ -122,6 +125,8 @@ private:
 
 	// 墨量から画面用の ARGB バッファを組み直す（書き戻し後に使う）
 	void RebuildPixels_NoLock();
+	// 墨・水分を書き戻したあとの後始末（画素の組み直し・にじみ範囲・GPU への再転送）
+	void FinishRestore_NoLock();
 
 	void ResetDirtyRect_NoLock();
 	void ExpandDirtyRect_NoLock(int x, int y);

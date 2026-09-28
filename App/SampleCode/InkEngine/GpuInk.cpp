@@ -520,6 +520,58 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 	if (!RleDecode(snap.ink, snap.inkCompressed, m_ink.data(), pixels)) return false;
 	if (!RleDecode(snap.wet, snap.wetCompressed, m_wetField.data(), pixels)) return false;
 
+	FinishRestore_NoLock();
+	return true;
+}
+
+bool GpuInk::RestoreSnapshotRotated(const InkSnapshot& snap, bool counterClockwise)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (snap.IsEmpty()) return false;
+
+	const size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+	if (pixels == 0 || m_ink.size() != pixels || m_wetField.size() != pixels) return false;
+
+	// 控えは元の向きの寸法で展開する
+	const int srcW = snap.width;
+	const int srcH = snap.height;
+	const size_t srcPixels = static_cast<size_t>(srcW) * static_cast<size_t>(srcH);
+	std::vector<int> srcInk(srcPixels);
+	std::vector<uint8_t> srcWet(srcPixels);
+	if (!RleDecode(snap.ink, snap.inkCompressed, srcInk.data(), srcPixels)) return false;
+	if (!RleDecode(snap.wet, snap.wetCompressed, srcWet.data(), srcPixels)) return false;
+
+	// 書き戻し先の各画素について、回す前の半紙のどこに当たるかを正規化座標で求めて拾う。
+	// 左回り（通常表示 → 紙だけ表示）: 元の (u, v) は (v, 1 - u) へ移る。
+	// 右回り（紙だけ表示 → 通常表示）: 元の (u, v) は (1 - v, u) へ移る。
+	// 縦横の画素数は端数の丸めで1画素ほどずれうるので、最近傍で拾い直す。
+	for (int y = 0; y < m_height; ++y)
+	{
+		const double ny = (y + 0.5) / m_height;
+		for (int x = 0; x < m_width; ++x)
+		{
+			const double nx = (x + 0.5) / m_width;
+			double su, sv;
+			if (counterClockwise) { su = 1.0 - ny; sv = nx; }
+			else                  { su = ny;       sv = 1.0 - nx; }
+			int sx = (std::min)(srcW - 1, (std::max)(0, static_cast<int>(su * srcW)));
+			int sy = (std::min)(srcH - 1, (std::max)(0, static_cast<int>(sv * srcH)));
+			const size_t s = static_cast<size_t>(sy) * static_cast<size_t>(srcW) + static_cast<size_t>(sx);
+			const size_t d = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
+			m_ink[d] = srcInk[s];
+			m_wetField[d] = srcWet[s];
+		}
+	}
+
+	FinishRestore_NoLock();
+	return true;
+}
+
+void GpuInk::FinishRestore_NoLock()
+{
+	const size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+
 	// 拡散の作業用バッファは 1 パスごとに作り直されるので 0 に戻すだけでよい
 	if (!m_deltaInk.empty()) std::fill_n(m_deltaInk.data(), pixels, 0);
 
@@ -560,7 +612,6 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 		m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 	}
 	m_needsGpuUpload = true;
-	return true;
 }
 
 int GpuInk::SettleDiffusion(int maxSteps)

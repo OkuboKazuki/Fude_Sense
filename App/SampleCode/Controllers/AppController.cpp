@@ -144,8 +144,10 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 }
 
 // 紙だけ表示の出入り。
-// 墨は半紙と同じ画素数のバッファに積んでおり、縦横が入れ替わると引き伸ばされて
-// 字が歪むため、墨・運筆記録・控えはまとめて消して新しい紙にする。
+// 紙だけ表示の半紙は、通常表示の半紙を画面の上で左回りに90度倒したもの
+// （画面を右回りに倒して見ると元の向きに戻る）。墨のバッファも縦横が入れ替わるので、
+// 切り替える前の墨を控えておき、新しい半紙へ回して書き戻す。書いていた字はそのまま残る。
+// 運筆記録と「一画戻す」の控えは元の向きの座標で持っているので、これまでどおり消す。
 void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk) {
     if (state.ui.paperOnly == on) return;
 
@@ -160,9 +162,18 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     state.brush.isDraggingHardness = false;
     state.ui.hoverPaperOnly = 0;
 
+    // 書いていた墨を控える（半紙を作り直すと消えるため）
+    InkSnapshot keep;
+    bool hasInk = gpuInk.CaptureSnapshot(keep);
+
     state.ui.paperOnly = on;
 
     RelayoutForPaper(hWnd, state, gpuInk);
+
+    // 紙だけ表示へ入るときは左回り、戻るときは右回りに回して書き戻す
+    if (hasInk && gpuInk.RestoreSnapshotRotated(keep, on)) {
+        InvalidateRect(hWnd, NULL, FALSE);
+    }
 }
 
 bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure) {
