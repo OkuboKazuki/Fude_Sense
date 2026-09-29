@@ -203,7 +203,7 @@ bool CanvasView::HasOtehonFont(HDC dc, OtehonFontStyle style) {
 }
 
 void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity,
-                                 OtehonFontStyle style) {
+                                 OtehonFontStyle style, bool rotateCcw) {
     using namespace RenderUtils;
     if (text.empty()) return;
     const wchar_t* ch = text.c_str();
@@ -246,17 +246,35 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
     SIZE ext{};
     GetTextExtentPoint32W(layerDC, ch, chLen, &ext);
 
-    int emTop = (cellH - emSize) / 2;
+    // 倒して描くときは、字を正立させた向きのマス（縦横が入れ替わる）で位置を求める
+    const int glyphW = rotateCcw ? cellH : cellW;
+    const int glyphH = rotateCcw ? cellW : cellH;
+    int emTop = (glyphH - emSize) / 2;
     int baseline = emTop + (tm.tmAscent - tm.tmInternalLeading);
-    int x = (cellW - ext.cx) / 2;
+    int x = (glyphW - ext.cx) / 2;
 
     int grayVal = (int)(248 - opacity * 105.0);
     grayVal = Clamp(grayVal, 80, 245);
+
+    // 左回りに倒す: 正立したマスの上端が画面の左、左端が画面の下へ来るよう、
+    // 正立の (x', y') を画面の (y', cellH - x') へ移す
+    int oldMode = 0;
+    if (rotateCcw) {
+        oldMode = SetGraphicsMode(layerDC, GM_ADVANCED);
+        XFORM xf = { 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, static_cast<float>(cellH) };
+        SetWorldTransform(layerDC, &xf);
+    }
 
     SetTextAlign(layerDC, TA_LEFT | TA_BASELINE);
     SetBkMode(layerDC, TRANSPARENT);
     SetTextColor(layerDC, RGB(grayVal, (int)(grayVal * 0.98), (int)(grayVal * 0.95)));
     TextOutW(layerDC, x, baseline, ch, chLen);
+
+    // 作業用の DC は使い回すので、次の塗りつぶしがずれないよう変換を戻す
+    if (rotateCcw) {
+        ModifyWorldTransform(layerDC, nullptr, MWT_IDENTITY);
+        SetGraphicsMode(layerDC, oldMode);
+    }
 
     BitBlt(dc, cell.left, cell.top, cellW, cellH, layerDC, 0, 0, SRCAND);
 
@@ -265,16 +283,16 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
 
 void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     if (!state.otehon.isVisible) return;
-    // 紙だけ表示は画面を倒して使うので、お手本が横向きになる。出さない。
-    // 表示設定（isVisible）は残すので、通常表示に戻ればそのまま出る。
-    if (state.ui.paperOnly) return;
 
     const UIState& ui = state.ui;
     const double opacity = state.otehon.opacity;
 
-    // マスごとに置いた字をすべて出す
+    // マスごとに置いた字をすべて出す。
+    // 紙だけ表示の升目は半紙と一緒に左回りに倒してあり（並びは書字順のまま）、
+    // 画面を右回りに倒して縦に持って書く。字も左回りに倒せば、その向きで正立して見える。
     for (int i = 0; i < ui.gridCellCount; ++i) {
-        DrawOtehonGlyph(dc, ui.rGridCell[i], state.otehon.GetCellText(i), opacity, state.otehon.fontStyle);
+        DrawOtehonGlyph(dc, ui.rGridCell[i], state.otehon.GetCellText(i), opacity, state.otehon.fontStyle,
+                        ui.paperOnly);
     }
 }
 

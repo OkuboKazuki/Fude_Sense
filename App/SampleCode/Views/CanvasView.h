@@ -16,8 +16,9 @@ public:
 
     // 指定した矩形にお手本を1字、em ボックス基準で内接描画する
     // （画像エクスポートからも使う）
+    // rotateCcw = true で字を左回りに90度倒して描く（紙だけ表示の半紙の向きに合わせる用）
     static void DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& text, double opacity,
-                                OtehonFontStyle style);
+                                OtehonFontStyle style, bool rotateCcw = false);
 
     // 書体がこの PC に入っているか。無い書体を選ぶと GDI が黙って別の書体へ
     // 置き換えるため、UI 側で選べないことを示すのに使う。
