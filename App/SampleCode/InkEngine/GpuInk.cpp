@@ -1096,11 +1096,9 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 		}
 	}
 
-	extern HWND g_hInkWnd;
 	if (stampChanged)
 	{
 		m_needsGpuUpload = true;
-		if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
 	}
 }
 
@@ -1330,9 +1328,7 @@ void GpuInk::PropagationThreadLoop()
 
 		if (updated)
 		{
-			extern HWND g_hInkWnd;
 			extern HWND g_mainWnd;
-			if (g_hInkWnd && IsWindow(g_hInkWnd)) InvalidateRect(g_hInkWnd, NULL, FALSE);
 			if (g_mainWnd && IsWindow(g_mainWnd))
 			{
 				if (rcDirty.right > rcDirty.left && rcDirty.bottom > rcDirty.top)
