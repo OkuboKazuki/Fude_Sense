@@ -701,9 +701,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				break;
 			}
 
-			// キャリブレーション結果モーダルと重ねない
-			if (g_appState.calibration.IsResult()) break;
-
 			// 硯パネルの「全消し」ボタンと同じ確認モーダルを出す。
 			// 紙だけ表示では倒した向きで読めるよう回して描く（ModalView::DrawClearConfirm）。
 			g_appState.ui.hoverClearModal = 0;

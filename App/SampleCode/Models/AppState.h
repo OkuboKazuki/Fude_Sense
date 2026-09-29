@@ -176,7 +176,6 @@ struct OtehonModel {
 
 #include "InkModel.h"
 #include "TrajectoryModel.h"
-#include "CalibrationModel.h"
 #include "UndoHistory.h"
 #include "UIComponents.h"
 
@@ -186,7 +185,6 @@ struct UIState {
     bool isSubPanelOpen = true;
     bool showClearConfirm = false;
     int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
-    int hoverCalib = 0;      // 1: 適用, 2: 再計測, 3: キャンセル/閉じる
 
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
     // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
@@ -219,7 +217,6 @@ struct UIState {
     UIWidget rTbNavToggle{}, rTbBrush{}, rTbPaper{}, rTbAnalysis{}, rTbSave{}, rTbOtehon{};
     UIWidget rPaper{};
     UIWidget rSubSmall{}, rSubMedium{}, rSubLarge{};
-    UIWidget rSubCalibBtn{}; // 筆圧キャリブレーション起動ボタン
     UIWidget rGridTile[GRID_PATTERN_COUNT]{};
     UIWidget rColorBtn[3]{};
     UIWidget rOtehonTile[8]{};
@@ -240,7 +237,6 @@ struct UIState {
     UIWidget rPaperOnlyBar{};      // 紙だけ表示中: 半紙の右のボタンの帯
     UIWidget rHardnessTrack{};
     UIWidget rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
-    UIWidget rCalibModalBox{}, rCalibApplyBtn{}, rCalibRetryBtn{}, rCalibCloseBtn{};
 
     // タイトル画面用ウィジェット
     UIWidget rTitleCardFree{};      // 「自由に書く」カード
@@ -275,7 +271,6 @@ public:
     InkModel ink;
     TrajectorySession trajectory;
     ReplayModel replay;
-    CalibrationModel calibration;
     UndoHistory undo;   // 「一画戻す」用に、画を書き始める直前の状態を控える
     UIState ui;
 

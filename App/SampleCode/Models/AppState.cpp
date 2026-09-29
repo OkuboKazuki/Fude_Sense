@@ -108,10 +108,6 @@ void AppState::Layout(int w, int h) {
         int cardBottom = topOff + (cardH + 10) * 2 + cardH;
         ui.rHardnessTrack = { ui.rSub.left + 40, cardBottom + 74, ui.rSub.right - 40, cardBottom + 88 };
 
-        // 筆圧キャリブレーションボタン
-        int calibBtnY = cardBottom + 138;
-        ui.rSubCalibBtn = { ui.rSub.left + 18, calibBtnY, ui.rSub.right - 18, calibBtnY + 58 };
-
         // 紙タブ
         // 用紙は半紙に固定なので、先頭は下敷きの見出しから始める
         int gridTop = topOff + 36;
@@ -298,22 +294,6 @@ void AppState::Layout(int w, int h) {
 
     // 4. 全消し確認モーダルダイアログ
     LayoutClearModal(ui, w, h);
-
-    // 5. 筆圧キャリブレーション結果モーダル
-    int calibModalW = 540;
-    int calibModalH = 340;
-    ui.rCalibModalBox = { w / 2 - calibModalW / 2, h / 2 - calibModalH / 2, w / 2 + calibModalW / 2, h / 2 + calibModalH / 2 };
-    int cBtnH = 42;
-    int cBtnY = ui.rCalibModalBox.bottom - 58;
-    int cApplyW = 200;
-    int cRetryW = 120;
-    int cCloseW = 110;
-    int cTotalW = cApplyW + cRetryW + cCloseW + 24;
-    int cStartX = ui.rCalibModalBox.left + (calibModalW - cTotalW) / 2;
-
-    ui.rCalibApplyBtn = { cStartX, cBtnY, cStartX + cApplyW, cBtnY + cBtnH };
-    ui.rCalibRetryBtn = { cStartX + cApplyW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW, cBtnY + cBtnH };
-    ui.rCalibCloseBtn = { cStartX + cApplyW + 12 + cRetryW + 12, cBtnY, cStartX + cApplyW + 12 + cRetryW + 12 + cCloseW, cBtnY + cBtnH };
 }
 
 // 紙だけ表示。机や毛氈は描かず、横に倒した半紙を比率を保って画面いっぱいに広げ、

@@ -5,7 +5,6 @@
 #include "FloatingMenuView.h"
 #include "InkStoneView.h"
 #include "ModalView.h"
-#include "CalibrationView.h"
 #include "TitleView.h"
 
 #pragma comment(lib, "msimg32.lib")
@@ -128,7 +127,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     bool hitLeft = (IntersectRect(&dummy, &rcPaint, &state.ui.rTbNavToggle) != FALSE)
                 || (IntersectRect(&dummy, &rcPaint, &state.ui.rTbHomeBtn) != FALSE)
                 || (state.ui.isSubPanelOpen && IntersectRect(&dummy, &rcPaint, &state.ui.rSub) != FALSE);
-    bool hitModal = state.ui.showClearConfirm || state.calibration.IsActive();
+    bool hitModal = state.ui.showClearConfirm;
 
     // 運筆中など半紙専用の局所更新で、モーダルや左メニュー、硯パネル、木目余白と交差しない場合のみ背景を再描画しない
     // （硯パネルは透明テキスト「墨残量: ○○%」を描画するため、木目背景の再描画・クリアが必要）
@@ -177,9 +176,6 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
 
         // 8. 全消し確認モーダルオーバーレイ
         ModalView::DrawClearConfirm(memDC, width, height, state);
-
-        // 9. 筆圧キャリブレーション（ガイダンスまたは結果モーダル）
-        CalibrationView::Draw(memDC, width, height, state);
 
         // 画面へ一括転送 (フリッカーフリー)
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);

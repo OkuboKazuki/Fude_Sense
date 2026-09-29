@@ -39,7 +39,6 @@
 App/SampleCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
-│   ├── CalibrationModel.h           # 筆圧キャリブレーション数理モデル
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
 │   └── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合ファサード
@@ -56,7 +55,6 @@ App/SampleCode/
 │   ├── FloatingMenuView.h / .cpp    # 左側フローティングパネル (筆/紙/保存/お手本)
 │   ├── InkStoneView.h / .cpp        # 右側 硯・墨残量・墨補充・全消し描画
 │   ├── AnalysisView.h / .cpp        # リアルタイム運筆解析・3D筆姿勢モニタ描画
-│   ├── CalibrationView.h / .cpp     # 筆圧自動測定ガイダンス・結果モーダル
 │   ├── ModalView.h / .cpp           # 全消し確認モーダル描画
 │   └── MainView.h / .cpp            # ダブルバッファリングと描画統括
 │

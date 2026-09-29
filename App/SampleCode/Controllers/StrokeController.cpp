@@ -17,7 +17,6 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     }
     if (pState) {
         pState->trajectory.OnStrokeEnd();
-        pState->calibration.OnStrokeEnd();
     }
 }
 
@@ -76,16 +75,11 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     bool canDrawInk = (state.currentScreen == AppScreen::Studio)
         && !state.isTransitioning
         && !state.ui.showClearConfirm
-        && !state.calibration.IsResult()
         && (state.ui.paperOnly || state.ui.leftTab != LeftTab::Analysis)
         && PtInRect(&rPaper, clientPt)
         && !(state.ui.isSubPanelOpen && PtInRect(&rSub, clientPt));
 
     if (m_smoothedPressure > 0.0 && canDrawInk) {
-        // キャリブレーション中の筆圧サンプリング
-        if (state.calibration.IsInDrawingStep()) {
-            state.calibration.RecordPoint(m_smoothedPressure);
-        }
         POINT paperPt = { clientPt.x - rPaper.left, clientPt.y - rPaper.top };
         POINT oldPaperPt = { m_ptOld.x - rPaper.left, m_ptOld.y - rPaper.top };
 
