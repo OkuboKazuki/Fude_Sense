@@ -137,8 +137,7 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
         gpuInk.Initialize(canvasW, canvasH);
     }
 
-    // 「一画戻す」の控えは元の縦横の寸法で持っているので、作り直した半紙へは書き戻せない
-    state.undo.Clear();
+    // 「一画戻す」の控えは元の縦横の寸法で持っているので、呼び出し側で新しい半紙へ回す
     state.ui.showClearConfirm = false;
     // ペンが接地したままでも、新しい半紙で運筆を始めないようロックする
     state.ui.suppressPenUntilLift = true;
@@ -150,7 +149,7 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 // （画面を右回りに倒して見ると元の向きに戻る）。墨のバッファも縦横が入れ替わるので、
 // 切り替える前の墨を控えておき、新しい半紙へ回して書き戻す。書いていた字はそのまま残る。
 // 運筆記録も同じ向きへ回して残す（解析タブのリプレイは記録から描くため、消すと字が消える）。
-// 「一画戻す」の控えは元の縦横の寸法で持っているので、これまでどおり消す。
+// 「一画戻す」「一画復元」の控えも同じ向きへ回して残す（消すと横画面から戻った後に戻せなくなる）。
 void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk) {
     if (state.ui.paperOnly == on) return;
 
@@ -174,8 +173,17 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     RelayoutForPaper(hWnd, state, gpuInk);
 
     // 紙だけ表示へ入るときは左回り、戻るときは右回りに回して書き戻す
-    if (hasInk && gpuInk.RestoreSnapshotRotated(keep, on)) {
+    bool restored = hasInk && gpuInk.RestoreSnapshotRotated(keep, on);
+    if (restored) {
         InvalidateRect(hWnd, NULL, FALSE);
+    }
+
+    // 「一画戻す」「一画復元」の控えも同じ向きへ回して残す。
+    // 墨を書き戻せなかった（白紙になった）ときは、控えと画面が噛み合わないので捨てる。
+    if (restored) {
+        state.undo.RotateQuarter(on, gpuInk.GetWidth(), gpuInk.GetHeight(), oldPaper, state.ui.rPaper);
+    } else {
+        state.undo.Clear();
     }
 
     // 運筆記録も墨と同じ向きへ回し、リプレイのタイムラインと再生位置を取り直す。

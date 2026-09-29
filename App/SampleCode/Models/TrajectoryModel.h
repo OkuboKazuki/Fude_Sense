@@ -116,6 +116,8 @@ public:
     // 画面上の大きさで持っているので、新しい半紙の大きさへ直す。
     // タイムラインは作り直さないので、呼び出し側で BuildReplayTimeline し直すこと。
     void RotateQuarter(bool counterClockwise, const RECT& oldPaper, const RECT& newPaper);
+    // 記録の外にある1画（「一画復元」の控えが持つ画）を、RotateQuarter と同じように回す
+    static void RotateStrokeQuarter(StrokeData& stroke, bool counterClockwise, const RECT& oldPaper, const RECT& newPaper);
 
     // ゲッター
     const std::vector<StrokeData>& GetStrokes() const { return m_strokes; }

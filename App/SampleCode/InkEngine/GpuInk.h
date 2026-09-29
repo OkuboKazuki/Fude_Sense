@@ -101,6 +101,9 @@ public:
 	// 控えを90度回して書き戻す（紙だけ表示の出入りで半紙が倒れるとき用）。
 	// counterClockwise = true で左回り。寸法は今の半紙に合わせて拾い直す。
 	bool RestoreSnapshotRotated(const InkSnapshot& snap, bool counterClockwise);
+	// 控えそのものを90度回し、dstW x dstH の寸法へ拾い直す（「一画戻す」の履歴を
+	// 紙だけ表示の出入りに追従させる用）。半紙の画素には触れない。
+	static bool RotateSnapshot(InkSnapshot& snap, bool counterClockwise, int dstW, int dstH);
 
 	// デバッグ用: 現在の墨汁量をスレッドセーフにコピーして取得
 	void GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight);

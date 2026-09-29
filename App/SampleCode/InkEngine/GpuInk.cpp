@@ -524,6 +524,32 @@ bool GpuInk::RestoreSnapshot(const InkSnapshot& snap)
 	return true;
 }
 
+// 半紙を90度倒したときの画素の拾い直し。
+// 書き戻し先の各画素について、回す前の半紙のどこに当たるかを正規化座標で求めて拾う。
+// 左回り（通常表示 → 紙だけ表示）: 元の (u, v) は (v, 1 - u) へ移る。
+// 右回り（紙だけ表示 → 通常表示）: 元の (u, v) は (1 - v, u) へ移る。
+// 縦横の画素数は端数の丸めで1画素ほどずれうるので、最近傍で拾い直す。
+template <typename T>
+static void RotateQuarterNearest(const T* src, int srcW, int srcH, T* dst, int dstW, int dstH, bool counterClockwise)
+{
+	for (int y = 0; y < dstH; ++y)
+	{
+		const double ny = (y + 0.5) / dstH;
+		for (int x = 0; x < dstW; ++x)
+		{
+			const double nx = (x + 0.5) / dstW;
+			double su, sv;
+			if (counterClockwise) { su = 1.0 - ny; sv = nx; }
+			else                  { su = ny;       sv = 1.0 - nx; }
+			int sx = (std::min)(srcW - 1, (std::max)(0, static_cast<int>(su * srcW)));
+			int sy = (std::min)(srcH - 1, (std::max)(0, static_cast<int>(sv * srcH)));
+			const size_t s = static_cast<size_t>(sy) * static_cast<size_t>(srcW) + static_cast<size_t>(sx);
+			const size_t d = static_cast<size_t>(y) * static_cast<size_t>(dstW) + static_cast<size_t>(x);
+			dst[d] = src[s];
+		}
+	}
+}
+
 bool GpuInk::RestoreSnapshotRotated(const InkSnapshot& snap, bool counterClockwise)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
@@ -542,29 +568,42 @@ bool GpuInk::RestoreSnapshotRotated(const InkSnapshot& snap, bool counterClockwi
 	if (!RleDecode(snap.ink, snap.inkCompressed, srcInk.data(), srcPixels)) return false;
 	if (!RleDecode(snap.wet, snap.wetCompressed, srcWet.data(), srcPixels)) return false;
 
-	// 書き戻し先の各画素について、回す前の半紙のどこに当たるかを正規化座標で求めて拾う。
-	// 左回り（通常表示 → 紙だけ表示）: 元の (u, v) は (v, 1 - u) へ移る。
-	// 右回り（紙だけ表示 → 通常表示）: 元の (u, v) は (1 - v, u) へ移る。
-	// 縦横の画素数は端数の丸めで1画素ほどずれうるので、最近傍で拾い直す。
-	for (int y = 0; y < m_height; ++y)
-	{
-		const double ny = (y + 0.5) / m_height;
-		for (int x = 0; x < m_width; ++x)
-		{
-			const double nx = (x + 0.5) / m_width;
-			double su, sv;
-			if (counterClockwise) { su = 1.0 - ny; sv = nx; }
-			else                  { su = ny;       sv = 1.0 - nx; }
-			int sx = (std::min)(srcW - 1, (std::max)(0, static_cast<int>(su * srcW)));
-			int sy = (std::min)(srcH - 1, (std::max)(0, static_cast<int>(sv * srcH)));
-			const size_t s = static_cast<size_t>(sy) * static_cast<size_t>(srcW) + static_cast<size_t>(sx);
-			const size_t d = static_cast<size_t>(y) * static_cast<size_t>(m_width) + static_cast<size_t>(x);
-			m_ink[d] = srcInk[s];
-			m_wetField[d] = srcWet[s];
-		}
-	}
+	RotateQuarterNearest(srcInk.data(), srcW, srcH, m_ink.data(), m_width, m_height, counterClockwise);
+	RotateQuarterNearest(srcWet.data(), srcW, srcH, m_wetField.data(), m_width, m_height, counterClockwise);
 
 	FinishRestore_NoLock();
+	return true;
+}
+
+bool GpuInk::RotateSnapshot(InkSnapshot& snap, bool counterClockwise, int dstW, int dstH)
+{
+	if (snap.IsEmpty() || dstW <= 0 || dstH <= 0) return false;
+
+	const int srcW = snap.width;
+	const int srcH = snap.height;
+	const size_t srcPixels = static_cast<size_t>(srcW) * static_cast<size_t>(srcH);
+	const size_t dstPixels = static_cast<size_t>(dstW) * static_cast<size_t>(dstH);
+
+	// 墨量と水分を1つずつ展開して回すので、展開後の大きな配列は同時に1組しか持たない
+	InkSnapshot out;
+	out.width = dstW;
+	out.height = dstH;
+	{
+		std::vector<int> src(srcPixels);
+		if (!RleDecode(snap.ink, snap.inkCompressed, src.data(), srcPixels)) return false;
+		std::vector<int> dst(dstPixels);
+		RotateQuarterNearest(src.data(), srcW, srcH, dst.data(), dstW, dstH, counterClockwise);
+		RleEncode(dst.data(), dstPixels, out.ink, out.inkCompressed);
+	}
+	{
+		std::vector<uint8_t> src(srcPixels);
+		if (!RleDecode(snap.wet, snap.wetCompressed, src.data(), srcPixels)) return false;
+		std::vector<uint8_t> dst(dstPixels);
+		RotateQuarterNearest(src.data(), srcW, srcH, dst.data(), dstW, dstH, counterClockwise);
+		RleEncode(dst.data(), dstPixels, out.wet, out.wetCompressed);
+	}
+
+	snap = std::move(out);
 	return true;
 }
 

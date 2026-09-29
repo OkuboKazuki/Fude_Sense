@@ -47,17 +47,21 @@ void TrajectorySession::RedoStroke(const StrokeData& stroke) {
     ++m_revision;
 }
 
-void TrajectorySession::RotateQuarter(bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
-    const double kPi = 3.14159265358979323846;
+// 線幅・速度は画面上のピクセルで持っている。墨の半紙は長辺をそろえて回すので、
+// 画面上の長辺の比で直せば、書いたときと同じ太さで引き直せる。
+static double QuarterTurnScale(const RECT& oldPaper, const RECT& newPaper) {
     int oldLong = (std::max)(RenderUtils::RW(oldPaper), RenderUtils::RH(oldPaper));
     int newLong = (std::max)(RenderUtils::RW(newPaper), RenderUtils::RH(newPaper));
-    // 線幅・速度は画面上のピクセルで持っている。墨の半紙は長辺をそろえて回すので、
-    // 画面上の長辺の比で直せば、書いたときと同じ太さで引き直せる。
-    double scale = (oldLong > 0 && newLong > 0) ? static_cast<double>(newLong) / static_cast<double>(oldLong) : 1.0;
+    return (oldLong > 0 && newLong > 0) ? static_cast<double>(newLong) / static_cast<double>(oldLong) : 1.0;
+}
+
+void TrajectorySession::RotateStrokeQuarter(StrokeData& stroke, bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
+    const double kPi = 3.14159265358979323846;
+    double scale = QuarterTurnScale(oldPaper, newPaper);
     int newW = (std::max)(1, RenderUtils::RW(newPaper));
     int newH = (std::max)(1, RenderUtils::RH(newPaper));
 
-    auto rotatePoint = [&](StrokePoint& p) {
+    for (StrokePoint& p : stroke.points) {
         // 左回り: 元の (u, v) は (v, 1 - u) へ移る。右回り: 元の (u, v) は (1 - v, u) へ移る。
         // （GpuInk::RestoreSnapshotRotated と同じ対応）
         double u = p.normX;
@@ -76,16 +80,15 @@ void TrajectorySession::RotateQuarter(bool counterClockwise, const RECT& oldPape
 
         p.width *= scale;
         p.speedPxPerSec *= scale;
-    };
+    }
+    stroke.maxSpeed *= scale;
+    stroke.avgSpeed *= scale;
+}
 
-    auto rotateStroke = [&](StrokeData& s) {
-        for (StrokePoint& p : s.points) rotatePoint(p);
-        s.maxSpeed *= scale;
-        s.avgSpeed *= scale;
-    };
-
-    for (StrokeData& s : m_strokes) rotateStroke(s);
-    rotateStroke(m_currentStroke);
+void TrajectorySession::RotateQuarter(bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
+    for (StrokeData& s : m_strokes) RotateStrokeQuarter(s, counterClockwise, oldPaper, newPaper);
+    RotateStrokeQuarter(m_currentStroke, counterClockwise, oldPaper, newPaper);
+    double scale = QuarterTurnScale(oldPaper, newPaper);
     m_realtime.currentSpeed *= scale;
     m_realtime.currentWidth *= scale;
     ++m_revision;

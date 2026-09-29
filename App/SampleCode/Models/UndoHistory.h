@@ -49,6 +49,12 @@ public:
 
     void Clear();
 
+    // 紙だけ表示の出入りで半紙が90度倒れたとき、控えも同じ向きへ回して残す。
+    // 墨の控えは新しい半紙の寸法 canvasW x canvasH へ、復元用の1画は
+    // TrajectorySession::RotateQuarter と同じように回す。
+    // 回せなかった場合は、書き戻せない控えを残さないよう履歴を全部捨てて false を返す。
+    bool RotateQuarter(bool counterClockwise, int canvasW, int canvasH, const RECT& oldPaper, const RECT& newPaper);
+
     bool CanUndo() const { return !m_undo.empty(); }
     bool CanRedo() const { return !m_redo.empty(); }
     int Depth() const { return static_cast<int>(m_undo.size()); }

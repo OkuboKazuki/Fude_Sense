@@ -113,6 +113,33 @@ bool UndoHistory::Redo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& traject
     return true;
 }
 
+bool UndoHistory::RotateQuarter(bool counterClockwise, int canvasW, int canvasH, const RECT& oldPaper, const RECT& newPaper) {
+    try {
+        size_t bytes = 0;
+        for (std::vector<UndoEntry>* stack : { &m_undo, &m_redo }) {
+            for (UndoEntry& e : *stack) {
+                if (!GpuInk::RotateSnapshot(e.ink, counterClockwise, canvasW, canvasH)) {
+                    Clear();
+                    return false;
+                }
+                if (e.hasStroke) {
+                    TrajectorySession::RotateStrokeQuarter(e.stroke, counterClockwise, oldPaper, newPaper);
+                }
+                // 回すと RLE の効き方が変わるので、容量を数え直す
+                e.bytes = e.ink.ByteSize();
+                bytes += e.bytes;
+            }
+        }
+        m_bytes = bytes;
+    }
+    catch (const std::bad_alloc&) {
+        Clear();
+        return false;
+    }
+    Trim();
+    return true;
+}
+
 void UndoHistory::Clear() {
     std::vector<UndoEntry>().swap(m_undo);
     std::vector<UndoEntry>().swap(m_redo);
