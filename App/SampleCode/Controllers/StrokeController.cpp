@@ -190,7 +190,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
         double drynessFactor = 1.0 - state.ink.GetDryness() * 0.45;
-        double consumeAmount = stepDist * widthRatio * 0.00022 * drynessFactor;
+        double consumeAmount = stepDist * widthRatio * 0.00011 * drynessFactor;
         state.ink.Consume(consumeAmount);
 
         // 運筆データアーカイブへ記録
