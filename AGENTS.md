@@ -1,6 +1,6 @@
 # AGENTS.md
 
-このリポジトリは、Wacomペンタブレット / Multi-Touch API および Wintab32 API を用いた習字制作ワークスペース「**SHUJI STUDIO (Fudesence)**」のプロジェクトです。
+このリポジトリは、Wacomペンタブレット / Multi-Touch API および Wintab32 API を用いた習字制作ワークスペース「**SHUJI STUDIO (Fude Sense)**」のプロジェクトです。
 
 ---
 
@@ -73,7 +73,7 @@ App/SampleCode/
 │   ├── ImageExporter.h / .cpp       # 画像エクスポート (WIC PNG / BMP, クリップボード)
 │   └── WintabUtils.h / .cpp         # Wintab ユーティリティ
 │
-├── Resource.h / Fudesence.rc        # Win32リソース
+├── Resource.h / FudeSense.rc        # Win32リソース
 └── WacomMT_Scribble.cpp             # メインエントリ / イベントディスパッチ
 ```
 
@@ -83,17 +83,17 @@ App/SampleCode/
 
 ### ソリューション / プロジェクト
 
-- ソリューションファイル: `App/SampleCode/Fudesence.sln`
-- プロジェクトファイル: `App/SampleCode/Fudesence.vcxproj`
+- ソリューションファイル: `App/SampleCode/FudeSense.sln`
+- プロジェクトファイル: `App/SampleCode/FudeSense.vcxproj`
 
 ### MSBuild コマンドライン
 
 ```powershell
 # Debug ビルド (Win32)
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\Fudesence.sln /p:Configuration=Debug /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\FudeSense.sln /p:Configuration=Debug /p:Platform=Win32
 
 # Release ビルド (Win32)
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\Fudesence.sln /p:Configuration=Release /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\FudeSense.sln /p:Configuration=Release /p:Platform=Win32
 ```
 
 ---

@@ -23,7 +23,7 @@ namespace RenderUtils {
 
         std::vector<std::wstring> candidates;
 
-        // 1. exe と同じ場所。ビルド後にここへコピーしている（Fudesence.vcxproj の
+        // 1. exe と同じ場所。ビルド後にここへコピーしている（FudeSense.vcxproj の
         //    PostBuildEvent）ので、配布時はこれだけで見つかる。
         wchar_t exePath[MAX_PATH] = {};
         if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0) {

@@ -1,4 +1,4 @@
-# SHUJI STUDIO (Fudesence)
+# SHUJI STUDIO (Fude Sense)
 
 > **物理にじみ・カスレと筆圧生体情報を科学する、本格書道・習字制作ワークスペース**
 
@@ -6,7 +6,7 @@
 
 ## 1. プロジェクト概要
 
-**SHUJI STUDIO (Fudesence)** は、Windows および Wacom ペンタブレット（Wintab API / Windows Pointer API）の高度なセンシング性能を最大限に引き出した、デジタル書道制作・運筆解析プラットフォームです。
+**SHUJI STUDIO (Fude Sense)** は、Windows および Wacom ペンタブレット（Wintab API / Windows Pointer API）の高度なセンシング性能を最大限に引き出した、デジタル書道制作・運筆解析プラットフォームです。
 
 単なるペイントソフトとは一線を画し、毛筆特有の「穂先の広がり」「毛束のかすれ」「紙への墨汁浸透」「毛管流による物理にじみ」を数理・物理モデルとして実装。さらに揮毫中の筆圧・姿勢・速度をリアルタイム解析し、書道学習・臨書・運筆の科学的分析を可能にします。
 
@@ -81,9 +81,9 @@
 ### MSBuild によるコマンドラインビルド
 ```powershell
 # リポジトリ直下から Release ビルドを実行
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\Fudesence.sln /p:Configuration=Release /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\FudeSense.sln /p:Configuration=Release /p:Platform=Win32
 ```
-ビルド完了後、`App/SampleCode/Release/Fudesence.exe` が生成されます。
+ビルド完了後、`App/SampleCode/Release/FudeSense.exe` が生成されます。
 
 ---
 

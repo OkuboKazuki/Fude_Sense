@@ -230,7 +230,7 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
 
     ofs << std::fixed << std::setprecision(4);
     ofs << "{\n";
-    ofs << "  \"format\": \"FudesenceStrokeArchive\",\n";
+    ofs << "  \"format\": \"FudeSenseStrokeArchive\",\n";
     ofs << "  \"version\": \"1.1\",\n";
     ofs << "  \"metadata\": {\n";
     ofs << "    \"application\": \"Fude Sense\",\n";
@@ -314,7 +314,7 @@ bool TrajectorySession::PromptSaveArchiveJson(HWND hWnd, const TrajectorySession
     std::time_t tt = std::chrono::system_clock::to_time_t(now);
     std::tm tm;
     localtime_s(&tm, &tt);
-    swprintf_s(szFileName, MAX_PATH, L"Fudesence_Archive_%04d%02d%02d_%02d%02d%02d.json",
+    swprintf_s(szFileName, MAX_PATH, L"FudeSense_Archive_%04d%02d%02d_%02d%02d%02d.json",
         tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
     OPENFILENAMEW ofn = { 0 };
@@ -338,7 +338,7 @@ bool TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession&
     std::time_t tt = std::chrono::system_clock::to_time_t(now);
     std::tm tm;
     localtime_s(&tm, &tt);
-    swprintf_s(szFileName, MAX_PATH, L"Fudesence_Kinematics_%04d%02d%02d_%02d%02d%02d.csv",
+    swprintf_s(szFileName, MAX_PATH, L"FudeSense_Kinematics_%04d%02d%02d_%02d%02d%02d.csv",
         tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
     OPENFILENAMEW ofn = { 0 };

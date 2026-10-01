@@ -48,7 +48,7 @@ void Cleanup(void);
 // Global Variables
 HINSTANCE hInst = NULL;
 std::wstring szTitle = L"Fude Sense";
-std::wstring szWindowClass = L"FUDESENCE";
+std::wstring szWindowClass = L"FUDESENSE";
 HWND g_mainWnd = NULL;
 HDC g_hdc = NULL;
 HWND g_hWndAbout = NULL;
@@ -135,7 +135,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
 	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_FUDESENCE));
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_FUDESENSE));
 	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wcex.hbrBackground = NULL;
 	wcex.lpszMenuName = NULL; // 古いメニューバーを非表示にしキャンバス領域を最大化
@@ -190,7 +190,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		return FALSE;
 	}
 
-	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_FUDESENCE));
+	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_FUDESENSE));
 
 	while (GetMessage(&msg, NULL, 0, 0))
 	{

@@ -7,13 +7,13 @@
 #define IDS_APP_TITLE                   103
 
 #define IDR_MAINFRAME                   128
-#define IDD_FUDESENCE_DIALOG            102
+#define IDD_FUDESENSE_DIALOG            102
 #define IDD_ABOUTBOX                    103
 #define IDM_ABOUT                       104
 #define IDM_EXIT                        105
-#define IDI_FUDESENCE                   107
+#define IDI_FUDESENSE                   107
 #define IDI_SMALL                       108
-#define IDC_FUDESENCE                   109
+#define IDC_FUDESENSE                   109
 #define IDC_MYICON                      2
 #define IDC_ABOUT_DESC                  1000
 #define IDC_ABOUT_CR                    1001
@@ -23,7 +23,7 @@
 
 #define APP_VERSION_NUM                 1,0,0,0
 #define APP_VERSION_STR                 "1.0"
-#define APP_NAME                        "Fudesence"
+#define APP_NAME                        "Fude Sense"
 #define APP_COMPANY_NAME                "Wacom Co., Ltd."
 #define APP_COPYRIGHT                   "Copyright (C) 2012-2020 Wacom Co., Ltd."
 

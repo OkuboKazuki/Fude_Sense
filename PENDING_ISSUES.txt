@@ -1,5 +1,5 @@
 ================================================================================
-FUDESENCE (SHUJI STUDIO) - 判断が必要な改善項目・保留検討事項
+FUDE SENSE (SHUJI STUDIO) - 判断が必要な改善項目・保留検討事項
 作成日: 2026-09-11
 ================================================================================
 
@@ -131,7 +131,7 @@ FUDESENCE (SHUJI STUDIO) - 判断が必要な改善項目・保留検討事項
   コンテスト審査では「単一責任の原則（SRP）」が問われることがある。
 
 ■ 選択肢:
-  【案A】 AppContext / FudesenceApp クラスの導入と HWND (GWLP_USERDATA) への集約
+  【案A】 AppContext / FudeSenseApp クラスの導入と HWND (GWLP_USERDATA) への集約
     - メリット: グローバル変数を完全に排除し、Win32 の正統な設計に統一。
     - 実装内容: アプリケーション状態を一元管理するクラスを作成し、WM_CREATE で
       SetWindowLongPtr(hWnd, GWLP_USERDATA, ...) して WndProc で取り出す。
@@ -160,7 +160,7 @@ FUDESENCE (SHUJI STUDIO) - 判断が必要な改善項目・保留検討事項
 
 ■ 該当箇所:
   - App/SampleCode/InkEngine/GpuInk.cpp (L1125)
-  - App/SampleCode/Fudesence.vcxproj (マニフェスト設定)
+  - App/SampleCode/FudeSense.vcxproj (マニフェスト設定)
 
 ■ 判断が必要な理由:
   Per-Monitor V2 を有効にすると、ウィンドウリサイズやマルチモニタ移動時に
