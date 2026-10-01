@@ -64,11 +64,6 @@ void MainView::ReleaseBackBuffer() {
     TitleView::ReleaseResources();
 }
 
-void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
-    RECT rcFull = { 0, 0, width, height };
-    Render(hdc, width, height, gpuInk, state, rcFull);
-}
-
 void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state, const RECT& rcPaint) {
     if (width <= 0 || height <= 0) return;
 

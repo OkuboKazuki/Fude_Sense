@@ -67,15 +67,6 @@ struct InkModel {
         stoneAmount = brushWater;
     }
 
-    void ConsumeInk(double amount) {
-        Consume(amount);
-    }
-
-    // 筆先が使えるインク濃度係数 (0.0 ~ 1.0)
-    double GetInkFactor() const {
-        return (std::min)(stoneAmount, brushAmount);
-    }
-
     // 筆の乾き具合 (0.0: 潤沢 ~ 1.0: 渇筆)
     // 残量 KASURE_START_LEVEL までは完全に潤沢（かすれなし）を維持し、
     // それを切ってからのかすれを穏やかな非線形カーブで立ち上げることで、

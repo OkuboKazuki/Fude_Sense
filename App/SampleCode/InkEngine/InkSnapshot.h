@@ -22,13 +22,4 @@ struct InkSnapshot {
     bool IsEmpty() const { return width <= 0 || height <= 0; }
 
     size_t ByteSize() const { return ink.size() + wet.size(); }
-
-    void Reset() {
-        width = 0;
-        height = 0;
-        inkCompressed = false;
-        wetCompressed = false;
-        std::vector<uint8_t>().swap(ink);
-        std::vector<uint8_t>().swap(wet);
-    }
 };

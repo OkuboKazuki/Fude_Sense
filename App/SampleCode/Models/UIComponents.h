@@ -21,12 +21,4 @@ struct UIWidget : public tagRECT {
     UIWidget(int l, int t, int r, int b) {
         left = l; top = t; right = r; bottom = b;
     }
-
-    // ポイントが領域内にあるかのヒットテスト
-    bool Contains(POINT pt) const {
-        return (pt.x >= left && pt.x <= right && pt.y >= top && pt.y <= bottom);
-    }
-
-    int Width() const { return right - left; }
-    int Height() const { return bottom - top; }
 };

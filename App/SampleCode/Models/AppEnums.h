@@ -10,15 +10,6 @@ enum class Brush {
     Large    // 大筆
 };
 
-inline const wchar_t* BrushName(Brush b) {
-    switch (b) {
-    case Brush::Small:  return L"小筆";
-    case Brush::Medium: return L"中筆";
-    case Brush::Large:  return L"大筆";
-    }
-    return L"中筆";
-}
-
 // 用紙の種類（実寸の縦横比に対応）
 enum class PaperType {
     Hanshi     // 半紙   242x333  W:H=1:1.376
@@ -65,9 +56,7 @@ enum class TbButton {
     Paper,
     Analysis,
     Save,
-    Otehon,
-    InkRefill,
-    ClearAll
+    Otehon
 };
 
 // 左側フローティングパネルのタブ

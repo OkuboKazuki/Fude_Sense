@@ -50,7 +50,6 @@ HINSTANCE hInst = NULL;
 std::wstring szTitle = L"Fude Sense";
 std::wstring szWindowClass = L"FUDESENCE";
 HWND g_mainWnd = NULL;
-HDC g_hdc = NULL;
 HWND g_hWndAbout = NULL;
 
 RECT g_clientRect = { 0, 0, 0, 0 };
@@ -59,7 +58,6 @@ static AppState g_appState;
 static WintabManager g_wintab;
 static GpuInk g_gpuInk;
 static StrokeController g_strokeCtrl;
-static AppController g_appCtrl;
 
 // 前回の再生タイマ刻。停止中は 0。
 static DWORD g_lastReplayTick = 0;
@@ -68,7 +66,6 @@ DWORD g_lastWintabTick = 0;
 // Forward declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
-void ClearScreen();
 
 // ===== 全画面表示（F11 で切り替え） =====
 // 枠なしウィンドウをモニタいっぱいに広げる方式。元へ戻せるよう、切り替え前の
@@ -164,7 +161,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	if (!g_mainWnd) return FALSE;
 
 	SetMenu(g_mainWnd, NULL);
-	g_hdc = GetDC(g_mainWnd);
 
 	ShowWindow(g_mainWnd, SW_SHOWMAXIMIZED);
 	UpdateWindow(g_mainWnd);
@@ -225,7 +221,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		g_appState.paper.GetCanvasSize(canvasW, canvasH);
 		if (canvasW > 0 && canvasH > 0)
 		{
-			g_gpuInk.Initialize(hWnd, canvasW, canvasH);
+			g_gpuInk.Initialize(canvasW, canvasH);
 		}
 
 		if (!OpenTabletContexts(hWnd))
@@ -644,7 +640,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		MainView::ReleaseBackBuffer();
 		CanvasView::ReleaseReplayCache();
 		AnalysisView::ReleaseWaveformCache();
-		ReleaseDC(hWnd, g_hdc);
 		CloseTabletContexts();
 		Cleanup();
 		PostQuitMessage(0);
@@ -679,12 +674,6 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	}
 	return 0;
-}
-
-void ClearScreen()
-{
-	g_gpuInk.Clear();
-	InvalidateRect(g_mainWnd, NULL, FALSE);
 }
 
 bool OpenTabletContexts(HWND hWnd)

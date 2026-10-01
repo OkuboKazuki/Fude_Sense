@@ -355,11 +355,6 @@ bool GpuInk::CreateRenderTarget_NoLock()
 	return SUCCEEDED(hr) && m_pInkBitmap;
 }
 
-bool GpuInk::Initialize(HWND /*hWnd*/, int width, int height)
-{
-	return Initialize(width, height);
-}
-
 bool GpuInk::Initialize(int width, int height, bool runPropagationThread)
 {
 	StopPropagationThread();
@@ -920,26 +915,6 @@ bool GpuInk::PropagateInk_NoLock()
 
 
 
-KinematicsInfo GpuInk::GetKinematicsInfo()
-{
-	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
-	KinematicsInfo info;
-	info.currentSpeed = m_lastSpeed;
-	info.currentAccel = m_lastAcceleration;
-	info.recentMaxSpeed = m_recentMaxSpeed;
-	info.recentMaxAccel = m_recentMaxAccel;
-	info.recentMaxDist = m_recentMaxDist;
-	info.lastEndSpeed = m_lastEndSpeed;
-	info.lastEndEffectiveSpeed = m_lastEndEffectiveSpeed;
-	info.lastEndAccel = m_lastEndAccel;
-	info.lastIsFlick = m_lastIsFlick;
-	info.currentZ = m_penZ;
-	info.currentAltitude = static_cast<int>(std::round(m_penAltitudeDegrees));
-	info.currentAzimuth = static_cast<int>(std::round(m_penAzimuthRad * (180.0 / 3.14159265358979323846)));
-	info.isHovering = m_isHovering;
-	return info;
-}
-
 void GpuInk::UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering)
 {
 	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
@@ -1217,24 +1192,6 @@ void GpuInk::DrawSegmentLinear(const StrokeSegment& seg)
 
 	m_lastPt = b;
 }
-
-void GpuInk::DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha)
-{
-	StrokeSegment seg;
-	seg.a = a;
-	seg.b = b;
-	seg.startWidth = startWidth;
-	seg.endWidth = endWidth;
-	seg.inkAlpha = inkAlpha;
-	DrawSegmentLinear(seg);
-}
-
-void GpuInk::DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha)
-{
-	DrawSegmentLinear(a, b, strokeWidth, strokeWidth, inkAlpha);
-}
-
-
 
 void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 {

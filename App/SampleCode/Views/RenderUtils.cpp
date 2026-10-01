@@ -138,22 +138,6 @@ namespace RenderUtils {
         DeleteObject(b);
     }
 
-    void DrawShadow(HDC dc, const RECT& r, int blurSize, int round) {
-        if (blurSize <= 0) return;
-        HBRUSH ob = (HBRUSH)SelectObject(dc, GetStockObject(NULL_BRUSH));
-        for (int i = blurSize; i >= 1; --i) {
-            // 机の木目に自然に溶け込むダークシャドウ
-            int shade = 10 + (int)(16.0 * ((double)i / blurSize));
-            COLORREF c = RGB(shade, shade * 0.75, shade * 0.6);
-            HPEN p = CreatePen(PS_SOLID, 2, c);
-            HPEN op = (HPEN)SelectObject(dc, p);
-            RoundRect(dc, r.left - i + 3, r.top - i + 5, r.right + i + 3, r.bottom + i + 5, round + i * 2, round + i * 2);
-            SelectObject(dc, op);
-            DeleteObject(p);
-        }
-        SelectObject(dc, ob);
-    }
-
     void DrawWoodDesk(HDC dc, int width, int height) {
         if (width <= 0 || height <= 0) return;
 
@@ -293,13 +277,6 @@ namespace RenderUtils {
 
     void Center(HDC dc, RECT r, const wchar_t* s, HFONT f, COLORREF c) {
         DrawTextCustom(dc, r, s, f, c, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    }
-
-    void DrawPanelTitle(HDC dc, const RECT& rPanel, const wchar_t* title) {
-        RECT rTitle = { rPanel.left + 18, 16, rPanel.right - 18, 44 };
-        HFONT f = CreateCustomFont(18, FW_BOLD);
-        DrawTextCustom(dc, rTitle, title, f, RGB(245, 248, 252));
-        DeleteObject(f);
     }
 
     void DrawTileCard(HDC dc, RECT r, const wchar_t* title, const wchar_t* sub, bool active, bool hover) {

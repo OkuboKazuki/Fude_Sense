@@ -57,9 +57,6 @@ namespace RenderUtils {
     // 角丸枠線付きボックス描画
     void Box(HDC dc, const RECT& r, COLORREF fill, COLORREF border, int bw = 1, int round = 6);
 
-    // ドロップシャドウ描画
-    void DrawShadow(HDC dc, const RECT& r, int blurSize = 10, int round = 8);
-
     // 和風木製机（文机）の背景描画
     void DrawWoodDesk(HDC dc, int width, int height);
 
@@ -68,9 +65,6 @@ namespace RenderUtils {
 
     // 中央揃えテキスト描画
     void Center(HDC dc, RECT r, const wchar_t* s, HFONT f, COLORREF c);
-
-    // パネルタイトル描画
-    void DrawPanelTitle(HDC dc, const RECT& rPanel, const wchar_t* title);
 
     // タイルカード描画
     void DrawTileCard(HDC dc, RECT r, const wchar_t* title, const wchar_t* sub, bool active, bool hover);

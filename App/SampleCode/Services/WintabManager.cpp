@@ -62,12 +62,6 @@ bool WintabManager::OpenContexts(HWND hWnd) {
             if (hCtx) {
                 TabletInfo info;
                 info.maxPressure = Pressure.axMax;
-                info.penColor = RGB(0, 0, 0);
-                sprintf_s(info.name, sizeof(info.name), "Tablet %i", ctxIndex);
-                info.tabletXExt = tabletX.axMax;
-                info.tabletYExt = tabletY.axMax;
-                info.displayTablet = displayTablet;
-                info.maxZ = axisZ.axMax;
                 m_contextMap[hCtx] = info;
                 gnOpenContexts++;
             }

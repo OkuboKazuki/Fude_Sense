@@ -17,24 +17,6 @@
 #include "InkSnapshot.h"
 #include "GpuSimulator.h"
 
-struct KinematicsInfo
-{
-	double currentSpeed;
-	double currentAccel;
-	double recentMaxSpeed;
-	double recentMaxAccel;
-	double recentMaxDist;
-	double lastEndSpeed;
-	double lastEndEffectiveSpeed;
-	double lastEndAccel;
-	bool lastIsFlick;
-
-	int currentZ;
-	int currentAltitude;
-	int currentAzimuth;
-	bool isHovering;
-};
-
 // 1 セグメント分の運筆パラメータ
 // 運筆方向・乾き具合など、今後の描画表現に必要な情報をまとめて受け渡す
 struct StrokeSegment
@@ -60,7 +42,6 @@ public:
 	~GpuInk();
 
 	// 初期化 / リサイズ
-	bool Initialize(HWND hWnd, int width, int height);
 	// runPropagationThread = false で、にじみを進める背景スレッドを立てない。
 	// リプレイのように、時間の進め方を呼び出し側が決める場合に使う。
 	bool Initialize(int width, int height, bool runPropagationThread = true);
@@ -68,10 +49,6 @@ public:
 
 	// ストローク操作
 	void DrawSegmentLinear(const StrokeSegment& seg);
-
-	// 旧シグネチャ（互換用ラッパー。内部で StrokeSegment を組み立てる）
-	void DrawSegmentLinear(POINT a, POINT b, double startWidth, double endWidth, uint8_t inkAlpha = 255);
-	void DrawSegment(POINT a, POINT b, double strokeWidth, uint8_t inkAlpha = 255);
 	void EndStroke();
 
 	// にじみを1段階進める。背景スレッドを立てていないときに使う。
@@ -81,7 +58,6 @@ public:
 	int SettleDiffusion(int maxSteps = 200);
 	bool IsInStroke() const { return m_inStroke.load(std::memory_order_relaxed); }
 
-	KinematicsInfo GetKinematicsInfo();
 	void UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering);
 	void UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees, bool hovering);
 	void SetPressureFactor(double factor);

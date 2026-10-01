@@ -59,7 +59,6 @@ public:
     bool CanRedo() const { return !m_redo.empty(); }
     int Depth() const { return static_cast<int>(m_undo.size()); }
     int RedoDepth() const { return static_cast<int>(m_redo.size()); }
-    size_t TotalBytes() const { return m_bytes; }
 
 private:
     // 今の状態を控えへ取る（戻す・復元の直前に使う）

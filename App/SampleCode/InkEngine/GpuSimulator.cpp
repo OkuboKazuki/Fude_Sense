@@ -417,26 +417,6 @@ bool GpuSimulator::StepSimulation()
     return true;
 }
 
-bool GpuSimulator::DownloadToPixels(uint32_t* dstPixels, int width, int height)
-{
-    if (!m_available || !m_context || !m_stagingPixel || width != m_width || height != m_height || !dstPixels) return false;
-
-    m_context->CopyResource(m_stagingPixel.Get(), m_texPixel.Get());
-
-    D3D11_MAPPED_SUBRESOURCE mapped = {};
-    HRESULT hr = m_context->Map(m_stagingPixel.Get(), 0, D3D11_MAP_READ, 0, &mapped);
-    if (FAILED(hr)) return false;
-
-    const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
-    for (int y = 0; y < height; ++y)
-    {
-        std::memcpy(dstPixels + y * width, srcRow + y * mapped.RowPitch, width * sizeof(uint32_t));
-    }
-
-    m_context->Unmap(m_stagingPixel.Get(), 0);
-    return true;
-}
-
 bool GpuSimulator::DownloadToPixelsRegion(uint32_t* dstPixels, int width, int height, int minX, int minY, int maxX, int maxY)
 {
     if (!m_available || !m_context || !m_stagingPixel || width != m_width || height != m_height || !dstPixels) return false;
@@ -471,45 +451,6 @@ bool GpuSimulator::DownloadToPixelsRegion(uint32_t* dstPixels, int width, int he
     }
 
     m_context->Unmap(m_stagingPixel.Get(), 0);
-    return true;
-}
-
-bool GpuSimulator::DownloadInkAndWet(int* dstInk, uint8_t* dstWet, int width, int height)
-{
-    if (!m_available || !m_context || width != m_width || height != m_height) return false;
-
-    int curIdx = m_currentPingPong;
-
-    if (dstInk && m_stagingInk)
-    {
-        m_context->CopyResource(m_stagingInk.Get(), m_texInk[curIdx].Get());
-        D3D11_MAPPED_SUBRESOURCE mapped = {};
-        if (SUCCEEDED(m_context->Map(m_stagingInk.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
-        {
-            const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
-            for (int y = 0; y < height; ++y)
-            {
-                std::memcpy(dstInk + y * width, srcRow + y * mapped.RowPitch, width * sizeof(int));
-            }
-            m_context->Unmap(m_stagingInk.Get(), 0);
-        }
-    }
-
-    if (dstWet && m_stagingWet)
-    {
-        m_context->CopyResource(m_stagingWet.Get(), m_texWet[curIdx].Get());
-        D3D11_MAPPED_SUBRESOURCE mapped = {};
-        if (SUCCEEDED(m_context->Map(m_stagingWet.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
-        {
-            const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
-            for (int y = 0; y < height; ++y)
-            {
-                std::memcpy(dstWet + y * width, srcRow + y * mapped.RowPitch, width * sizeof(uint8_t));
-            }
-            m_context->Unmap(m_stagingWet.Get(), 0);
-        }
-    }
-
     return true;
 }
 

@@ -15,12 +15,6 @@
 
 struct TabletInfo {
     int maxPressure = 1024;
-    COLORREF penColor = RGB(0, 0, 0);
-    char name[32] = { 0 };
-    LONG tabletXExt = 0;
-    LONG tabletYExt = 0;
-    bool displayTablet = false;
-    int maxZ = 0;
 };
 
 class WintabManager {
@@ -52,9 +46,6 @@ public:
     }
 
     bool IsSystemContext() const { return m_openSystemContext; }
-    void SetSystemContext(bool openSystem) { m_openSystemContext = openSystem; }
-
-    const std::map<HCTX, TabletInfo>& GetContextMap() const { return m_contextMap; }
 
 private:
     std::map<HCTX, TabletInfo> m_contextMap;

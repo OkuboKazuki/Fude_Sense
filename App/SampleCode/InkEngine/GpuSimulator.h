@@ -45,11 +45,9 @@ public:
     bool UploadFromCpu(const int* inkData, const uint8_t* wetData, int width, int height);
 
     // GPU テクスチャから CPU ピクセルバッファ (ARGB) を読み戻す（描画用）
-    bool DownloadToPixels(uint32_t* dstPixels, int width, int height);
     bool DownloadToPixelsRegion(uint32_t* dstPixels, int width, int height, int minX, int minY, int maxX, int maxY);
 
     // GPU テクスチャから墨量・水分バッファを読み戻す（一画戻す/スナップショット用）
-    bool DownloadInkAndWet(int* dstInk, uint8_t* dstWet, int width, int height);
     bool DownloadInkAndWetRegion(int* dstInk, uint8_t* dstWet, int width, int height, int minX, int minY, int maxX, int maxY);
 
     bool IsAvailable() const { return m_available; }

@@ -131,11 +131,6 @@ struct OtehonModel {
         for (std::wstring& t : cellText) t.clear();
     }
 
-    bool HasPlacedChar() const {
-        for (const std::wstring& t : cellText) if (!t.empty()) return true;
-        return false;
-    }
-
     int GetPaletteCount() const { return (int)palette.size(); }
 
     const std::wstring& GetCharacter(int index) const {
