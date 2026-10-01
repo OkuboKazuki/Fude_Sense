@@ -553,3 +553,6 @@ FodyWeavers.xsd
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,visualstudio,c++,c
 App/SampleCode/.vscode
+
+# 内部メモ（提出物に含めない）
+PENDING_ISSUES.txt
