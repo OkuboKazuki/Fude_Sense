@@ -81,9 +81,9 @@
 ### MSBuild によるコマンドラインビルド
 ```powershell
 # リポジトリ直下から Release ビルドを実行
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\FudeSense.sln /p:Configuration=Release /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\FudeCode\FudeSense.sln /p:Configuration=Release /p:Platform=Win32
 ```
-ビルド完了後、`App/SampleCode/Release/FudeSense.exe` が生成されます。
+ビルド完了後、`App/FudeCode/Release/FudeSense.exe` が生成されます。
 
 ---
 

@@ -36,7 +36,7 @@
 - サブシステム間の疎結合を保ちつつ、運筆中の瞬時なパラメータ参照（筆圧、硬さ補正、インク消費量）をキャッシュミスなく O(1) で高速アクセス可能にしています。
 
 ```text
-App/SampleCode/
+App/FudeCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
@@ -83,17 +83,17 @@ App/SampleCode/
 
 ### ソリューション / プロジェクト
 
-- ソリューションファイル: `App/SampleCode/FudeSense.sln`
-- プロジェクトファイル: `App/SampleCode/FudeSense.vcxproj`
+- ソリューションファイル: `App/FudeCode/FudeSense.sln`
+- プロジェクトファイル: `App/FudeCode/FudeSense.vcxproj`
 
 ### MSBuild コマンドライン
 
 ```powershell
 # Debug ビルド (Win32)
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\FudeSense.sln /p:Configuration=Debug /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\FudeCode\FudeSense.sln /p:Configuration=Debug /p:Platform=Win32
 
 # Release ビルド (Win32)
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\SampleCode\FudeSense.sln /p:Configuration=Release /p:Platform=Win32
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' App\FudeCode\FudeSense.sln /p:Configuration=Release /p:Platform=Win32
 ```
 
 ---

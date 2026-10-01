@@ -69,8 +69,8 @@ void TitleView::EnsureLogoLoaded() {
 
     // 2. カレントディレクトリ基準
     candidates.push_back(L"title_logo.png");
-    candidates.push_back(L"App\\SampleCode\\title_logo.png");
-    candidates.push_back(L"SampleCode\\title_logo.png");
+    candidates.push_back(L"App\\FudeCode\\title_logo.png");
+    candidates.push_back(L"FudeCode\\title_logo.png");
 
     std::wstring foundPath;
     for (const auto& path : candidates) {

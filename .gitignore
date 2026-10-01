@@ -552,7 +552,7 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,visualstudio,c++,c
-App/SampleCode/.vscode
+App/FudeCode/.vscode
 
 # 内部メモ（提出物に含めない）
 PENDING_ISSUES.txt
