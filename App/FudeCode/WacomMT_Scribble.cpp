@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 //	PURPOSE
-//		SHUJI STUDIO - Wacom Feel Multi-Touch & Wintab32 GPU Ink Application
+//		Fude Sense - Wintab32 / Windows Pointer GPU Ink Application
 //
 //	COPYRIGHT
 //		Copyright (c) 2012-2020 Wacom Co., Ltd.

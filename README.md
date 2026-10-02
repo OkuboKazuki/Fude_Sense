@@ -125,7 +125,7 @@ App/FudeCode/
 
 ## 4. 動作環境
 
-- **OS**: Windows 10 / Windows 11 (64-bit / 32-bit)
+- **OS**: Windows 10 / Windows 11（アプリは 32 ビット版としてビルド。64 ビット版 Windows でも動作）
 - **推奨入力機器**: 
   - Wacom ペンタブレット / 液晶ペンタブレット（Wintab ドライバ対応機種）
   - Windows Ink / Microsoft Pen Protocol (MPP) 対応デジタイザーペン（Surface等）

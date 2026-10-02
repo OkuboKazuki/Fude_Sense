@@ -1,6 +1,6 @@
 # AGENTS.md
 
-このリポジトリは、Wacom ペンタブレット（Wintab32 API）と Windows Pointer API を用いた習字制作ワークスペース「**SHUJI STUDIO (Fude Sense)**」のプロジェクトです。
+このリポジトリは、Wacom ペンタブレット（Wintab32 API）と Windows Pointer API を用いた習字制作ワークスペース「**Fude Sense**」のプロジェクトです。
 
 ---
 
