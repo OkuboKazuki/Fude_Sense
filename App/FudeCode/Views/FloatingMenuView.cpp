@@ -126,9 +126,14 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
 
         if (!ui.saveFeedback.empty() && (GetTickCount() - ui.saveFeedbackTime < 4000)) {
             RECT rMsg = { ui.rSub.left + 20, rInfoBox.bottom + 12, ui.rSub.right - 20, rInfoBox.bottom + 58 };
-            Box(dc, rMsg, RGB(30, 62, 45), RGB(55, 145, 90), 1, 8);
+            if (ui.saveFeedbackIsError) {
+                Box(dc, rMsg, RGB(70, 30, 32), RGB(200, 80, 80), 1, 8);
+            } else {
+                Box(dc, rMsg, RGB(30, 62, 45), RGB(55, 145, 90), 1, 8);
+            }
             HFONT fMsg = CreateCustomFont(18, FW_BOLD);
-            Center(dc, rMsg, ui.saveFeedback.c_str(), fMsg, RGB(190, 255, 210));
+            Center(dc, rMsg, ui.saveFeedback.c_str(), fMsg,
+                ui.saveFeedbackIsError ? RGB(255, 205, 205) : RGB(190, 255, 210));
             DeleteObject(fMsg);
         }
     }

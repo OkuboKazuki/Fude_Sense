@@ -146,9 +146,11 @@ public:
     bool ExportToJson(const std::wstring& filePath, PaperType paperType, Brush brushType, double hardness) const;
     bool ExportToCsv(const std::wstring& filePath) const;
 
-    // ファイル保存ダイアログ呼び出し
-    static bool PromptSaveArchiveJson(HWND hWnd, const TrajectorySession& session, PaperType paperType, Brush brushType, double hardness);
-    static bool PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession& session);
+    // ファイル保存ダイアログ呼び出し。取り消しと失敗を分けて返す
+    // （取り消しでは何も表示せず、失敗したときだけ知らせるため）。
+    enum class SaveResult { Saved, Canceled, Failed };
+    static SaveResult PromptSaveArchiveJson(HWND hWnd, const TrajectorySession& session, PaperType paperType, Brush brushType, double hardness);
+    static SaveResult PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession& session);
 
 private:
     std::vector<StrokeData> m_strokes;

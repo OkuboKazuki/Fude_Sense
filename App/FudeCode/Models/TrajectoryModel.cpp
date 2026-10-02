@@ -276,7 +276,9 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
     ofs << "  ]\n";
     ofs << "}\n";
 
-    return true;
+    // 開けただけでは成功ではない。容量不足などで書き込みが途中で止まっていないかを見る
+    ofs.close();
+    return !ofs.fail();
 }
 
 bool TrajectorySession::ExportToCsv(const std::wstring& filePath) const {
@@ -305,10 +307,16 @@ bool TrajectorySession::ExportToCsv(const std::wstring& filePath) const {
         }
     }
 
-    return true;
+    ofs.close();
+    return !ofs.fail();
 }
 
-bool TrajectorySession::PromptSaveArchiveJson(HWND hWnd, const TrajectorySession& session, PaperType paperType, Brush brushType, double hardness) {
+// 保存ダイアログが閉じた理由。CommDlgExtendedError が 0 ならユーザーの取り消し
+static TrajectorySession::SaveResult DialogClosedResult() {
+    return (CommDlgExtendedError() == 0) ? TrajectorySession::SaveResult::Canceled : TrajectorySession::SaveResult::Failed;
+}
+
+TrajectorySession::SaveResult TrajectorySession::PromptSaveArchiveJson(HWND hWnd, const TrajectorySession& session, PaperType paperType, Brush brushType, double hardness) {
     wchar_t szFileName[MAX_PATH] = L"";
     auto now = std::chrono::system_clock::now();
     std::time_t tt = std::chrono::system_clock::to_time_t(now);
@@ -326,13 +334,14 @@ bool TrajectorySession::PromptSaveArchiveJson(HWND hWnd, const TrajectorySession
     ofn.lpstrDefExt = L"json";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
 
-    if (GetSaveFileNameW(&ofn)) {
-        return session.ExportToJson(szFileName, paperType, brushType, hardness);
-    }
-    return false;
+    if (!GetSaveFileNameW(&ofn)) return DialogClosedResult();
+    if (session.ExportToJson(szFileName, paperType, brushType, hardness)) return SaveResult::Saved;
+    // 途中までしか書けていないファイルは残さない
+    DeleteFileW(szFileName);
+    return SaveResult::Failed;
 }
 
-bool TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession& session) {
+TrajectorySession::SaveResult TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession& session) {
     wchar_t szFileName[MAX_PATH] = L"";
     auto now = std::chrono::system_clock::now();
     std::time_t tt = std::chrono::system_clock::to_time_t(now);
@@ -350,10 +359,10 @@ bool TrajectorySession::PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession&
     ofn.lpstrDefExt = L"csv";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
 
-    if (GetSaveFileNameW(&ofn)) {
-        return session.ExportToCsv(szFileName);
-    }
-    return false;
+    if (!GetSaveFileNameW(&ofn)) return DialogClosedResult();
+    if (session.ExportToCsv(szFileName)) return SaveResult::Saved;
+    DeleteFileW(szFileName);
+    return SaveResult::Failed;
 }
 
 // タイムラインは m_strokes から決まるので、何度作り直しても

@@ -504,14 +504,28 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnJson, pt)) {
-                    if (TrajectorySession::PromptSaveArchiveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
+                    switch (TrajectorySession::PromptSaveArchiveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
+                    case TrajectorySession::SaveResult::Saved:
                         state.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
+                        break;
+                    case TrajectorySession::SaveResult::Failed:
+                        state.SetSaveFeedback(L"× JSON を保存できませんでした", true);
+                        break;
+                    case TrajectorySession::SaveResult::Canceled:
+                        break;
                     }
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnCsv, pt)) {
-                    if (TrajectorySession::PromptSaveArchiveCsv(hWnd, state.trajectory)) {
+                    switch (TrajectorySession::PromptSaveArchiveCsv(hWnd, state.trajectory)) {
+                    case TrajectorySession::SaveResult::Saved:
                         state.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
+                        break;
+                    case TrajectorySession::SaveResult::Failed:
+                        state.SetSaveFeedback(L"× CSV を出力できませんでした", true);
+                        break;
+                    case TrajectorySession::SaveResult::Canceled:
+                        break;
                     }
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;

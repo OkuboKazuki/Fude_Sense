@@ -20,6 +20,7 @@ bool SaveBitmapAsPng(HBITMAP hBmp, int width, int height, const wchar_t* filePat
     bool needUninit = SUCCEEDED(hrCo);
 
     bool success = false;
+    bool fileCreated = false;
     do {
         ComPtr<IWICImagingFactory> pFactory;
         HRESULT hr = CoCreateInstance(
@@ -40,6 +41,7 @@ bool SaveBitmapAsPng(HBITMAP hBmp, int width, int height, const wchar_t* filePat
 
         hr = pStream->InitializeFromFilename(filePath, GENERIC_WRITE);
         if (FAILED(hr)) break;
+        fileCreated = true;
 
         ComPtr<IWICBitmapEncoder> pEncoder;
         hr = pFactory->CreateEncoder(GUID_ContainerFormatPng, NULL, &pEncoder);
@@ -74,6 +76,12 @@ bool SaveBitmapAsPng(HBITMAP hBmp, int width, int height, const wchar_t* filePat
         success = true;
     } while (false);
 
+    // 作りかけの PNG を残すと、壊れたファイルがデスクトップに並ぶ。
+    // ストリームはこの時点で解放済みなので消せる。
+    if (!success && fileCreated) {
+        DeleteFileW(filePath);
+    }
+
     if (needUninit) {
         CoUninitialize();
     }
@@ -104,15 +112,19 @@ bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* f
     GetDIBits(memDC, memBmp, 0, ph, buf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
 
     HANDLE hFile = CreateFileW(filePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile != INVALID_HANDLE_VALUE) {
+    if (hFile == INVALID_HANDLE_VALUE) return false;
+
+    // 開けただけでは成功ではない。容量不足などで途中までしか書けていないことがある
+    auto writeAll = [hFile](const void* data, DWORD size) {
         DWORD written = 0;
-        WriteFile(hFile, &bfh, sizeof(bfh), &written, NULL);
-        WriteFile(hFile, &bih, sizeof(bih), &written, NULL);
-        WriteFile(hFile, buf.data(), dwSize, &written, NULL);
-        CloseHandle(hFile);
-        return true;
-    }
-    return false;
+        return WriteFile(hFile, data, size, &written, NULL) && written == size;
+    };
+    bool ok = writeAll(&bfh, sizeof(bfh))
+        && writeAll(&bih, sizeof(bih))
+        && writeAll(buf.data(), dwSize);
+    CloseHandle(hFile);
+    if (!ok) DeleteFileW(filePath);
+    return ok;
 }
 
 } // namespace
@@ -175,6 +187,11 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
             }
             CoTaskMemFree(pDeskPath);
         }
+    }
+
+    if (!success) {
+        state.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
+                                          : L"× 画像を保存できませんでした", true);
     }
 
     SelectObject(memDC, oldBmp);

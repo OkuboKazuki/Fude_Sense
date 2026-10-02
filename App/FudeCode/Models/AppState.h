@@ -208,6 +208,7 @@ struct UIState {
 
     std::wstring saveFeedback = L"";
     DWORD saveFeedbackTime = 0;
+    bool saveFeedbackIsError = false; // 保存に失敗したときは赤で出す
 
     // 各種UIウィジェット（コンポーネント指向・RECT互換）
     UIWidget rSub{};
@@ -276,9 +277,10 @@ public:
     // 画面上の点を全消し確認モーダルの座標系へ移す（紙だけ表示では倒した向き）
     POINT ToClearModalSpace(POINT pt, int clientHeight) const;
 
-    void SetSaveFeedback(const std::wstring& message) {
+    void SetSaveFeedback(const std::wstring& message, bool isError = false) {
         ui.saveFeedback = message;
         ui.saveFeedbackTime = GetTickCount();
+        ui.saveFeedbackIsError = isError;
     }
 
 private:
