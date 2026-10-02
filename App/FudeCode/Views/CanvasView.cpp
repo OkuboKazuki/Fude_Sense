@@ -885,9 +885,11 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
 
     // 中心接地点マーカー
     HBRUSH dotB = CreateSolidBrush(isPenDown ? prsColor : RGB(140, 150, 170));
-    SelectObject(dc, dotB);
+    HBRUSH prevDotB = (HBRUSH)SelectObject(dc, dotB);
     int dotR = isPenDown ? (std::max)(3, 2 + static_cast<int>(pose.pressure * 3.0)) : 3;
     Ellipse(dc, cx - dotR, cy - dotR, cx + dotR, cy + dotR);
+    // 選択したままの GDI オブジェクトは削除できないので、外してから削除する
+    SelectObject(dc, prevDotB);
     DeleteObject(dotB);
 
     SelectObject(dc, oldPen);
@@ -949,16 +951,18 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
 
     // 筆軸ハイライト線
     HPEN hlPen = CreatePen(PS_SOLID, 2, RGB(225, 185, 135));
-    SelectObject(dc, hlPen);
+    HPEN prevPen = (HPEN)SelectObject(dc, hlPen);
     MoveToEx(dc, tipBaseX + static_cast<int>(normX * 1.5), tipBaseY + static_cast<int>(normY * 1.5), nullptr);
     LineTo(dc, shaftTopX + static_cast<int>(normX * 1.5), shaftTopY + static_cast<int>(normY * 1.5));
+    SelectObject(dc, prevPen);
     DeleteObject(hlPen);
 
     // 穂首の巻線バンド（筆圧カラーアクセント）
     HPEN bandPen = CreatePen(PS_SOLID, 3, isPenDown ? prsColor : RGB(245, 240, 225));
-    SelectObject(dc, bandPen);
+    prevPen = (HPEN)SelectObject(dc, bandPen);
     MoveToEx(dc, tipBaseX + static_cast<int>(normX * (shaftHalfW + 0.5)), tipBaseY + static_cast<int>(normY * (shaftHalfW + 0.5)), nullptr);
     LineTo(dc, tipBaseX - static_cast<int>(normX * (shaftHalfW + 0.5)), tipBaseY - static_cast<int>(normY * (shaftHalfW + 0.5)));
+    SelectObject(dc, prevPen);
     DeleteObject(bandPen);
 
     SelectObject(dc, oldPen);
