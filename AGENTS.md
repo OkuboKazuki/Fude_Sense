@@ -1,22 +1,25 @@
 # AGENTS.md
 
-このリポジトリは、Wacomペンタブレット / Multi-Touch API および Wintab32 API を用いた習字制作ワークスペース「**SHUJI STUDIO (Fude Sense)**」のプロジェクトです。
+このリポジトリは、Wacom ペンタブレット（Wintab32 API）と Windows Pointer API を用いた習字制作ワークスペース「**SHUJI STUDIO (Fude Sense)**」のプロジェクトです。
 
 ---
 
 ## 1. プロジェクト概要
 
-- **言語・環境**: C++ (C++17 / C++20), Win32 API, GDI / Direct2D / Direct3D 11
+- **言語・環境**: C++（`LanguageStandard` 未指定のため MSVC 既定の C++14）, Win32 API, GDI / Direct2D / Direct3D 11
 - **プラットフォーム**: Windows (Win32 / x86 構成)
 - **アーキテクチャ**: MVC + Input Adapter + InkEngine（デバイス非依存・モジュール設計）
 - **主要機能**:
-  - デバイス非依存のペン入力抽象化（Wintab / Windows Ink / Pointer API 対応可能）
-  - Direct2D / CPU ハイブリッドによるリアルタイムな墨汁浸透・物理にじみシミュレーション（`InkEngine`）
+  - デバイス非依存のペン入力抽象化（Wintab / Windows Pointer API / マウス）
+  - Direct3D 11 Compute Shader（使えない環境では CPU）によるリアルタイムな墨汁浸透・物理にじみシミュレーション（`InkEngine`）
   - 運筆に伴うインク消費とカスレ（かすれ）の物理連動シミュレーション
   - 筆（小筆・中筆・大筆、硬さ・感度調整、止め・払い・傾き連動）
   - 用紙（半紙）および各種下敷き格子ガイド（十字、2段、田の字、2x3、2x4）
-  - お手本オーバーレイ表示
-  - 硯（すずり）での墨補充および墨残量管理
+  - お手本表示（入力した文字を升目ミニマップで配置、楷書・教科書体・行書）
+  - 硯（すずり）での墨補充（ペンの筆圧に応じた量）および墨残量管理
+  - 一画戻す / 一画復元
+  - 紙を大きくする表示（F9、半紙を横向きにして画面いっぱいに表示）
+  - 運筆の記録・リプレイ・解析（JSON / CSV 書き出し）
   - 作品の画像保存（PNG/BMP）およびクリップボードコピー
 
 ---
@@ -39,6 +42,7 @@
 App/FudeCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
+│   ├── UIComponents.h               # UI ウィジェット（RECT 互換）
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
 │   └── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合ファサード
@@ -47,10 +51,12 @@ App/FudeCode/
 │   ├── GpuInk.h / .cpp              # Direct2D/D3D11 リアルタイム墨汁浸透・物理エンジン
 │   ├── GpuSimulator.h / .cpp        # Direct3D 11 Compute Shader 浸透シミュレータ
 │   ├── ReplayInk.h / .cpp           # 運筆リプレイ墨汁再生エンジン
+│   ├── InkSnapshot.h                # 墨バッファの控え（一画戻す・紙を大きくする表示の出入り）
 │   └── InkModel.h                   # 墨残量・筆保水量・カスレ物理モデル
 │
 ├── Views/                           # [View] 描画・プレゼンテーション (GDI + D2D)
 │   ├── RenderUtils.h / .cpp         # GDI描画ヘルパー関数 (Box, Text, Font, Fill 等)
+│   ├── TitleView.h / .cpp           # タイトル画面（ロゴ・「タップして硯へ向かう」）
 │   ├── CanvasView.h / .cpp          # 半紙・下敷き・お手本・墨ストローク描画
 │   ├── FloatingMenuView.h / .cpp    # 左側フローティングパネル (筆/紙/保存/お手本)
 │   ├── InkStoneView.h / .cpp        # 右側 硯・墨残量・墨補充・全消し描画
@@ -73,6 +79,10 @@ App/FudeCode/
 │   ├── ImageExporter.h / .cpp       # 画像エクスポート (WIC PNG / BMP, クリップボード)
 │   └── WintabUtils.h / .cpp         # Wintab ユーティリティ
 │
+├── Wintab_SDK/                      # Wintab SDK ヘッダー（Wacom 配布物）
+├── Wacom_Feel_SDK/                  # Wacom Feel Multi-Touch API（ビルドに含むが未使用）
+├── title_logo.png                   # タイトル画面のロゴ
+├── desk_texture.jpg                 # 文机の背景テクスチャ
 ├── Resource.h / FudeSense.rc        # Win32リソース
 └── WacomMT_Scribble.cpp             # メインエントリ / イベントディスパッチ
 ```

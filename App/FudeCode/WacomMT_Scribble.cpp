@@ -3,6 +3,12 @@
 //	PURPOSE
 //		SHUJI STUDIO - Wacom Feel Multi-Touch & Wintab32 GPU Ink Application
 //
+//	COPYRIGHT
+//		Copyright (c) 2012-2020 Wacom Co., Ltd.
+//
+//		The text and information contained in this file may be freely used,
+//		copied, or distributed without compensation or licensing restrictions.
+//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
@@ -50,7 +56,6 @@ HINSTANCE hInst = NULL;
 std::wstring szTitle = L"Fude Sense";
 std::wstring szWindowClass = L"FUDESENSE";
 HWND g_mainWnd = NULL;
-HDC g_hdc = NULL;
 HWND g_hWndAbout = NULL;
 
 RECT g_clientRect = { 0, 0, 0, 0 };
@@ -68,7 +73,6 @@ DWORD g_lastWintabTick = 0;
 // Forward declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
-void ClearScreen();
 
 // ===== 全画面表示（F11 で切り替え） =====
 // 枠なしウィンドウをモニタいっぱいに広げる方式。元へ戻せるよう、切り替え前の
@@ -164,7 +168,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	if (!g_mainWnd) return FALSE;
 
 	SetMenu(g_mainWnd, NULL);
-	g_hdc = GetDC(g_mainWnd);
 
 	ShowWindow(g_mainWnd, SW_SHOWMAXIMIZED);
 	UpdateWindow(g_mainWnd);
@@ -256,18 +259,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_appState.isTransitioning = false;
 				g_appState.transitionProgress = 1.0f;
 				g_appState.currentScreen = AppScreen::Studio;
-				g_appState.ui.leftTab = g_appState.pendingStartTab;
-				if (g_appState.pendingStartTab == LeftTab::Analysis)
-				{
-					AppController::SyncReplayTimeline(hWnd, g_appState);
-					if (g_appState.replay.currentTimeMs == 0)
-					{
-						g_appState.replay.currentTimeMs = g_appState.replay.totalDurationMs;
-						g_appState.replay.hasValidSample = g_appState.trajectory.GetReplaySample(
-							g_appState.replay.currentTimeMs, g_appState.ui.rPaper, g_appState.replay.currentSample);
-					}
-					g_appState.replay.state = ReplayState::Paused;
-				}
+				g_appState.ui.leftTab = LeftTab::Brush;
 				KillTimer(hWnd, TRANSITION_TIMER_ID);
 			}
 			else
@@ -362,7 +354,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		}
 
-		// 文字入力中はショートカット（Esc=全消しの確認 / I=インクウィンドウ）を止める。
+		// 文字入力中はショートカット（Esc=全消しの確認 / Ctrl+Z・Ctrl+Y=一画戻す・復元）を止める。
 		// Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
 		if (g_appState.otehon.isTyping) break;
 
@@ -432,16 +424,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				CreateDialog(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 				ShowWindow(g_hWndAbout, SW_SHOW);
 			}
-			break;
-		}
-		case IDM_ERASE:
-		{
-			AppController::ClearAllInk(hWnd, g_appState, g_gpuInk);
-			break;
-		}
-		case IDM_EXIT:
-		{
-			DestroyWindow(hWnd);
 			break;
 		}
 		default:
@@ -644,7 +626,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		MainView::ReleaseBackBuffer();
 		CanvasView::ReleaseReplayCache();
 		AnalysisView::ReleaseWaveformCache();
-		ReleaseDC(hWnd, g_hdc);
 		CloseTabletContexts();
 		Cleanup();
 		PostQuitMessage(0);
@@ -679,12 +660,6 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	}
 	return 0;
-}
-
-void ClearScreen()
-{
-	g_gpuInk.Clear();
-	InvalidateRect(g_mainWnd, NULL, FALSE);
 }
 
 bool OpenTabletContexts(HWND hWnd)

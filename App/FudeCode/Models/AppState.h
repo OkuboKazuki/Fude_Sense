@@ -238,13 +238,6 @@ struct UIState {
     UIWidget rHardnessTrack{};
     UIWidget rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
 
-    // タイトル画面用ウィジェット
-    UIWidget rTitleCardFree{};      // 「自由に書く」カード
-    UIWidget rTitleCardOtehon{};    // 「お手本で練習」カード
-    UIWidget rTitleCardAnalysis{};  // 「運筆を分析・再現」カード
-    int hoverTitleCard = 0;         // 1: Free, 2: Otehon, 3: Analysis
-    bool hoverTitleHome = false;
-
     // 下敷き升目のジオメトリ。罫線描画（CanvasView::DrawGrid）とお手本の配置が
     // 同じセルを参照できるよう、AppState::Layout で一元的に算出する。
     // ここを分けて計算すると、お手本がマスからずれる。
@@ -263,7 +256,6 @@ public:
     DWORD transitionStartTime = 0;
     DWORD transitionDurationMs = 400;            // 400ms の滑らかな遷移
     float transitionProgress = 0.0f;             // 0.0 (Title) -> 1.0 (Studio)
-    LeftTab pendingStartTab = LeftTab::Brush;    // 選択されたカードに対応する初期タブ
 
     BrushModel brush;
     PaperModel paper;
