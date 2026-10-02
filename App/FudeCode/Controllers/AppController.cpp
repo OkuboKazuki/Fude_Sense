@@ -211,7 +211,6 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         if (state.isTransitioning) return true;
         if (state.ui.suppressPenUntilLift) return true;
 
-        state.pendingStartTab = LeftTab::Brush;
         state.ui.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
 
         // 墨染めフェード遷移を開始

@@ -88,11 +88,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
         // 1. 背景バッファ（memDC）にスタジオ画面を描画
         RenderUtils::DrawWoodDesk(memDC, width, height);
         CanvasView::DrawBackground(memDC, state);
-        if (state.pendingStartTab == LeftTab::Analysis) {
-            CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
-        } else {
-            CanvasView::RenderInk(memDC, gpuInk, state);
-        }
+        CanvasView::RenderInk(memDC, gpuInk, state);
         CanvasView::DrawOtehon(memDC, state);
         CanvasView::DrawGrid(memDC, state);
         InkStoneView::Draw(memDC, state);
