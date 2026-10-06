@@ -19,7 +19,6 @@
 static constexpr int PROPAGATION_THRESHOLD = 350;
 static constexpr int PROPAGATION_AMOUNT = 40;
 static constexpr int MAX_INK_PER_PIXEL = 450;
-static constexpr double MAX_SPEED_PX_PER_SEC = 2000.0;
 
 // スタンプ内の濃度プロファイル。
 // 中心側は平坦に飽和させ、外周 STAMP_RIM_RATIO の帯だけを急峻に落とす。
@@ -920,33 +919,13 @@ bool GpuInk::PropagateInk_NoLock()
 
 
 
-KinematicsInfo GpuInk::GetKinematicsInfo()
-{
-	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
-	KinematicsInfo info;
-	info.currentSpeed = m_lastSpeed;
-	info.currentAccel = m_lastAcceleration;
-	info.recentMaxSpeed = m_recentMaxSpeed;
-	info.recentMaxAccel = m_recentMaxAccel;
-	info.recentMaxDist = m_recentMaxDist;
-	info.lastEndSpeed = m_lastEndSpeed;
-	info.lastEndEffectiveSpeed = m_lastEndEffectiveSpeed;
-	info.lastEndAccel = m_lastEndAccel;
-	info.lastIsFlick = m_lastIsFlick;
-	info.currentZ = m_penZ;
-	info.currentAltitude = static_cast<int>(std::round(m_penAltitudeDegrees));
-	info.currentAzimuth = static_cast<int>(std::round(m_penAzimuthRad * (180.0 / 3.14159265358979323846)));
-	info.isHovering = m_isHovering;
-	return info;
-}
-
 void GpuInk::UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering)
 {
-	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
-	m_penZ = z;
+	(void)z;
+	(void)hovering;
+	std::lock_guard<std::mutex> lock(m_penMutex);
 	m_penAltitudeDegrees = (altitudeDegrees > 0.0) ? altitudeDegrees : 90.0;
 	m_penAzimuthRad = azimuthRad;
-	m_isHovering = hovering;
 }
 
 void GpuInk::UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees, bool hovering)
@@ -958,30 +937,15 @@ void GpuInk::UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees
 
 void GpuInk::SetPressureFactor(double factor)
 {
-	std::lock_guard<std::mutex> lock(m_kinematicsMutex);
+	std::lock_guard<std::mutex> lock(m_penMutex);
 	if (factor < 0.0) factor = 0.0;
 	if (factor > 1.0) factor = 1.0;
 	m_pressureFactor = factor;
 }
 
-// ストローク終了 (ユーザー指示に基づき「跳ね払い」のスタンプ生成処理は削除)
+// ストローク終了
 void GpuInk::EndStroke()
 {
-	{
-		std::lock_guard<std::mutex> lock(m_kinematicsMutex);
-
-		double effectiveSpeed = std::min(MAX_SPEED_PX_PER_SEC, std::max(m_lastSpeed, m_recentMaxDist * 60.0));
-		const double MIN_FLICK_SPEED = 35.0;
-		bool hasSpeed = (effectiveSpeed > MIN_FLICK_SPEED) || (m_recentMaxDist >= 1.0);
-		bool isStopping = (m_lastAcceleration < -3000.0);
-		bool isFlick = hasSpeed && !isStopping;
-
-		m_lastEndSpeed = m_lastSpeed;
-		m_lastEndEffectiveSpeed = effectiveSpeed;
-		m_lastEndAccel = m_lastAcceleration;
-		m_lastIsFlick = isFlick;
-	}
-
 	std::lock_guard<std::mutex> lock(m_mutex);
 	m_inStroke = false;
 }
@@ -1000,7 +964,7 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	double penAzRad = 0.0;
 	double penPressFactor = 0.0;
 	{
-		std::lock_guard<std::mutex> kLock(m_kinematicsMutex);
+		std::lock_guard<std::mutex> kLock(m_penMutex);
 		penAltDeg = m_penAltitudeDegrees;
 		penAzRad = m_penAzimuthRad;
 		penPressFactor = m_pressureFactor;

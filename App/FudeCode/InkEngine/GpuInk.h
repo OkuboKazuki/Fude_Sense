@@ -17,24 +17,6 @@
 #include "InkSnapshot.h"
 #include "GpuSimulator.h"
 
-struct KinematicsInfo
-{
-	double currentSpeed;
-	double currentAccel;
-	double recentMaxSpeed;
-	double recentMaxAccel;
-	double recentMaxDist;
-	double lastEndSpeed;
-	double lastEndEffectiveSpeed;
-	double lastEndAccel;
-	bool lastIsFlick;
-
-	int currentZ;
-	int currentAltitude;
-	int currentAzimuth;
-	bool isHovering;
-};
-
 // 1 セグメント分の運筆パラメータ
 // 運筆方向・乾き具合など、今後の描画表現に必要な情報をまとめて受け渡す
 struct StrokeSegment
@@ -81,7 +63,6 @@ public:
 	int SettleDiffusion(int maxSteps = 200);
 	bool IsInStroke() const { return m_inStroke.load(std::memory_order_relaxed); }
 
-	KinematicsInfo GetKinematicsInfo();
 	void UpdatePen(int z, double altitudeDegrees, double azimuthRad, bool hovering);
 	void UpdatePenZ(int z, int altitudeTenthDegrees, int azimuthTenthDegrees, bool hovering);
 	void SetPressureFactor(double factor);
@@ -167,26 +148,13 @@ private:
 	int m_uploadMaxY = -1;
 
 	std::mutex m_mutex;
-	std::mutex m_kinematicsMutex;
+	std::mutex m_penMutex; // ペンの姿勢・圧力パラメータの同期用
 
 	std::atomic<bool> m_inStroke{ false };
 	POINT m_lastPt = { 0, 0 };
 
-	double m_lastSpeed = 0.0;
-	double m_recentMaxSpeed = 0.0;
-	double m_recentMaxDist = 0.0;
-	double m_lastAcceleration = 0.0;
-	double m_recentMaxAccel = 0.0;
-
-	double m_lastEndSpeed = 0.0;
-	double m_lastEndEffectiveSpeed = 0.0;
-	double m_lastEndAccel = 0.0;
-	bool m_lastIsFlick = false;
-
-	int m_penZ = 0;
 	double m_penAltitudeDegrees = 90.0;
 	double m_penAzimuthRad = 0.0;
-	bool m_isHovering = true;
 	double m_pressureFactor = 0.0;
 	double m_strokeDryness = 0.0; // 描画中セグメントの乾き具合 (StrokeSegment::dryness)
 

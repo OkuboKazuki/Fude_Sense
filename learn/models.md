@@ -115,7 +115,7 @@ classDiagram
 - **使用されている定数の名前 (Constants used)**:
   - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
   - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
-  - `INK_MAX_VALUE`: 墨残量・水分の最大値 (`1.0`)。
+  - `INK_MAX_VALUE`: 墨残量の最大値 (`1.0`)。
   - `MAX_GRID_CELLS`: 升目セル配列の上限 (`8`)。
   - `REPLAY_TIMER_ID`: リプレイ再生用タイマ ID (`101`)。
   - `TRANSITION_TIMER_ID`: タイトル→スタジオ画面遷移タイマ ID (`102`)。
