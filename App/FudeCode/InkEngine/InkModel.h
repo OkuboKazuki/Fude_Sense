@@ -10,8 +10,10 @@
 
 // ペンで硯を1回押したときに足される墨の量。筆圧だけで決まる。
 // 軽く触れただけで REFILL_MIN_AMOUNT、REFILL_FULL_PRESSURE 以上押し込むと
-// 空から満タンになる量（最大筆圧は出しにくいので手前で最大にする）。
-constexpr double REFILL_MIN_AMOUNT = 0.10;
+// REFILL_MAX_AMOUNT（最大筆圧は出しにくいので手前で最大にする）。
+// 空の筆は1回では満タンにならず、何度か押して含ませる。
+constexpr double REFILL_MIN_AMOUNT = 0.05;
+constexpr double REFILL_MAX_AMOUNT = 0.60;
 constexpr double REFILL_FULL_PRESSURE = 0.8;
 
 // 墨・硯・運筆インク管理モデル（単一パラメータ設計）
@@ -33,7 +35,7 @@ struct InkModel {
     // 筆圧から足す墨の量を決める。弱く押すと少なく、強く押すほど多く足す。
     static double RefillAmountFromPressure(double pressure) {
         double p = (std::min)((std::max)(pressure / REFILL_FULL_PRESSURE, 0.0), 1.0);
-        return REFILL_MIN_AMOUNT + (INK_MAX_VALUE - REFILL_MIN_AMOUNT) * p;
+        return REFILL_MIN_AMOUNT + (REFILL_MAX_AMOUNT - REFILL_MIN_AMOUNT) * p;
     }
 
     // ペンで押し始めたときに呼ぶ。今の残量を足し算の基準にする。
