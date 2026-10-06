@@ -69,7 +69,7 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     auto S = [sc](int v) { return (int)(v * sc + 0.5); };
 
     // 1. 墨量表示ヘッダー（硯の真上にモダンなピルバッジとして表示）
-    int inkPercent = (int)(state.ink.stoneAmount * 100.0);
+    int inkPercent = (int)(state.ink.amount * 100.0);
     bool isLow = (inkPercent <= 20);
 
     COLORREF badgeBg     = isLow ? RGB(52, 22, 25)     : RGB(24, 28, 36);
@@ -103,7 +103,7 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     RECT rPool = { ui.rInkStoneLarge.left + S(12), ui.rInkStoneLarge.top + S(12), ui.rInkStoneLarge.right - S(12), ui.rInkStoneLarge.top + (int)(RH(ui.rInkStoneLarge) * 0.38) };
     Box(dc, rPool, RGB(10, 11, 14), RGB(36, 40, 50), 1, 6);
 
-    double inkFrac = Clamp(state.ink.stoneAmount / INK_MAX_VALUE, 0.0, 1.0);
+    double inkFrac = Clamp(state.ink.amount / INK_MAX_VALUE, 0.0, 1.0);
     if (inkFrac > 0.01) {
         int poolH = RH(rPool) - 6;
         int fillH = (int)(poolH * inkFrac);
@@ -169,7 +169,7 @@ void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state) {
     Fill(dc, ui.rPaperOnlyBar, RGB(24, 26, 34));
 
     // 墨を補充。硯が見えないので残量もボタンに添え、少ないときは赤くする
-    int inkPercent = (int)(state.ink.stoneAmount * 100.0);
+    int inkPercent = (int)(state.ink.amount * 100.0);
     bool low = (inkPercent <= 20);
     bool hovRefill = (ui.hoverPaperOnly == 2);
     Box(dc, ui.rInkRefillBtn, hovRefill ? RGB(42, 72, 110) : RGB(26, 30, 38),

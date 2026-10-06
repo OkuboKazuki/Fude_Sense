@@ -91,17 +91,20 @@ graph TD
 ### 2.3 [InkModel.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/InkModel.h)
 
 - **責務 (Responsibility)**:
-  - 硯の墨残量（`stoneAmount`）、筆に含まれる顔料濃度（`brushAmount`）、筆に含まれる水分量（`brushWater`）を独立した物理量として管理します。
-  - 顔料と水分を分離することで、「濃墨・渇筆（濃い色だがかすれてにじまない）」という書道の高度な表現を可能にしています。
+  - 硯および筆の墨残量（`amount`）を単一の物理パラメータ ($0.0 \sim 1.0$) で一元管理します。
+  - 残量がしきい値（`KASURE_START_LEVEL = 0.60`）を下回ると、非線形カーブによって筆先の渇き度合い（`dryness`）を算出し、運筆に伴うかすれ（渇筆）をリアルタイムに駆動します。
 - **入力 (Input)**:
-  - `Consume(double amount)`: 運筆に応じた消費量
-  - `Refill()`: 硯での墨補充
+  - `Consume(double delta)`: 運筆に応じたインク消費量
+  - `Refill()`: 硯での墨補充（満タン）
+  - `PressRefill(double pressure)`: ペンの筆圧に応じた継ぎ足し補充
 - **出力 (Output)**:
-  - `GetInkFactor()`: 現在の筆先濃度係数 ($0.0 \sim 1.0$)
-  - `GetDryness()`: 乾き具合（渇筆度合い $0.0$: 潤沢 $\sim 1.0$: 完全かすれ）
+  - `amount`: 現在の墨残量 ($0.0 \sim 1.0$)
+  - `GetDryness()`: 筆の乾き具合（渇筆度合い $0.0$: 潤沢 $\sim 1.0$: 完全かすれ）
 - **使用されている定数の名前 (Constants used)**:
-  - `WATER_LOSS_RATIO = 1.5`: 水分消費速度比（紙への吸収・蒸発により顔料の1.5倍の速さで消費）。
-  - `INK_MAX_VALUE = 1.0`: 墨および水分の満タン値。
+  - `KASURE_START_LEVEL = 0.60`: かすれ（渇筆）が立ち上がり始めるインク残量のしきい値。
+  - `REFILL_MIN_AMOUNT = 0.10`: 筆圧補充時の最小付与量。
+  - `REFILL_FULL_PRESSURE = 0.8`: 満タン補充となる筆圧基準。
+  - `INK_MAX_VALUE = 1.0`: 墨の満タン値。
 
 ---
 

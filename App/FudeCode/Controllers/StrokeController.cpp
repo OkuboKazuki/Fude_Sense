@@ -28,9 +28,9 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // 硯・「墨を補充」をペンで押している間は、強く押し込むほど墨を継ぎ足す
     if (state.ui.isPenRefilling) {
         if (event.pressure > 0.0) {
-            double before = state.ink.stoneAmount;
+            double before = state.ink.amount;
             state.ink.PressRefill(event.pressure);
-            if (state.ink.stoneAmount != before) {
+            if (state.ink.amount != before) {
                 InvalidateRect(hWnd, state.ui.paperOnly ? &state.ui.rInkRefillBtn : &state.ui.rRight, FALSE);
             }
         } else {
