@@ -226,7 +226,8 @@ void AnalysisView::DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& sta
     } else {
         swprintf_s(bufInk, 32, L"—");
     }
-    // かすれ始める残量（KASURE_START_LEVEL）を下回ったら色を変える
+    // 乾き始める残量（KASURE_START_LEVEL = 60%）を下回ったら色を変える。
+    // 見た目のかすれが現れるのはもっと後（残量 25～30% あたり）。
     COLORREF inkColor = (curInk < 0.0) ? RGB(160, 170, 185)
                       : (curInk >= InkModel::KASURE_START_LEVEL ? RGB(225, 230, 240) : RGB(255, 140, 120));
     DrawMetricItem(3, L"墨残量", bufInk, inkColor);

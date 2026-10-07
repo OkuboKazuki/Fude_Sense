@@ -105,6 +105,10 @@ void CSMain(uint3 DTid : SV_DispatchThreadID)
                     int flowIn = max(1, g_amount / nCount);
                     deltaInk += flowIn;
 
+                    // 流れ込んだ水で自分を濡らす。自分が乾いた画素（かすれの隙間）でも
+                    // 隣が濡れていれば墨が入る（CPU 版 GpuInk::PropagateInk_NoLock と同じ考え方）。
+                    // CPU 版と違い、隣の水分が g_wetThreshold を超えていれば、運べる水が
+                    // 残らなくても墨だけは 1 画素入る。
                     int carriedWet = (int)nWet - g_wetLoss;
                     if (carriedWet > (int)newWet)
                     {

@@ -29,8 +29,9 @@ static constexpr int MAX_INK_PER_PIXEL = 450;
 static constexpr double STAMP_RIM_RATIO = 0.22;
 
 // 紙の水分場（m_wetField）のパラメータ
-// にじみは墨の濃さではなく水分が駆動する。乾いた紙には墨が流れ込まないため、
-// 水分を持たない画素（かすれの隙間など）は塗り潰されずに残る。
+// にじみは墨の濃さではなく水分が駆動する。墨を送り出せるのは、十分な水分を持つ画素だけ。
+// ただし送り出す側は、流れ込む先の画素を自分の水分で濡らしてから墨を流す。
+// そのため乾いた画素（かすれの隙間など）にも、隣が十分濡れていれば墨が入り込む。
 static constexpr int WET_MAX = 255;          // 画素あたりの最大水分量
 static constexpr int WET_THRESHOLD = 8;      // これ以下は「乾いた紙」として扱う
 static constexpr int WET_DRY_RATE = 1;       // 1 ティックあたりの乾燥量
@@ -45,10 +46,19 @@ static constexpr double WET_MARGIN_PX = 2.0; // 墨の接地範囲より外側�
 //
 // かすれは「濃度を下げる」のではなく「墨を置かない画素を決める」ことで作る。
 // 置くと決めた画素には従来どおり飽和濃度を与え、置かない画素は墨も水分も
-// 受け取らない (m_ink = 0 のまま)。水を置かないので、後続のにじみでも
-// 白い隙間が塗り潰されることはない。判定は次の 1 本の式に集約される。
+// 受け取らない (m_ink = 0 のまま)。判定は次の 1 本の式に集約される。
 //
-//   毛束マスク(u) + 紙目マスク(x, y) > dryness * KASURE_THRESHOLD_SCALE
+//   0.62 * 毛束マスク(u) + 0.38 * 紙目マスク(x, y) > dryness * KASURE_THRESHOLD_SCALE
+//
+// 左辺は「その画素に毛が触れる度合い」(0.0 ～ 1.0)、右辺は越えるべき基準。
+// 乾くほど基準が上がり、墨の載る画素が減る。
+//
+// 左辺は 2 つのなめらかなノイズの重み付き和なので、値は中央に集まり 0 付近は
+// ほとんど出ない。dryness が 0.16 でも墨を置かない画素は 1.6% 程度しかない。
+// さらに水分が多いうちは、隣の画素からのにじみがこの隙間を埋める（m_wetField の
+// コメント参照）。隙間が白く残るのは、隙間が広がり、しかも筆の水分が減って
+// にじみの届く距離が短くなってから。その結果、見た目のかすれは残量 25～30%
+// あたりから現れる（数値は InkModel::GetDryness のコメント参照）。
 //
 // u は運筆方向に垂直な距離。毛束マスクを u だけの関数にするのが要で、
 // これにより同じ画素を覆う何枚ものスタンプが必ず同じ判定を返す。
@@ -783,7 +793,9 @@ bool GpuInk::PropagateInk_NoLock()
 			if (curInk <= PROPAGATION_THRESHOLD) continue;
 
 			// にじみを駆動するのは墨の濃さではなく水分。
-			// 渇筆で置かれた墨は水分を持たないため、ここで止まりかすれが保存される。
+			// 渇筆で置かれた墨は水分が少ない（WET_MAX * (1 - dryness)）ため、ここで止まりやすい。
+			// dryness が約 0.8 を超えると運べる水が残らず、ここでは墨を送り出さない
+			// （GPU 版は隣へ 1 画素だけ入ることがある。GpuSimulator.cpp 参照）。
 			// 水は墨に先んじて紙を濡らすので、送り出す側の水分から減衰分を引いた
 			// 量を「隣へ運べる水」とみなす。
 			int carriedWet = static_cast<int>(m_wetField[i]) - WET_SPREAD_LOSS;
@@ -803,7 +815,8 @@ bool GpuInk::PropagateInk_NoLock()
 
 				if (curInk > m_ink[ni])
 				{
-					// 墨が進む先を水が濡らす（毛管流には濡れた経路が要る）
+					// 墨が進む先を水が濡らす（毛管流には濡れた経路が要る）。
+					// 進む先が乾いた画素（かすれの隙間）でもここで濡らすので、墨が入り込む。
 					if (m_wetField[ni] < carriedWet)
 					{
 						m_wetField[ni] = static_cast<uint8_t>(carriedWet);
@@ -1012,6 +1025,7 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 
 	// かすれの判定基準。乾くほど基準が上がり、墨を置ける画素が減る。
 	// 潤沢な筆 (dryness = 0) では基準が 0 になり判定そのものを行わない。
+	// 基準が 0.3 程度までは墨を置かない画素がごく少なく、にじみで埋まって見えない。
 	double kasureBar = drynessClamped * KASURE_THRESHOLD_SCALE;
 	bool kasureActive = (kasureBar > 0.0);
 

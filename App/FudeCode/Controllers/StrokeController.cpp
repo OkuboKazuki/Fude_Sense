@@ -185,8 +185,9 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 運筆に伴うインク・水分の物理消費
-        // かすれ前（残量45%以上）の書ける量は完全に維持しつつ、
-        // かすれ中（紙への付着量が減る状態）は物理消費を穏やかにしてカスレの持続距離を伸ばす
+        // 消費量は「移動距離 × 線幅」に比例する（線幅 36px なら 1px あたり 0.0002）。
+        // 乾いてくると（dryness > 0、残量 60% 未満）消費を最大 45% 減らし、
+        // かすれが続く距離を伸ばす。dryness = 0 の間は消費量は変わらない。
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
         double drynessFactor = 1.0 - state.ink.GetDryness() * 0.45;
