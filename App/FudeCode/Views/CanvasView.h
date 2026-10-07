@@ -35,6 +35,7 @@ public:
     static void Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoint& pose, bool isPenDown);
 
 private:
+    static void DrawReplayTrajectory(HDC dc, const TrajectorySession& session, const AppState& state, const RECT& rPaper, int pw, int ph);
     static void DrawCross(HDC dc, int x, int y, int s);
 };
 

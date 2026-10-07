@@ -847,11 +847,92 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
             // ・再生中: 再生済みの黒い墨(RGB 0,0,0)の上は黒のまま保たれ、未再生の未来の文字だけが筆圧グラデーションとして表示される。
             BitBlt(dc, rPaper.left, rPaper.top, pw, ph, g_replayCache.ghostMaster.dc, 0, 0, SRCAND);
         }
+
+        // 3. 実際にペンが通った軌跡の細い線（運筆の芯線）
+        DrawReplayTrajectory(dc, session, state, rPaper, pw, ph);
     }
 
     if (state.replay.hasValidSample) {
         Draw3DBrushPose(dc, state, state.replay.currentSample.point, state.replay.currentSample.isPenDown);
     }
+}
+
+void CanvasView::DrawReplayTrajectory(HDC dc, const TrajectorySession& session, const AppState& state, const RECT& rPaper, int pw, int ph) {
+    const auto& strokes = session.GetStrokes();
+    if (strokes.empty()) return;
+
+    DWORD currentTimeMs = state.replay.currentTimeMs;
+
+    // ペンが実際に通った軌跡（芯線）を視認しやすい朱色（朱墨カラー）の細線で描画
+    // 黒い墨汁テクスチャの上でも白い半紙の上でもくっきりと映える
+    const COLORREF trajColor = RGB(235, 55, 35);
+    HPEN trajPen = CreatePen(PS_SOLID, 1, trajColor);
+    if (!trajPen) return;
+
+    HPEN oldPen = static_cast<HPEN>(SelectObject(dc, trajPen));
+
+    for (size_t i = 0; i < strokes.size(); ++i) {
+        DWORD startTl = session.GetStrokeTimelineStart(i);
+        if (currentTimeMs < startTl) {
+            // まだ開始されていない画は描画しない（再生が進んでペンが通った箇所に順次現れる）
+            break;
+        }
+
+        DWORD endTl = session.GetStrokeTimelineEnd(i);
+        const auto& pts = strokes[i].points;
+        if (pts.empty()) continue;
+
+        if (currentTimeMs >= endTl) {
+            // すでに書き終えた画: 全点を通る軌跡を描画
+            if (pts.size() == 1) {
+                int x = rPaper.left + static_cast<int>(pts[0].normX * pw);
+                int y = rPaper.top + static_cast<int>(pts[0].normY * ph);
+                SetPixel(dc, x, y, trajColor);
+                SetPixel(dc, x + 1, y, trajColor);
+                SetPixel(dc, x - 1, y, trajColor);
+                SetPixel(dc, x, y + 1, trajColor);
+                SetPixel(dc, x, y - 1, trajColor);
+            } else {
+                int startX = rPaper.left + static_cast<int>(pts[0].normX * pw);
+                int startY = rPaper.top + static_cast<int>(pts[0].normY * ph);
+                MoveToEx(dc, startX, startY, nullptr);
+                for (size_t p = 1; p < pts.size(); ++p) {
+                    int px = rPaper.left + static_cast<int>(pts[p].normX * pw);
+                    int py = rPaper.top + static_cast<int>(pts[p].normY * ph);
+                    LineTo(dc, px, py);
+                }
+            }
+        } else {
+            // 現在再生・運筆中の画: currentTimeMs までに通過した点を描画
+            size_t visibleCount = session.GetVisiblePointCount(i, currentTimeMs);
+            if (visibleCount > 0) {
+                int startX = rPaper.left + static_cast<int>(pts[0].normX * pw);
+                int startY = rPaper.top + static_cast<int>(pts[0].normY * ph);
+                MoveToEx(dc, startX, startY, nullptr);
+                for (size_t p = 1; p < visibleCount; ++p) {
+                    int px = rPaper.left + static_cast<int>(pts[p].normX * pw);
+                    int py = rPaper.top + static_cast<int>(pts[p].normY * ph);
+                    LineTo(dc, px, py);
+                }
+                // 現在着筆中かつこの画であれば、補間された最新のペン先位置へ接続
+                if (state.replay.hasValidSample && state.replay.currentSample.isPenDown &&
+                    state.replay.currentSample.strokeIndex == static_cast<int>(i)) {
+                    int curX = rPaper.left + static_cast<int>(state.replay.currentSample.point.normX * pw);
+                    int curY = rPaper.top + static_cast<int>(state.replay.currentSample.point.normY * ph);
+                    LineTo(dc, curX, curY);
+                }
+            } else if (state.replay.hasValidSample && state.replay.currentSample.isPenDown &&
+                       state.replay.currentSample.strokeIndex == static_cast<int>(i)) {
+                // 着筆直後でサンプリング点境界にある場合
+                int curX = rPaper.left + static_cast<int>(state.replay.currentSample.point.normX * pw);
+                int curY = rPaper.top + static_cast<int>(state.replay.currentSample.point.normY * ph);
+                SetPixel(dc, curX, curY, trajColor);
+            }
+        }
+    }
+
+    SelectObject(dc, oldPen);
+    DeleteObject(trajPen);
 }
 
 void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoint& pose, bool isPenDown) {
