@@ -1072,6 +1072,11 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
                     : p1.inkAmount;
             }
 
+            // 線幅は書いたときの半紙が基準なので、いまの半紙の大きさへ直して返す
+            if (s.paperW > 0 && s.paperH > 0) {
+                outSample.point.width *= (static_cast<double>(pw) / s.paperW + static_cast<double>(ph) / s.paperH) * 0.5;
+            }
+
             outSample.point.paperX = rPaper.left + static_cast<int>(outSample.point.normX * pw);
             outSample.point.paperY = rPaper.top + static_cast<int>(outSample.point.normY * ph);
             return true;

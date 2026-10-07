@@ -533,6 +533,13 @@ void BakeGhostMaster(const std::vector<int>& ink, int inkW, int inkH, const Traj
             continue;
         }
 
+        // 線幅はこの画を書いたときの画面上の半紙が基準。いまの半紙の大きさへ直さないと、
+        // ウィンドウを縮めたときに色付きの筆跡だけ太くなり、傾きのずらし量も墨とずれる
+        double widthScale = 1.0;
+        if (s.paperW > 0 && s.paperH > 0) {
+            widthScale = (static_cast<double>(pw) / s.paperW + static_cast<double>(ph) / s.paperH) * 0.5;
+        }
+
         for (size_t i = 0; i < s.points.size(); ++i) {
             const auto& p = s.points[i];
             const auto& prev = (i > 0) ? s.points[i - 1] : p;
@@ -547,8 +554,8 @@ void BakeGhostMaster(const std::vector<int>& ink, int inkW, int inkH, const Traj
             double y2 = p.normY * ph;
             double prs1 = prev.pressure;
             double prs2 = p.pressure;
-            double w1 = prev.width;
-            double w2 = p.width;
+            double w1 = prev.width * widthScale;
+            double w2 = p.width * widthScale;
             double alt1 = prev.altitudeDeg;
             double alt2 = p.altitudeDeg;
             double az1 = prev.azimuthDeg;

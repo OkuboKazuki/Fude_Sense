@@ -218,8 +218,12 @@ void ReplayInk::FeedForward(const TrajectorySession& session, DWORD timeMs, bool
             m_openStroke = static_cast<int>(si);
         }
 
-        double scaleX = (m_dispW > 0 && m_canvasW > 0) ? (static_cast<double>(m_canvasW) / static_cast<double>(m_dispW)) : 1.0;
-        double scaleY = (m_dispH > 0 && m_canvasH > 0) ? (static_cast<double>(m_canvasH) / static_cast<double>(m_dispH)) : 1.0;
+        // 線幅はこの画を書いたときの画面上の半紙が基準。いまの表示の大きさで割ると、
+        // ウィンドウを縮めたときに書いたときより太く引き直してしまう
+        int srcW = (strokes[si].paperW > 0) ? strokes[si].paperW : m_dispW;
+        int srcH = (strokes[si].paperH > 0) ? strokes[si].paperH : m_dispH;
+        double scaleX = (srcW > 0 && m_canvasW > 0) ? (static_cast<double>(m_canvasW) / static_cast<double>(srcW)) : 1.0;
+        double scaleY = (srcH > 0 && m_canvasH > 0) ? (static_cast<double>(m_canvasH) / static_cast<double>(srcH)) : 1.0;
         double scaleAvg = (scaleX + scaleY) * 0.5;
 
         for (size_t i = m_fedCount[si]; i < visible; ++i) {
