@@ -204,7 +204,7 @@ struct UIState {
     int hoverInkStone = 0;
     // 右の硯パネル（硯・ボタン・文字）の拡大率。Layout で空きに収まる範囲で決める。
     double inkStoneScale = 1.0;
-    int hoverReplayBtn = 0; // 1: Reset, 2: Prev, 3: Play/Pause, 4: Next, 5: Speed0.5, 6: Speed1.0, 7: Speed2.0, 8: SeekTrack
+    int hoverReplayBtn = 0; // 1: Reset, 2: Prev, 3: Play/Pause, 4: Next, 5: Speed0.5, 6: Speed1.0, 7: Speed2.0, 8: SeekTrack, 9: Import, 10: Back
 
     std::wstring saveFeedback = L"";
     DWORD saveFeedbackTime = 0;
@@ -231,6 +231,8 @@ struct UIState {
     UIWidget rReplayPlayBtn{}, rReplayPrevBtn{}, rReplayNextBtn{}, rReplayResetBtn{};
     UIWidget rReplaySeekTrack{}, rReplaySeekThumb{};
     UIWidget rReplaySpeedBtn[3]{};
+    UIWidget rAnalysisImportBtn{};   // 運筆アーカイブを読み込む
+    UIWidget rAnalysisBackBtn{};     // 読み込んだ記録を閉じて自分の記録に戻る（表示中だけ）
     UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
     UIWidget rPaperOnlyBtn{};      // 右パネル: 紙だけ表示に入る
     UIWidget rPaperOnlyExitBtn{};  // 紙だけ表示中: 通常表示に戻る（墨の補充は rInkRefillBtn を半紙の右へ置き直す）
@@ -263,10 +265,19 @@ public:
     OtehonModel otehon;
     InkModel ink;
     TrajectorySession trajectory;
+    // 解析タブで読み込んだ他人の運筆アーカイブ。見るだけで、書き足しや「一画戻す」の
+    // 対象にはならない。自分の記録（trajectory）と半紙の墨には手を付けない。
+    TrajectorySession importedTrajectory;
+    bool viewingImport = false;
+    std::wstring importedName;   // 読み込んだファイル名（解析タブに出す）
     ReplayModel replay;
     UndoHistory undo;   // 「一画戻す」用に、画を書き始める直前の状態を控える
     UIState ui;
 
+
+    // 解析タブのリプレイ・グラフが見ている記録。読み込んだ記録を表示中ならそちら
+    TrajectorySession& AnalysisSession() { return viewingImport ? importedTrajectory : trajectory; }
+    const TrajectorySession& AnalysisSession() const { return viewingImport ? importedTrajectory : trajectory; }
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);

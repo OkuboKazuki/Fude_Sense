@@ -35,6 +35,9 @@ public:
 
     void Release();
 
+    // 流し込み済みの墨の濃さ（GpuInk::GetInkSnapshot と同じ形）。用意できていなければ false
+    bool GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight);
+
 private:
     // 画の切れ目で控えた墨の状態。巻き戻しはここから引き直す。
     struct Checkpoint {

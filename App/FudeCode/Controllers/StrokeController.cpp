@@ -195,7 +195,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
 
         // 運筆データアーカイブへ記録
         state.trajectory.AddPoint(event, rPaper, m_smoothedWidth, speed,
-            pressureFactor, state.ink.GetDryness(), m_lastMoveAngle);
+            pressureFactor, state.ink.GetDryness(), m_lastMoveAngle, state.ink.amount);
 
         // 内部固定論理解像度へのスケーリング変換
         int inkW = gpuInk.GetWidth();

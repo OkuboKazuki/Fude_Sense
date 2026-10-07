@@ -41,6 +41,10 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     state.trajectory.Clear();
     state.undo.Clear();
     state.replay.Reset();
+    // 読み込んだ記録を見ている間は、消えるのは自分の墨と記録だけ。解析はそのまま続ける
+    if (state.viewingImport) {
+        SyncReplayTimeline(hWnd, state);
+    }
     state.ui.showClearConfirm = false;
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
@@ -70,14 +74,68 @@ void AppController::SyncReplayTimeline(HWND hWnd, AppState& state) {
         KillTimer(hWnd, REPLAY_TIMER_ID);
     }
 
-    state.trajectory.BuildReplayTimeline();
-    state.replay.totalDurationMs = state.trajectory.GetReplayTotalDurationMs();
+    state.AnalysisSession().BuildReplayTimeline();
+    state.replay.totalDurationMs = state.AnalysisSession().GetReplayTotalDurationMs();
     if (state.replay.currentTimeMs > state.replay.totalDurationMs) {
         state.replay.currentTimeMs = state.replay.totalDurationMs;
     }
-    state.replay.hasValidSample = state.trajectory.GetReplaySample(
+    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
         state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
     state.UpdateReplaySeekThumb();
+}
+
+// 解析の対象を切り替えた直後の表示。書き上がった状態（末尾）で一時停止にする
+static void ShowAnalysisSessionFromEnd(HWND hWnd, AppState& state) {
+    RECT rc = { 0, 0, 0, 0 };
+    GetClientRect(hWnd, &rc);
+    // 「自分の記録に戻る」ボタンの有無で解析タブの並びが変わる
+    state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+
+    AppController::SyncReplayTimeline(hWnd, state);
+    state.replay.state = ReplayState::Paused;
+    state.replay.currentTimeMs = state.replay.totalDurationMs;
+    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
+        state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+    state.UpdateReplaySeekThumb();
+    InvalidateRect(hWnd, NULL, FALSE);
+}
+
+void AppController::ImportArchive(HWND hWnd, AppState& state) {
+    if (state.replay.state == ReplayState::Playing) {
+        state.replay.state = ReplayState::Paused;
+        KillTimer(hWnd, REPLAY_TIMER_ID);
+    }
+
+    // 読み込みに失敗したときは、表示中の記録（前に読み込んだものを含む）に手を付けない
+    std::wstring fileName, error;
+    switch (TrajectorySession::PromptLoadArchive(hWnd, state.importedTrajectory, state.ui.rPaper, fileName, error)) {
+    case TrajectorySession::SaveResult::Saved:
+        state.viewingImport = true;
+        state.importedName = fileName;
+        ShowAnalysisSessionFromEnd(hWnd, state);
+        break;
+    case TrajectorySession::SaveResult::Failed: {
+        std::wstring msg = L"運筆アーカイブを読み込めませんでした。";
+        if (!error.empty()) msg += L"\n\n" + error;
+        MessageBoxW(hWnd, msg.c_str(), L"運筆アーカイブの読み込み", MB_OK | MB_ICONWARNING);
+        break;
+    }
+    case TrajectorySession::SaveResult::Canceled:
+        break;
+    }
+    // ダイアログを閉じたペンが接地したままでも、半紙に墨を落とさない
+    state.ui.suppressPenUntilLift = true;
+}
+
+void AppController::CloseImportedArchive(HWND hWnd, AppState& state) {
+    if (state.replay.state == ReplayState::Playing) {
+        state.replay.state = ReplayState::Paused;
+        KillTimer(hWnd, REPLAY_TIMER_ID);
+    }
+    state.viewingImport = false;
+    state.importedName.clear();
+    state.importedTrajectory = TrajectorySession();  // 読み込んだ記録のメモリを手放す
+    ShowAnalysisSessionFromEnd(hWnd, state);
 }
 
 // 直前の1画を取り消す。
@@ -193,7 +251,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     SyncReplayTimeline(hWnd, state);
     if (wasAtEnd) {
         state.replay.currentTimeMs = state.replay.totalDurationMs;
-        state.replay.hasValidSample = state.trajectory.GetReplaySample(
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
             state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
         state.UpdateReplaySeekThumb();
     }
@@ -311,7 +369,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             if (state.replay.currentTimeMs == 0) {
                 // 開いた直後は書き上がった状態を見せる
                 state.replay.currentTimeMs = state.replay.totalDurationMs;
-                state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
             }
             state.replay.state = ReplayState::Paused;
             state.Layout(w, h);
@@ -332,12 +390,22 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         // 詳細パネル内部の操作
         if (PtIn(ui.rSub, pt)) {
             if (ui.leftTab == LeftTab::Analysis) {
+                // 0. 運筆アーカイブの読み込み / 自分の記録に戻る
+                if (PtIn(ui.rAnalysisImportBtn, pt)) {
+                    ImportArchive(hWnd, state);
+                    return true;
+                }
+                if (state.viewingImport && PtIn(ui.rAnalysisBackBtn, pt)) {
+                    CloseImportedArchive(hWnd, state);
+                    return true;
+                }
+
                 // 記録が1画も無い間は再生・シーク系の操作を受け付けない（ボタンも無効表示）
-                bool hasRecording = state.trajectory.GetTotalStrokeCount() > 0;
+                bool hasRecording = state.AnalysisSession().GetTotalStrokeCount() > 0;
                 // 1. 最初に戻る (↺)
                 if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) {
                     state.replay.currentTimeMs = 0;
-                    state.replay.hasValidSample = state.trajectory.GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -345,16 +413,16 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 }
                 // 2. 前画 (⏮)
                 else if (hasRecording && PtIn(ui.rReplayPrevBtn, pt)) {
-                    int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
-                    DWORD curStart = state.trajectory.GetStrokeTimelineStart(curIdx);
+                    int curIdx = state.AnalysisSession().FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
+                    DWORD curStart = state.AnalysisSession().GetStrokeTimelineStart(curIdx);
                     if (state.replay.currentTimeMs > curStart + 180) {
                         state.replay.currentTimeMs = curStart;
                     } else if (curIdx > 0) {
-                        state.replay.currentTimeMs = state.trajectory.GetStrokeTimelineStart(curIdx - 1);
+                        state.replay.currentTimeMs = state.AnalysisSession().GetStrokeTimelineStart(curIdx - 1);
                     } else {
                         state.replay.currentTimeMs = 0;
                     }
-                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -363,8 +431,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 // 3. 再生 / 一時停止 (▶ / ❚❚)
                 else if (hasRecording && PtIn(ui.rReplayPlayBtn, pt)) {
                     if (state.replay.totalDurationMs == 0) {
-                        state.trajectory.BuildReplayTimeline();
-                        state.replay.totalDurationMs = state.trajectory.GetReplayTotalDurationMs();
+                        state.AnalysisSession().BuildReplayTimeline();
+                        state.replay.totalDurationMs = state.AnalysisSession().GetReplayTotalDurationMs();
                     }
                     if (state.replay.state == ReplayState::Playing) {
                         state.replay.state = ReplayState::Paused;
@@ -377,7 +445,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         // 再生中だけタイマを回す。適正間隔（20ms / 50fps）で描画詰まりを防止。
                         SetTimer(hWnd, REPLAY_TIMER_ID, 20, NULL);
                     }
-                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -385,13 +453,13 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 }
                 // 4. 次画 (⏭)
                 else if (hasRecording && PtIn(ui.rReplayNextBtn, pt)) {
-                    int curIdx = state.trajectory.FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
-                    if (curIdx + 1 < static_cast<int>(state.trajectory.GetTotalStrokeCount())) {
-                        state.replay.currentTimeMs = state.trajectory.GetStrokeTimelineStart(curIdx + 1);
+                    int curIdx = state.AnalysisSession().FindStrokeIndexAtTimeline(state.replay.currentTimeMs);
+                    if (curIdx + 1 < static_cast<int>(state.AnalysisSession().GetTotalStrokeCount())) {
+                        state.replay.currentTimeMs = state.AnalysisSession().GetStrokeTimelineStart(curIdx + 1);
                     } else {
                         state.replay.currentTimeMs = state.replay.totalDurationMs;
                     }
-                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -421,7 +489,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -436,7 +504,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-                    state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
                     state.UpdateReplaySeekThumb();
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -721,7 +789,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-        state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
         state.UpdateReplaySeekThumb();
         InvalidateRect(hWnd, &ui.rPaper, FALSE);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -734,7 +802,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-        state.replay.hasValidSample = state.trajectory.GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
         state.UpdateReplaySeekThumb();
         InvalidateRect(hWnd, &ui.rPaper, FALSE);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
@@ -769,8 +837,10 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
 
             if (PtIn(ui.rSub, pt)) {
                 if (ui.leftTab == LeftTab::Analysis) {
-                    bool hasRecording = state.trajectory.GetTotalStrokeCount() > 0;
-                    if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) ui.hoverReplayBtn = 1;
+                    bool hasRecording = state.AnalysisSession().GetTotalStrokeCount() > 0;
+                    if (PtIn(ui.rAnalysisImportBtn, pt)) ui.hoverReplayBtn = 9;
+                    else if (state.viewingImport && PtIn(ui.rAnalysisBackBtn, pt)) ui.hoverReplayBtn = 10;
+                    else if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) ui.hoverReplayBtn = 1;
                     else if (hasRecording && PtIn(ui.rReplayPrevBtn, pt)) ui.hoverReplayBtn = 2;
                     else if (hasRecording && PtIn(ui.rReplayPlayBtn, pt)) ui.hoverReplayBtn = 3;
                     else if (hasRecording && PtIn(ui.rReplayNextBtn, pt)) ui.hoverReplayBtn = 4;

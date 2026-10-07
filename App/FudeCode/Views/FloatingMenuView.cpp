@@ -118,7 +118,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         Box(dc, rInfoBox, RGB(26, 29, 38), RGB(44, 50, 64), 1, 8);
         HFONT fRec = CreateCustomFont(15, FW_NORMAL);
         wchar_t recBuf[128];
-        swprintf_s(recBuf, 128, L"記録中ストローク: %d 画 / 累積データ点: %d 点\n（筆圧・高度角・方位角・速度・正規化座標）",
+        swprintf_s(recBuf, 128, L"記録中ストローク: %d 画 / 累積データ点: %d 点\n（筆圧・高度角・方位角・速度・墨残量・正規化座標）",
             static_cast<int>(state.trajectory.GetTotalStrokeCount()), static_cast<int>(state.trajectory.GetTotalPointCount()));
         RECT rRecText = { rInfoBox.left + 10, rInfoBox.top + 6, rInfoBox.right - 10, rInfoBox.bottom - 6 };
         DrawTextCustom(dc, rRecText, recBuf, fRec, RGB(175, 190, 210), DT_CENTER | DT_WORDBREAK);

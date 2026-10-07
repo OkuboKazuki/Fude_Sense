@@ -126,13 +126,26 @@ void AppState::Layout(int w, int h) {
         }
 
         // 解析（グラフ・リプレイ）タブ
-        int availSubH = ui.rSub.bottom - topOff - 18;
+        // 先頭に運筆アーカイブの読み込み。読み込んだ記録を表示中は「自分の記録に戻る」を右に並べる
+        int importH = 40;
+        int importRight = ui.rSub.right - 18;
+        if (viewingImport) {
+            int backW = 190;
+            ui.rAnalysisBackBtn = { importRight - backW, topOff, importRight, topOff + importH };
+            importRight = ui.rAnalysisBackBtn.left - 10;
+        } else {
+            ui.rAnalysisBackBtn = { 0, 0, 0, 0 };
+        }
+        ui.rAnalysisImportBtn = { ui.rSub.left + 18, topOff, importRight, topOff + importH };
+        int analysisTop = topOff + importH + 10;
+
+        int availSubH = ui.rSub.bottom - analysisTop - 18;
         int replayH = 126;
         int metricsH = 88;
         int compassH = 168;
         int graphH = (std::max)(150, availSubH - replayH - metricsH - compassH - 42);
 
-        ui.rAnalysisReplayBox  = { ui.rSub.left + 18, topOff, ui.rSub.right - 18, topOff + replayH };
+        ui.rAnalysisReplayBox  = { ui.rSub.left + 18, analysisTop, ui.rSub.right - 18, analysisTop + replayH };
         ui.rAnalysisMetricsBox = { ui.rSub.left + 18, ui.rAnalysisReplayBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisReplayBox.bottom + 12 + metricsH };
         ui.rAnalysisCompassBox = { ui.rSub.left + 18, ui.rAnalysisMetricsBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisMetricsBox.bottom + 12 + compassH };
         ui.rAnalysisGraphBox   = { ui.rSub.left + 18, ui.rAnalysisCompassBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisCompassBox.bottom + 12 + graphH };

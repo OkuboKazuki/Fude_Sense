@@ -14,6 +14,8 @@ public:
     static void ReleaseWaveformCache();
 
 private:
+    // 運筆アーカイブの読み込み / 自分の記録に戻る
+    static void DrawImportBar(HDC dc, const AppState& state);
     static void DrawReplayControls(HDC dc, const RECT& rBox, const AppState& state);
     static void DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& state);
     static void DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& state);

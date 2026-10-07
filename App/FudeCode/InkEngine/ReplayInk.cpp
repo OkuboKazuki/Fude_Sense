@@ -260,6 +260,12 @@ void ReplayInk::AdvanceDiffusion(int steps) {
     }
 }
 
+bool ReplayInk::GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHeight) {
+    if (!m_ready || !m_ink) return false;
+    m_ink->GetInkSnapshot(outInk, outWidth, outHeight);
+    return true;
+}
+
 void ReplayInk::Render(HDC dc, int destX, int destY, int dispW, int dispH) {
     if (!m_ready || !m_ink) return;
     m_ink->Render(dc, destX, destY, dispW, dispH);

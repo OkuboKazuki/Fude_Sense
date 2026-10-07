@@ -25,8 +25,14 @@ public:
     static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 戻しすぎた1画を復元する
     static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
-    // 記録が変わったときにリプレイのタイムラインを作り直す
+    // 記録が変わったときにリプレイのタイムラインを作り直す（解析タブが見ている記録に対して）
     static void SyncReplayTimeline(HWND hWnd, AppState& state);
+
+    // 解析タブ: 他人の運筆アーカイブ（JSON / CSV）を読み込んで解析の対象にする。
+    // 自分の記録と半紙の墨はそのまま残す。
+    static void ImportArchive(HWND hWnd, AppState& state);
+    // 読み込んだ記録を閉じ、解析の対象を自分の記録に戻す
+    static void CloseImportedArchive(HWND hWnd, AppState& state);
 
     // 紙だけ表示（横向きの半紙を画面いっぱいに出す）の出入り。
     // 半紙の縦横が入れ替わるので、書いた墨と運筆記録は90度回して引き継ぐ。

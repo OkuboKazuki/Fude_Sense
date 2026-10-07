@@ -30,6 +30,10 @@ struct StrokePoint {
     double pressureFactor = 0.0;   // 筆の硬さ補正後の筆圧 (0.0 ~ 1.0)
     double dryness = 0.0;          // この点を打った時点の筆の乾き具合
     double moveAngleRad = 0.0;     // 平滑済みの運筆方向（かすれの筋の軸）
+
+    // この点を打った後の墨残量 (0.0 ~ 1.0)。dryness の元になる値。
+    // 墨残量を持たない古い記録を読み込んだときは負値（不明）。
+    double inkAmount = -1.0;
 };
 
 // 1画（ストローク）データ
@@ -41,6 +45,9 @@ struct StrokeData {
     double maxPressure = 0.0;
     double maxSpeed = 0.0;
     double avgSpeed = 0.0;
+    // 書いたときの画面上の半紙の大きさ (px)。線幅・速度・paperX/Y はこの大きさが基準。
+    int paperW = 0;
+    int paperH = 0;
 };
 
 // リアルタイム解析用メトリクス
@@ -100,8 +107,9 @@ public:
     void OnStrokeBegin(DWORD time);
     // width / pressureFactor / dryness / moveAngleRad は、呼び出し側が GpuInk へ
     // 渡すのと同じ値を渡す。リプレイはこれをそのまま流し込む。
+    // inkAmount はこの点で墨を消費した後の残量。
     void AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed,
-                  double pressureFactor, double dryness, double moveAngleRad);
+                  double pressureFactor, double dryness, double moveAngleRad, double inkAmount);
     void OnStrokeEnd();
     // 直前の1画を記録から取り消す（「一画戻す」で画面と揃えるため）。
     // 取り消した1画を outRemoved へ返す（「一画復元」で積み直すのに使う）。
@@ -152,7 +160,19 @@ public:
     static SaveResult PromptSaveArchiveJson(HWND hWnd, const TrajectorySession& session, PaperType paperType, Brush brushType, double hardness);
     static SaveResult PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession& session);
 
+    // 書き出した運筆アーカイブ（JSON / CSV）を読み込む。
+    // 線幅・速度は、いまの画面上の半紙（rPaper）の大きさへ直して取り込む。
+    // 失敗したときは outError に理由を入れ、この記録には手を付けない。
+    bool ImportFromFile(const std::wstring& filePath, const RECT& rPaper, std::wstring& outError);
+    // ファイル選択ダイアログから読み込む。outFileName には拡張子付きのファイル名を返す
+    static SaveResult PromptLoadArchive(HWND hWnd, TrajectorySession& session, const RECT& rPaper,
+                                        std::wstring& outFileName, std::wstring& outError);
+
 private:
+    // 記録が変わったことを知らせる。番号はすべての記録で通しなので、
+    // 自分の記録と読み込んだ記録を切り替えても、キャッシュが取り違えない。
+    void BumpRevision();
+
     std::vector<StrokeData> m_strokes;
     StrokeData m_currentStroke;
     bool m_isRecordingStroke = false;

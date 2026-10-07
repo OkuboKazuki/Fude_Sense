@@ -6,18 +6,43 @@
 #include <algorithm>
 
 void AnalysisView::Draw(HDC dc, const AppState& state) {
+    DrawImportBar(dc, state);
     DrawReplayControls(dc, state.ui.rAnalysisReplayBox, state);
     DrawMetricsCard(dc, state.ui.rAnalysisMetricsBox, state);
     DrawTiltCompass(dc, state.ui.rAnalysisCompassBox, state);
     DrawWaveformGraph(dc, state.ui.rAnalysisGraphBox, state);
 }
 
+void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
+    using namespace RenderUtils;
+    const UIState& ui = state.ui;
+
+    bool hovImport = (ui.hoverReplayBtn == 9);
+    Box(dc, ui.rAnalysisImportBtn, hovImport ? RGB(68, 58, 34) : RGB(48, 42, 26),
+        hovImport ? RGB(200, 155, 55) : RGB(135, 105, 40), 1, 8);
+    HFONT fImport = CreateCustomFont(15, FW_BOLD);
+    Center(dc, ui.rAnalysisImportBtn,
+        state.viewingImport ? L"📂 別の運筆アーカイブを読み込む" : L"📂 運筆アーカイブを読み込んで解析 (JSON / CSV)",
+        fImport, RGB(255, 246, 225));
+    DeleteObject(fImport);
+
+    if (state.viewingImport) {
+        bool hovBack = (ui.hoverReplayBtn == 10);
+        Box(dc, ui.rAnalysisBackBtn, hovBack ? RGB(46, 52, 64) : RGB(34, 38, 46),
+            hovBack ? RGB(100, 120, 160) : RGB(58, 66, 84), 1, 8);
+        HFONT fBack = CreateCustomFont(15, FW_BOLD);
+        Center(dc, ui.rAnalysisBackBtn, L"↩ 自分の記録に戻る", fBack, RGB(220, 228, 242));
+        DeleteObject(fBack);
+    }
+}
+
 void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& state) {
     using namespace RenderUtils;
-    Box(dc, rBox, RGB(26, 29, 36), RGB(46, 52, 66), 1, 8);
+    // 読み込んだ記録を見ている間は、自分の記録と取り違えないよう枠の色を変える
+    Box(dc, rBox, RGB(26, 29, 36), state.viewingImport ? RGB(200, 155, 55) : RGB(46, 52, 66), 1, 8);
 
     const auto& rep = state.replay;
-    const auto& session = state.trajectory;
+    const auto& session = state.AnalysisSession();
     size_t strokeCount = session.GetTotalStrokeCount();
     // 記録が1画も無い間は再生系を無効表示にする（操作側も受け付けない）
     bool hasRecording = (strokeCount > 0);
@@ -26,9 +51,15 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     const COLORREF DIS_TEXT   = RGB(88, 95, 110);
 
     // 1. ヘッダー: タイトル & 時刻表示
-    RECT rHeader = { rBox.left + 14, rBox.top + 8, rBox.left + 280, rBox.top + 28 };
+    RECT rHeader = { rBox.left + 14, rBox.top + 8, rBox.right - 264, rBox.top + 28 };
     HFONT fHeader = CreateCustomFont(14, FW_BOLD);
-    DrawTextCustom(dc, rHeader, L"運筆プロセス再現（筆圧可視化＆解析）", fHeader, RGB(210, 220, 240));
+    if (state.viewingImport) {
+        std::wstring title = L"読み込んだ記録: " + state.importedName;
+        DrawTextCustom(dc, rHeader, title.c_str(), fHeader, RGB(240, 200, 110),
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    } else {
+        DrawTextCustom(dc, rHeader, L"運筆プロセス再現（筆圧可視化＆解析）", fHeader, RGB(210, 220, 240));
+    }
     DeleteObject(fHeader);
 
     double curSec = static_cast<double>(rep.currentTimeMs) / 1000.0;
@@ -137,26 +168,30 @@ void AnalysisView::DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& sta
     double curPrs = 0.0;
     double curAlt = 90.0;
     double curSpd = 0.0;
-    size_t strokeCount = state.trajectory.GetTotalStrokeCount();
+    double curInk = -1.0;  // 負値は不明（墨残量を持たない古い記録）
+    size_t strokeCount = state.AnalysisSession().GetTotalStrokeCount();
 
     if (state.replay.hasValidSample) {
         const auto& p = state.replay.currentSample.point;
         curPrs = p.pressure;
         curAlt = p.altitudeDeg;
         curSpd = p.speedPxPerSec;
+        curInk = p.inkAmount;
     } else {
-        const RealtimeMetrics& m = state.trajectory.GetRealtimeMetrics();
+        const RealtimeMetrics& m = state.AnalysisSession().GetRealtimeMetrics();
         curPrs = m.currentPressure;
         curAlt = m.currentAltitude;
         curSpd = m.currentSpeed;
-        if (state.trajectory.IsRecordingStroke()) {
+        if (state.AnalysisSession().IsRecordingStroke()) {
             strokeCount += 1;
         }
+        // 再生していないときの墨残量は、自分の記録なら今の筆の残量
+        if (!state.viewingImport) curInk = state.ink.amount;
     }
 
-    // 4分割メトリクスグリッド
+    // 5分割メトリクスグリッド
     int w = RW(rBox);
-    int colW = (w - 20) / 4;
+    int colW = (w - 20) / 5;
 
     auto DrawMetricItem = [&](int colIdx, const wchar_t* title, const wchar_t* valStr, COLORREF valColor) {
         RECT rItem = { rBox.left + 10 + colIdx * colW, rBox.top + 6, rBox.left + 10 + (colIdx + 1) * colW - 4, rBox.bottom - 6 };
@@ -185,9 +220,20 @@ void AnalysisView::DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& sta
     swprintf_s(bufSpeed, 32, L"%.0f", curSpd);
     DrawMetricItem(2, L"速度 (px/s)", bufSpeed, RGB(255, 195, 80));
 
+    wchar_t bufInk[32];
+    if (curInk >= 0.0) {
+        swprintf_s(bufInk, 32, L"%.0f%%", curInk * 100.0);
+    } else {
+        swprintf_s(bufInk, 32, L"—");
+    }
+    // かすれ始める残量（KASURE_START_LEVEL）を下回ったら色を変える
+    COLORREF inkColor = (curInk < 0.0) ? RGB(160, 170, 185)
+                      : (curInk >= InkModel::KASURE_START_LEVEL ? RGB(225, 230, 240) : RGB(255, 140, 120));
+    DrawMetricItem(3, L"墨残量", bufInk, inkColor);
+
     wchar_t bufStroke[32];
     swprintf_s(bufStroke, 32, L"%d 画", static_cast<int>(strokeCount));
-    DrawMetricItem(3, L"総画数", bufStroke, RGB(220, 160, 255));
+    DrawMetricItem(4, L"総画数", bufStroke, RGB(220, 160, 255));
 }
 
 void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& state) {
@@ -244,7 +290,7 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
         azm = p.azimuthDeg;
         isPenDown = state.replay.currentSample.isPenDown;
     } else {
-        const RealtimeMetrics& m = state.trajectory.GetRealtimeMetrics();
+        const RealtimeMetrics& m = state.AnalysisSession().GetRealtimeMetrics();
         alt = m.currentAltitude;
         azm = m.currentAzimuth;
         isPenDown = m.isPenDown;
@@ -377,7 +423,7 @@ void BakeWaveform(HDC targetDC, int plotW, int plotH, const AppState& state) {
     SelectObject(targetDC, oldPen);
     DeleteObject(gridPen);
 
-    const auto& strokes = state.trajectory.GetStrokes();
+    const auto& strokes = state.AnalysisSession().GetStrokes();
     DWORD totalDur = state.replay.totalDurationMs;
 
     if (strokes.empty() || totalDur == 0) {
@@ -401,7 +447,7 @@ void BakeWaveform(HDC targetDC, int plotW, int plotH, const AppState& state) {
     for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
         const auto& s = strokes[sIdx];
         if (s.points.empty()) continue;
-        DWORD strokeStartTimeline = state.trajectory.GetStrokeTimelineStart(sIdx);
+        DWORD strokeStartTimeline = state.AnalysisSession().GetStrokeTimelineStart(sIdx);
 
         bool firstPt = true;
         for (const auto& pt : s.points) {
@@ -429,7 +475,7 @@ void BakeWaveform(HDC targetDC, int plotW, int plotH, const AppState& state) {
     for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
         const auto& s = strokes[sIdx];
         if (s.points.empty()) continue;
-        DWORD strokeStartTimeline = state.trajectory.GetStrokeTimelineStart(sIdx);
+        DWORD strokeStartTimeline = state.AnalysisSession().GetStrokeTimelineStart(sIdx);
 
         bool firstPt = true;
         for (const auto& pt : s.points) {
@@ -449,6 +495,37 @@ void BakeWaveform(HDC targetDC, int plotW, int plotH, const AppState& state) {
     }
     SelectObject(targetDC, oldPen);
     DeleteObject(prsPen);
+
+    // 3. 墨残量 (白の細線)。墨残量を持たない古い記録の点は描かない
+    HPEN inkPen = CreatePen(PS_SOLID, 1, RGB(200, 205, 215));
+    oldPen = (HPEN)SelectObject(targetDC, inkPen);
+
+    for (size_t sIdx = 0; sIdx < strokes.size(); ++sIdx) {
+        const auto& s = strokes[sIdx];
+        if (s.points.empty()) continue;
+        DWORD strokeStartTimeline = state.AnalysisSession().GetStrokeTimelineStart(sIdx);
+
+        bool firstPt = true;
+        for (const auto& pt : s.points) {
+            if (pt.inkAmount < 0.0) {
+                firstPt = true;
+                continue;
+            }
+            DWORD ptTimeline = strokeStartTimeline + pt.timeMs;
+            double normT = static_cast<double>(ptTimeline) / static_cast<double>(totalDur);
+            int gx = static_cast<int>(plotW * Clamp(normT, 0.0, 1.0));
+            int gy = plotH - static_cast<int>(plotH * Clamp(pt.inkAmount, 0.0, 1.0));
+
+            if (firstPt) {
+                MoveToEx(targetDC, gx, gy, nullptr);
+                firstPt = false;
+            } else {
+                LineTo(targetDC, gx, gy);
+            }
+        }
+    }
+    SelectObject(targetDC, oldPen);
+    DeleteObject(inkPen);
 }
 
 } // namespace
@@ -469,6 +546,9 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
 
     // 凡例
     HFONT fLegend = CreateCustomFont(11, FW_BOLD);
+    RECT rLeg0 = { rBox.right - 250, rBox.top + 8, rBox.right - 185, rBox.top + 26 };
+    DrawTextCustom(dc, rLeg0, L"■ 墨残量", fLegend, RGB(200, 205, 215));
+
     RECT rLeg1 = { rBox.right - 180, rBox.top + 8, rBox.right - 95, rBox.top + 26 };
     DrawTextCustom(dc, rLeg1, L"■ 筆圧 (0-100%)", fLegend, RGB(80, 210, 255));
 
@@ -497,8 +577,8 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
 
     if (plotW <= 0 || plotH <= 0) return;
 
-    unsigned curRev = state.trajectory.GetRevision();
-    size_t curStrokeCount = state.trajectory.GetTotalStrokeCount();
+    unsigned curRev = state.AnalysisSession().GetRevision();
+    size_t curStrokeCount = state.AnalysisSession().GetTotalStrokeCount();
     DWORD curTotalDur = state.replay.totalDurationMs;
 
     // 1. キャッシュの更新確認（サイズまたはデータ変更時のみ Bake）

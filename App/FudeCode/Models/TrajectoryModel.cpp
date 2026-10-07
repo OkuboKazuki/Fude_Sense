@@ -8,14 +8,23 @@
 #include <ctime>
 #include <commdlg.h>
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 TrajectorySession::TrajectorySession() {
     m_sessionStartTime = GetTickCount();
 }
 
+void TrajectorySession::BumpRevision() {
+    static unsigned s_lastRevision = 0;
+    m_revision = ++s_lastRevision;
+}
+
 void TrajectorySession::Clear() {
     m_strokes.clear();
-    ++m_revision;
+    BumpRevision();
     m_currentStroke = StrokeData();
     m_isRecordingStroke = false;
     m_realtime = RealtimeMetrics();
@@ -38,13 +47,13 @@ bool TrajectorySession::UndoLastStroke(StrokeData* outRemoved) {
     if (m_strokes.empty()) return false;
     if (outRemoved) *outRemoved = m_strokes.back();
     m_strokes.pop_back();
-    ++m_revision;
+    BumpRevision();
     return true;
 }
 
 void TrajectorySession::RedoStroke(const StrokeData& stroke) {
     m_strokes.push_back(stroke);
-    ++m_revision;
+    BumpRevision();
 }
 
 // 線幅・速度は画面上のピクセルで持っている。墨の半紙は長辺をそろえて回すので、
@@ -83,6 +92,8 @@ void TrajectorySession::RotateStrokeQuarter(StrokeData& stroke, bool counterCloc
     }
     stroke.maxSpeed *= scale;
     stroke.avgSpeed *= scale;
+    stroke.paperW = newW;
+    stroke.paperH = newH;
 }
 
 void TrajectorySession::RotateQuarter(bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
@@ -91,7 +102,7 @@ void TrajectorySession::RotateQuarter(bool counterClockwise, const RECT& oldPape
     double scale = QuarterTurnScale(oldPaper, newPaper);
     m_realtime.currentSpeed *= scale;
     m_realtime.currentWidth *= scale;
-    ++m_revision;
+    BumpRevision();
 }
 
 void TrajectorySession::OnStrokeBegin(DWORD time) {
@@ -106,8 +117,8 @@ void TrajectorySession::OnStrokeBegin(DWORD time) {
 }
 
 void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper, double width, double speed,
-                                double pressureFactor, double dryness, double moveAngleRad) {
-    ++m_revision;
+                                double pressureFactor, double dryness, double moveAngleRad, double inkAmount) {
+    BumpRevision();
     if (!m_isRecordingStroke) {
         OnStrokeBegin(event.time);
     }
@@ -146,8 +157,11 @@ void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper,
     pt.pressureFactor = pressureFactor;
     pt.dryness = dryness;
     pt.moveAngleRad = moveAngleRad;
+    pt.inkAmount = inkAmount;
 
     m_currentStroke.points.push_back(pt);
+    m_currentStroke.paperW = paperW;
+    m_currentStroke.paperH = paperH;
     if (pt.pressure > m_currentStroke.maxPressure) m_currentStroke.maxPressure = pt.pressure;
     if (pt.speedPxPerSec > m_currentStroke.maxSpeed) m_currentStroke.maxSpeed = pt.speedPxPerSec;
 
@@ -165,10 +179,14 @@ void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper,
 
 void TrajectorySession::OnStrokeEnd() {
     if (m_isRecordingStroke) {
-        ++m_revision;
+        BumpRevision();
         m_isRecordingStroke = false;
         m_realtime.isPenDown = false;
-        m_currentStroke.endTime = GetTickCount();
+        // 書き始め（startTime）はペンのタイムスタンプなので、書き終わりも同じ時計で取る。
+        // GetTickCount と Wintab の pkTime は基準がずれることがあり、混ぜると画の間隔が狂う。
+        m_currentStroke.endTime = m_currentStroke.points.empty()
+            ? m_currentStroke.startTime
+            : m_currentStroke.startTime + m_currentStroke.points.back().timeMs;
 
         if (!m_currentStroke.points.empty()) {
             double totalSpeed = 0.0;
@@ -231,7 +249,7 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
     ofs << std::fixed << std::setprecision(4);
     ofs << "{\n";
     ofs << "  \"format\": \"FudeSenseStrokeArchive\",\n";
-    ofs << "  \"version\": \"1.1\",\n";
+    ofs << "  \"version\": \"1.2\",\n";
     ofs << "  \"metadata\": {\n";
     ofs << "    \"application\": \"Fude Sense\",\n";
     ofs << "    \"recordedAt\": \"" << GetCurrentISOTimestamp() << "\",\n";
@@ -243,11 +261,19 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
     ofs << "  },\n";
     ofs << "  \"strokes\": [\n";
 
+    // 画の時刻は 1画目の書き始めから数える
+    const DWORD origin = m_strokes.empty() ? 0 : m_strokes.front().startTime;
     for (size_t sIdx = 0; sIdx < m_strokes.size(); ++sIdx) {
         const auto& s = m_strokes[sIdx];
         ofs << "    {\n";
         ofs << "      \"strokeId\": " << s.strokeId << ",\n";
         ofs << "      \"durationMs\": " << (s.endTime >= s.startTime ? (s.endTime - s.startTime) : 0) << ",\n";
+        // 読み込んだときに画と画の間の時間を再現するための時刻
+        ofs << "      \"startMs\": " << (s.startTime - origin) << ",\n";
+        ofs << "      \"endMs\": " << (s.endTime - origin) << ",\n";
+        // 線幅 w・速度 spd の基準になる半紙の大きさ (px)
+        ofs << "      \"paperWidthPx\": " << s.paperW << ",\n";
+        ofs << "      \"paperHeightPx\": " << s.paperH << ",\n";
         ofs << "      \"maxPressure\": " << s.maxPressure << ",\n";
         ofs << "      \"avgSpeed\": " << s.avgSpeed << ",\n";
         ofs << "      \"pointCount\": " << s.points.size() << ",\n";
@@ -266,6 +292,7 @@ bool TrajectorySession::ExportToJson(const std::wstring& filePath, PaperType pap
                 << ", \"pf\": " << p.pressureFactor
                 << ", \"dry\": " << p.dryness
                 << ", \"dir\": " << p.moveAngleRad
+                << ", \"ink\": " << p.inkAmount
                 << " }" << (pIdx + 1 < s.points.size() ? "," : "") << "\n";
         }
 
@@ -285,9 +312,11 @@ bool TrajectorySession::ExportToCsv(const std::wstring& filePath) const {
     std::ofstream ofs(filePath);
     if (!ofs.is_open()) return false;
 
-    ofs << "stroke_id,time_ms,norm_x,norm_y,paper_x,paper_y,pressure,altitude_deg,azimuth_deg,speed_px_sec,width,pressure_factor,dryness,move_angle_rad\n";
+    ofs << "stroke_id,time_ms,norm_x,norm_y,paper_x,paper_y,pressure,altitude_deg,azimuth_deg,speed_px_sec,width,pressure_factor,dryness,move_angle_rad,ink_amount,stroke_start_ms,stroke_end_ms,paper_w_px,paper_h_px\n";
     ofs << std::fixed << std::setprecision(4);
 
+    // 画の時刻は 1画目の書き始めから数える
+    const DWORD origin = m_strokes.empty() ? 0 : m_strokes.front().startTime;
     for (const auto& s : m_strokes) {
         for (const auto& p : s.points) {
             ofs << s.strokeId << ","
@@ -303,7 +332,12 @@ bool TrajectorySession::ExportToCsv(const std::wstring& filePath) const {
                 << p.width << ","
                 << p.pressureFactor << ","
                 << p.dryness << ","
-                << p.moveAngleRad << "\n";
+                << p.moveAngleRad << ","
+                << p.inkAmount << ","
+                << (s.startTime - origin) << ","
+                << (s.endTime - origin) << ","
+                << s.paperW << ","
+                << s.paperH << "\n";
         }
     }
 
@@ -363,6 +397,542 @@ TrajectorySession::SaveResult TrajectorySession::PromptSaveArchiveCsv(HWND hWnd,
     if (session.ExportToCsv(szFileName)) return SaveResult::Saved;
     DeleteFileW(szFileName);
     return SaveResult::Failed;
+}
+
+// ---------------------------------------------------------------------------
+// 運筆アーカイブの読み込み
+// 書き出した JSON / CSV を読み、リプレイと解析にかけられる記録へ戻す。
+// 他人のファイルを開くので、欠けた値・範囲外の値・桁違いの大きさには
+// 備えておき、取り込めない場合は理由を返して何も変えない。
+// ---------------------------------------------------------------------------
+namespace {
+
+// 取り込む記録の上限。壊れたファイルでメモリを使い切らないため
+constexpr size_t kImportMaxFileBytes = 256u * 1024u * 1024u;
+constexpr size_t kImportMaxStrokes = 5000;
+constexpr size_t kImportMaxPoints = 2000000;
+// 1画の長さの上限 (ms)。これを超える時刻は壊れた値として切り詰める
+constexpr double kImportMaxStrokeMs = 10.0 * 60.0 * 1000.0;
+// 画の時刻の基準。0 は「時刻なし」と区別できないので少し先から並べる
+constexpr DWORD kImportTimeBase = 1000;
+// 画と画の間の時間がファイルに無いときに空ける時間（BuildReplayTimeline の既定と同じ）
+constexpr DWORD kImportDefaultGapMs = 400;
+
+// 読み込み途中の1画。半紙の大きさと画の時刻は、ファイルに無ければ後で補う
+struct ImportedStroke {
+    StrokeData data;
+    bool hasTiming = false;
+    double startMs = 0.0;
+    double endMs = 0.0;
+    double paperW = 0.0;  // 0 なら不明
+    double paperH = 0.0;
+    bool hasPaperXY = false; // paperX / paperY から半紙の大きさを逆算できるか
+};
+
+bool ParseDouble(const char* begin, const char* end, double& out) {
+    // strtod は終端の無い範囲を読めないので、短い数値だけを写して読む
+    char buf[64];
+    size_t len = static_cast<size_t>(end - begin);
+    while (len > 0 && (*begin == ' ' || *begin == '\t')) { ++begin; --len; }
+    while (len > 0 && (begin[len - 1] == ' ' || begin[len - 1] == '\t' || begin[len - 1] == '\r')) --len;
+    if (len == 0 || len >= sizeof(buf)) return false;
+    memcpy(buf, begin, len);
+    buf[len] = '\0';
+    char* stop = nullptr;
+    double v = strtod(buf, &stop);
+    if (stop != buf + len || !std::isfinite(v)) return false;
+    out = v;
+    return true;
+}
+
+// 書き出した形式（キーの順・空白は問わない）を読む小さな JSON リーダー。
+// 値をすべて木に組むと点ごとに大きなメモリを食うので、知っているキーだけ
+// その場で取り出し、それ以外は読み飛ばす。
+class ArchiveJsonReader {
+public:
+    explicit ArchiveJsonReader(const std::string& text)
+        : m_p(text.data()), m_end(text.data() + text.size()) {}
+
+    bool Read(std::vector<ImportedStroke>& out, std::wstring& err) {
+        bool formatOk = true;
+        bool ok = ParseObject([&](const std::string& key) -> bool {
+            if (key == "format") {
+                std::string fmt;
+                if (!ParseString(fmt)) return false;
+                formatOk = (fmt == "FudeSenseStrokeArchive");
+                return true;
+            }
+            if (key == "strokes") {
+                return ParseArray([&]() -> bool {
+                    if (out.size() >= kImportMaxStrokes) { m_tooLarge = true; return false; }
+                    out.emplace_back();
+                    return ParseStroke(out.back());
+                });
+            }
+            return SkipValue(0);
+        });
+        if (m_tooLarge) { err = L"記録が大きすぎるため読み込めません。"; return false; }
+        if (!ok) { err = L"JSON の形式が正しくありません（ファイルが壊れている可能性があります）。"; return false; }
+        if (!formatOk) { err = L"Fude Sense の運筆アーカイブではありません。"; return false; }
+        return true;
+    }
+
+private:
+    const char* m_p;
+    const char* m_end;
+    size_t m_pointCount = 0;
+    bool m_tooLarge = false;
+
+    void SkipWs() {
+        while (m_p < m_end && (*m_p == ' ' || *m_p == '\t' || *m_p == '\r' || *m_p == '\n')) ++m_p;
+    }
+    bool Consume(char c) {
+        SkipWs();
+        if (m_p < m_end && *m_p == c) { ++m_p; return true; }
+        return false;
+    }
+
+    bool ParseString(std::string& out) {
+        out.clear();
+        if (!Consume('"')) return false;
+        while (m_p < m_end) {
+            char c = *m_p++;
+            if (c == '"') return true;
+            if (c == '\\') {
+                if (m_p >= m_end) return false;
+                char e = *m_p++;
+                switch (e) {
+                case 'n': out.push_back('\n'); break;
+                case 't': out.push_back('\t'); break;
+                case 'r': out.push_back('\r'); break;
+                case 'b': out.push_back('\b'); break;
+                case 'f': out.push_back('\f'); break;
+                case 'u':
+                    // キーにも値にも使わないので、文字としては取り出さずに読み飛ばす
+                    if (m_end - m_p < 4) return false;
+                    m_p += 4;
+                    out.push_back('?');
+                    break;
+                default: out.push_back(e); break;
+                }
+            } else {
+                out.push_back(c);
+            }
+        }
+        return false;
+    }
+
+    bool ParseNumber(double& out) {
+        SkipWs();
+        const char* start = m_p;
+        while (m_p < m_end && (isdigit(static_cast<unsigned char>(*m_p)) || *m_p == '-' || *m_p == '+'
+                               || *m_p == '.' || *m_p == 'e' || *m_p == 'E')) {
+            ++m_p;
+        }
+        return ParseDouble(start, m_p, out);
+    }
+
+    // 数値なら out へ入れて has を立てる。null や文字列など数値以外の値は
+    // 読み飛ばして has を下ろす。false を返すのは JSON として壊れているときだけ
+    bool ReadOptionalNumber(double& out, bool& has) {
+        has = false;
+        SkipWs();
+        if (m_p >= m_end) return false;
+        char c = *m_p;
+        if (c == '-' || c == '+' || c == '.' || isdigit(static_cast<unsigned char>(c))) {
+            has = ParseNumber(out);
+            return has;
+        }
+        return SkipValue(0);
+    }
+
+    bool SkipValue(int depth) {
+        if (depth > 64) return false;
+        SkipWs();
+        if (m_p >= m_end) return false;
+        char c = *m_p;
+        if (c == '"') { std::string s; return ParseString(s); }
+        if (c == '{') return ParseObject([&](const std::string&) { return SkipValue(depth + 1); });
+        if (c == '[') return ParseArray([&]() { return SkipValue(depth + 1); });
+        if (m_end - m_p >= 4 && (strncmp(m_p, "true", 4) == 0 || strncmp(m_p, "null", 4) == 0)) { m_p += 4; return true; }
+        if (m_end - m_p >= 5 && strncmp(m_p, "false", 5) == 0) { m_p += 5; return true; }
+        double d = 0.0;
+        return ParseNumber(d);
+    }
+
+    // onMember(key) は値を1つ読み切って true を返す
+    template <class F>
+    bool ParseObject(F onMember) {
+        if (!Consume('{')) return false;
+        if (Consume('}')) return true;
+        for (;;) {
+            std::string key;
+            if (!ParseString(key)) return false;
+            if (!Consume(':')) return false;
+            if (!onMember(key)) return false;
+            if (Consume(',')) continue;
+            return Consume('}');
+        }
+    }
+
+    template <class F>
+    bool ParseArray(F onItem) {
+        if (!Consume('[')) return false;
+        if (Consume(']')) return true;
+        for (;;) {
+            if (!onItem()) return false;
+            if (Consume(',')) continue;
+            return Consume(']');
+        }
+    }
+
+    bool ParseStroke(ImportedStroke& s) {
+        bool hasStart = false, hasEnd = false;
+        bool ok = ParseObject([&](const std::string& key) -> bool {
+            bool has = false;
+            if (key == "points") {
+                return ParseArray([&]() -> bool {
+                    if (++m_pointCount > kImportMaxPoints) { m_tooLarge = true; return false; }
+                    s.data.points.emplace_back();
+                    return ParsePoint(s.data.points.back());
+                });
+            }
+            if (key == "startMs")       return ReadOptionalNumber(s.startMs, hasStart);
+            if (key == "endMs")         return ReadOptionalNumber(s.endMs, hasEnd);
+            if (key == "paperWidthPx")  return ReadOptionalNumber(s.paperW, has);
+            if (key == "paperHeightPx") return ReadOptionalNumber(s.paperH, has);
+            return SkipValue(0);
+        });
+        s.hasTiming = hasStart && hasEnd;
+        return ok;
+    }
+
+    bool ParsePoint(StrokePoint& p) {
+        return ParseObject([&](const std::string& key) -> bool {
+            double v = 0.0;
+            bool has = false;
+            if (!ReadOptionalNumber(v, has)) return false;
+            if (!has) return true;
+            if      (key == "t")   p.timeMs = static_cast<DWORD>(RenderUtils::Clamp(v, 0.0, kImportMaxStrokeMs));
+            else if (key == "nx")  p.normX = v;
+            else if (key == "ny")  p.normY = v;
+            else if (key == "p")   p.pressure = v;
+            else if (key == "alt") p.altitudeDeg = v;
+            else if (key == "azm") p.azimuthDeg = v;
+            else if (key == "spd") p.speedPxPerSec = v;
+            else if (key == "w")   p.width = v;
+            else if (key == "pf")  p.pressureFactor = v;
+            else if (key == "dry") p.dryness = v;
+            else if (key == "dir") p.moveAngleRad = v;
+            else if (key == "ink") p.inkAmount = v;
+            return true;
+        });
+    }
+};
+
+// CSV の1行をカンマで区切る（書き出す CSV に引用符付きの値は無い）
+void SplitCsvLine(const std::string& line, std::vector<std::pair<const char*, const char*>>& out) {
+    out.clear();
+    const char* p = line.data();
+    const char* end = p + line.size();
+    const char* fieldStart = p;
+    for (; p <= end; ++p) {
+        if (p == end || *p == ',') {
+            out.emplace_back(fieldStart, p);
+            fieldStart = p + 1;
+        }
+    }
+}
+
+std::string TrimLower(const char* b, const char* e) {
+    while (b < e && (*b == ' ' || *b == '\t' || *b == '"')) ++b;
+    while (e > b && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r' || e[-1] == '"')) --e;
+    std::string s(b, e);
+    for (char& c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+bool ReadArchiveCsv(const std::string& text, std::vector<ImportedStroke>& out, std::wstring& err) {
+    enum Col { StrokeId, TimeMs, NormX, NormY, PaperX, PaperY, Pressure, Altitude, Azimuth, Speed, Width,
+               PressureFactor, Dryness, MoveAngle, InkAmount, StrokeStart, StrokeEnd, PaperW, PaperH, ColCount };
+    static const char* const kNames[ColCount] = {
+        "stroke_id", "time_ms", "norm_x", "norm_y", "paper_x", "paper_y", "pressure", "altitude_deg",
+        "azimuth_deg", "speed_px_sec", "width", "pressure_factor", "dryness", "move_angle_rad",
+        "ink_amount", "stroke_start_ms", "stroke_end_ms", "paper_w_px", "paper_h_px"
+    };
+    int colIndex[ColCount];
+    for (int& c : colIndex) c = -1;
+
+    std::vector<std::pair<const char*, const char*>> fields;
+    bool haveHeader = false;
+    double lastStrokeId = 0.0;
+    size_t pointCount = 0;
+    size_t lineNo = 0;
+
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t nl = text.find('\n', pos);
+        if (nl == std::string::npos) nl = text.size();
+        std::string line = text.substr(pos, nl - pos);
+        pos = nl + 1;
+        ++lineNo;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+
+        SplitCsvLine(line, fields);
+        if (!haveHeader) {
+            for (size_t i = 0; i < fields.size(); ++i) {
+                std::string name = TrimLower(fields[i].first, fields[i].second);
+                for (int c = 0; c < ColCount; ++c) {
+                    if (name == kNames[c]) colIndex[c] = static_cast<int>(i);
+                }
+            }
+            const int required[] = { StrokeId, TimeMs, NormX, NormY, Width };
+            for (int c : required) {
+                if (colIndex[c] < 0) {
+                    err = L"Fude Sense の運筆データ CSV ではありません（必要な列 ";
+                    err += std::wstring(kNames[c], kNames[c] + strlen(kNames[c]));
+                    err += L" がありません）。";
+                    return false;
+                }
+            }
+            haveHeader = true;
+            continue;
+        }
+
+        auto get = [&](int col, double& v) -> bool {
+            int idx = colIndex[col];
+            if (idx < 0 || static_cast<size_t>(idx) >= fields.size()) return false;
+            return ParseDouble(fields[idx].first, fields[idx].second, v);
+        };
+
+        double strokeId = 0.0, t = 0.0, nx = 0.0, ny = 0.0, w = 0.0;
+        if (!get(StrokeId, strokeId) || !get(TimeMs, t) || !get(NormX, nx) || !get(NormY, ny) || !get(Width, w)) {
+            err = L"CSV の " + std::to_wstring(lineNo) + L" 行目の値を読めませんでした。";
+            return false;
+        }
+
+        // 画番号が変わったところで次の画に移る
+        if (out.empty() || strokeId != lastStrokeId) {
+            if (out.size() >= kImportMaxStrokes) { err = L"記録が大きすぎるため読み込めません。"; return false; }
+            out.emplace_back();
+            lastStrokeId = strokeId;
+            ImportedStroke& s = out.back();
+            double start = 0.0, end = 0.0;
+            if (get(StrokeStart, start) && get(StrokeEnd, end)) {
+                s.hasTiming = true;
+                s.startMs = start;
+                s.endMs = end;
+            }
+            get(PaperW, s.paperW);
+            get(PaperH, s.paperH);
+        }
+        if (++pointCount > kImportMaxPoints) { err = L"記録が大きすぎるため読み込めません。"; return false; }
+
+        ImportedStroke& s = out.back();
+        StrokePoint p;
+        p.timeMs = static_cast<DWORD>(RenderUtils::Clamp(t, 0.0, kImportMaxStrokeMs));
+        p.normX = nx;
+        p.normY = ny;
+        p.width = w;
+        double v = 0.0;
+        double px = 0.0, py = 0.0;
+        if (get(PaperX, px) && get(PaperY, py)) {
+            p.paperX = static_cast<int>(px);
+            p.paperY = static_cast<int>(py);
+            s.hasPaperXY = true;
+        }
+        if (get(Pressure, v)) p.pressure = v;
+        p.pressureFactor = p.pressure;  // 列が無い古い CSV では筆圧そのものを使う
+        if (get(PressureFactor, v)) p.pressureFactor = v;
+        if (get(Altitude, v)) p.altitudeDeg = v;
+        if (get(Azimuth, v)) p.azimuthDeg = v;
+        if (get(Speed, v)) p.speedPxPerSec = v;
+        if (get(Dryness, v)) p.dryness = v;
+        if (get(MoveAngle, v)) p.moveAngleRad = v;
+        if (get(InkAmount, v)) p.inkAmount = v;
+        s.data.points.push_back(p);
+    }
+
+    if (!haveHeader) {
+        err = L"CSV に見出し行がありません。";
+        return false;
+    }
+    return true;
+}
+
+// 書いたときの半紙の長辺 (px)。ファイルに無ければ、半紙内ピクセル座標と
+// 正規化座標の比から逆算する。どちらも無ければ 0（不明）。
+double SourcePaperLongEdge(const ImportedStroke& s) {
+    if (s.paperW > 0.0 && s.paperH > 0.0) return (std::max)(s.paperW, s.paperH);
+    if (!s.hasPaperXY) return 0.0;
+    double sumW = 0.0, sumH = 0.0;
+    int nW = 0, nH = 0;
+    for (const StrokePoint& p : s.data.points) {
+        // 端に近い点は正規化で切り詰められていることがあるので使わない
+        if (p.normX > 0.05 && p.normX < 0.95) { sumW += p.paperX / p.normX; ++nW; }
+        if (p.normY > 0.05 && p.normY < 0.95) { sumH += p.paperY / p.normY; ++nH; }
+    }
+    double w = (nW > 0) ? sumW / nW : 0.0;
+    double h = (nH > 0) ? sumH / nH : 0.0;
+    return (std::max)(w, h);
+}
+
+double FiniteOr(double v, double fallback) {
+    return std::isfinite(v) ? v : fallback;
+}
+
+// 読んだ値を、いまの半紙で再生できる記録に整える
+bool FinalizeImport(std::vector<ImportedStroke>& in, const RECT& rPaper, std::vector<StrokeData>& out, std::wstring& err) {
+    const double kPi = 3.14159265358979323846;
+    int curW = (std::max)(1, RenderUtils::RW(rPaper));
+    int curH = (std::max)(1, RenderUtils::RH(rPaper));
+    double curLong = static_cast<double>((std::max)(curW, curH));
+
+    // 画と画の間の時間は、全部の画に時刻があるときだけ使う
+    bool allTimed = true;
+    for (const ImportedStroke& s : in) {
+        if (!s.data.points.empty() && !s.hasTiming) allTimed = false;
+    }
+
+    out.clear();
+    DWORD prevEnd = 0;
+    for (ImportedStroke& src : in) {
+        if (src.data.points.empty()) continue;
+
+        double srcLong = SourcePaperLongEdge(src);
+        double scale = (srcLong > 0.0) ? curLong / srcLong : 1.0;
+        if (!std::isfinite(scale) || scale <= 0.0) scale = 1.0;
+
+        StrokeData s;
+        s.points = std::move(src.data.points);
+        DWORD prevT = 0;
+        double totalSpeed = 0.0;
+        for (StrokePoint& p : s.points) {
+            // 時刻は戻らないものとして並べる（壊れた記録で補間が逆走しないように）
+            if (p.timeMs < prevT) p.timeMs = prevT;
+            prevT = p.timeMs;
+
+            p.normX = RenderUtils::Clamp(FiniteOr(p.normX, 0.0), 0.0, 1.0);
+            p.normY = RenderUtils::Clamp(FiniteOr(p.normY, 0.0), 0.0, 1.0);
+            p.paperX = static_cast<int>(p.normX * curW);
+            p.paperY = static_cast<int>(p.normY * curH);
+            p.pressure = RenderUtils::Clamp(FiniteOr(p.pressure, 0.0), 0.0, 1.0);
+            p.pressureFactor = RenderUtils::Clamp(FiniteOr(p.pressureFactor, p.pressure), 0.0, 1.0);
+            p.dryness = RenderUtils::Clamp(FiniteOr(p.dryness, 0.0), 0.0, 1.0);
+            p.altitudeDeg = RenderUtils::Clamp(FiniteOr(p.altitudeDeg, 90.0), 0.0, 90.0);
+            p.azimuthDeg = std::fmod(FiniteOr(p.azimuthDeg, 0.0), 360.0);
+            if (p.azimuthDeg < 0.0) p.azimuthDeg += 360.0;
+            p.moveAngleRad = std::fmod(FiniteOr(p.moveAngleRad, 0.0), 2.0 * kPi);
+            // 線幅は半紙の長辺の半分まで（それ以上は壊れた値）
+            p.width = RenderUtils::Clamp(FiniteOr(p.width, 0.0) * scale, 0.0, curLong * 0.5);
+            p.speedPxPerSec = (std::max)(0.0, FiniteOr(p.speedPxPerSec, 0.0) * scale);
+            p.inkAmount = (std::isfinite(p.inkAmount) && p.inkAmount >= 0.0) ? (std::min)(p.inkAmount, 1.0) : -1.0;
+
+            if (p.pressure > s.maxPressure) s.maxPressure = p.pressure;
+            if (p.speedPxPerSec > s.maxSpeed) s.maxSpeed = p.speedPxPerSec;
+            totalSpeed += p.speedPxPerSec;
+        }
+        s.avgSpeed = totalSpeed / static_cast<double>(s.points.size());
+        s.strokeId = static_cast<int>(out.size()) + 1;
+        s.paperW = curW;
+        s.paperH = curH;
+
+        DWORD duration = s.points.back().timeMs;
+        if (allTimed) {
+            double start = RenderUtils::Clamp(FiniteOr(src.startMs, 0.0), 0.0, 24.0 * 3600.0 * 1000.0);
+            double end = RenderUtils::Clamp(FiniteOr(src.endMs, start), start, 24.0 * 3600.0 * 1000.0);
+            s.startTime = kImportTimeBase + static_cast<DWORD>(start);
+            s.endTime = kImportTimeBase + static_cast<DWORD>(end);
+            if (s.endTime < s.startTime + duration) s.endTime = s.startTime + duration;
+        } else {
+            s.startTime = out.empty() ? kImportTimeBase : prevEnd + kImportDefaultGapMs;
+            s.endTime = s.startTime + duration;
+        }
+        prevEnd = s.endTime;
+        out.push_back(std::move(s));
+    }
+
+    if (out.empty()) {
+        err = L"運筆の記録が見つかりませんでした（画が1つもありません）。";
+        return false;
+    }
+    return true;
+}
+
+std::wstring FileNameOf(const std::wstring& path) {
+    size_t slash = path.find_last_of(L"\\/");
+    return (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+}
+
+} // namespace
+
+bool TrajectorySession::ImportFromFile(const std::wstring& filePath, const RECT& rPaper, std::wstring& outError) {
+    std::ifstream ifs(filePath, std::ios::binary);
+    if (!ifs.is_open()) {
+        outError = L"ファイルを開けませんでした。";
+        return false;
+    }
+    ifs.seekg(0, std::ios::end);
+    std::streamoff size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    if (size <= 0) {
+        outError = L"ファイルが空です。";
+        return false;
+    }
+    if (static_cast<unsigned long long>(size) > kImportMaxFileBytes) {
+        outError = L"ファイルが大きすぎるため読み込めません。";
+        return false;
+    }
+    std::string text(static_cast<size_t>(size), '\0');
+    if (!ifs.read(&text[0], size)) {
+        outError = L"ファイルを読み込めませんでした。";
+        return false;
+    }
+    // Excel などで保存し直した UTF-8 には先頭に BOM が付く
+    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF
+        && static_cast<unsigned char>(text[1]) == 0xBB && static_cast<unsigned char>(text[2]) == 0xBF) {
+        text.erase(0, 3);
+    }
+
+    // 拡張子ではなく中身で見分ける（名前を付け替えたファイルも読めるように）
+    size_t first = text.find_first_not_of(" \t\r\n");
+    bool isJson = (first != std::string::npos && text[first] == '{');
+
+    std::vector<ImportedStroke> raw;
+    if (isJson) {
+        ArchiveJsonReader reader(text);
+        if (!reader.Read(raw, outError)) return false;
+    } else {
+        if (!ReadArchiveCsv(text, raw, outError)) return false;
+    }
+
+    std::vector<StrokeData> strokes;
+    if (!FinalizeImport(raw, rPaper, strokes, outError)) return false;
+
+    Clear();
+    m_strokes = std::move(strokes);
+    BumpRevision();
+    return true;
+}
+
+TrajectorySession::SaveResult TrajectorySession::PromptLoadArchive(HWND hWnd, TrajectorySession& session, const RECT& rPaper,
+                                                                   std::wstring& outFileName, std::wstring& outError) {
+    wchar_t szFileName[MAX_PATH] = L"";
+
+    OPENFILENAMEW ofn = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = hWnd;
+    ofn.lpstrFilter = L"運筆アーカイブ (*.json;*.csv)\0*.json;*.csv\0運筆アーカイブ JSON (*.json)\0*.json\0運筆時系列データ CSV (*.csv)\0*.csv\0すべてのファイル (*.*)\0*.*\0";
+    ofn.lpstrFile = szFileName;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"解析する運筆アーカイブを開く";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+    if (!GetOpenFileNameW(&ofn)) return DialogClosedResult();
+    if (!session.ImportFromFile(szFileName, rPaper, outError)) return SaveResult::Failed;
+    outFileName = FileNameOf(szFileName);
+    return SaveResult::Saved;
 }
 
 // タイムラインは m_strokes から決まるので、何度作り直しても
@@ -497,6 +1067,9 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
 
                 outSample.point.speedPxPerSec = p1.speedPxPerSec + (p2.speedPxPerSec - p1.speedPxPerSec) * t;
                 outSample.point.width = p1.width + (p2.width - p1.width) * t;
+                outSample.point.inkAmount = (p1.inkAmount >= 0.0 && p2.inkAmount >= 0.0)
+                    ? p1.inkAmount + (p2.inkAmount - p1.inkAmount) * t
+                    : p1.inkAmount;
             }
 
             outSample.point.paperX = rPaper.left + static_cast<int>(outSample.point.normX * pw);
@@ -535,6 +1108,8 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
                 outSample.point.azimuthDeg = pEnd.azimuthDeg + dAzm * t;
                 outSample.point.speedPxPerSec = 150.0;
                 outSample.point.width = 0.0;
+                // 空中では墨は減らないので、書き終えた時点の残量のまま
+                outSample.point.inkAmount = pEnd.inkAmount;
 
                 outSample.point.paperX = rPaper.left + static_cast<int>(outSample.point.normX * pw);
                 outSample.point.paperY = rPaper.top + static_cast<int>(outSample.point.normY * ph);

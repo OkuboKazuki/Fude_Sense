@@ -503,13 +503,10 @@ ReplayInk g_replayInk;
 // 実際に書かれた GpuInk の墨汁テクスチャ（かすれの白抜け・毛筋・物理にじみ）に、
 // 各位置の筆圧の強弱に応じたカラーグラデーション（弱=水色/青 -> 中=緑/黄 -> 強=橙/赤）を融合した
 // マスターゴーストテクスチャを生成する
-void BakeGhostMaster(GpuInk& gpuInk, const TrajectorySession& session, int pw, int ph) {
+// ink は書き上がった墨の濃さ（自分の記録なら半紙の墨、読み込んだ記録なら最後まで引き直した墨）
+void BakeGhostMaster(const std::vector<int>& ink, int inkW, int inkH, const TrajectorySession& session, int pw, int ph) {
     ReplayLayer& layer = g_replayCache.ghostMaster;
     if (!layer.bits || layer.w != pw || layer.h != ph) return;
-
-    std::vector<int> ink;
-    int inkW = 0, inkH = 0;
-    gpuInk.GetInkSnapshot(ink, inkW, inkH);
 
     if (ink.empty() || inkW <= 0 || inkH <= 0) {
         layer.FillWhite();
@@ -801,24 +798,37 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
     int ph = RenderUtils::RH(rPaper);
     if (pw <= 0 || ph <= 0) return;
 
-    const auto& strokes = state.trajectory.GetStrokes();
+    const TrajectorySession& session = state.AnalysisSession();
+    const auto& strokes = session.GetStrokes();
     if (!strokes.empty()) {
         // 1. 再生済みの墨（時系列アニメーション）
         int canvasW = 0, canvasH = 0;
         state.paper.GetCanvasSize(canvasW, canvasH);
         bool scrubbing = (state.replay.isDraggingSeekBar || state.replay.isDraggingWaveform);
-        if (g_replayInk.Update(state.trajectory, state.replay.currentTimeMs, canvasW, canvasH, pw, ph, scrubbing)) {
+        if (g_replayInk.Update(session, state.replay.currentTimeMs, canvasW, canvasH, pw, ph, scrubbing)) {
             g_replayInk.Render(dc, rPaper.left, rPaper.top, pw, ph);
         }
 
         // 2. 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト（かすれ・にじみ完全保持）
-        unsigned rev = state.trajectory.GetRevision();
+        unsigned rev = session.GetRevision();
         bool keyChanged = (g_replayCache.revision != rev
             || g_replayCache.paperW != pw || g_replayCache.paperH != ph);
 
         if (g_replayCache.ghostMaster.Ensure(dc, pw, ph)) {
             if (keyChanged || !g_replayCache.masterValid) {
-                BakeGhostMaster(gpuInk, state.trajectory, pw, ph);
+                std::vector<int> ink;
+                int inkW = 0, inkH = 0;
+                if (state.viewingImport) {
+                    // 読み込んだ記録の墨は半紙に無いので、別の墨へ最後まで引き直して形を取る。
+                    // 形を取ったら用は済むので、GPU の資源はすぐ手放す。
+                    ReplayInk fullInk;
+                    if (fullInk.Update(session, session.GetReplayTotalDurationMs(), canvasW, canvasH, pw, ph, false)) {
+                        fullInk.GetInkSnapshot(ink, inkW, inkH);
+                    }
+                } else {
+                    gpuInk.GetInkSnapshot(ink, inkW, inkH);
+                }
+                BakeGhostMaster(ink, inkW, inkH, session, pw, ph);
                 g_replayCache.revision = rev;
                 g_replayCache.paperW = pw;
                 g_replayCache.paperH = ph;

@@ -308,7 +308,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_lastReplayTick = 0;
 			}
 
-			g_appState.replay.hasValidSample = g_appState.trajectory.GetReplaySample(
+			g_appState.replay.hasValidSample = g_appState.AnalysisSession().GetReplaySample(
 				g_appState.replay.currentTimeMs, g_appState.ui.rPaper, g_appState.replay.currentSample);
 
 			// 動くのは半紙のリプレイと解析パネルだけ。Layout() 全体も全画面の
