@@ -1378,7 +1378,10 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 		hr = m_gdiSurface1->GetDC(FALSE, &hD2DDC);
 		if (SUCCEEDED(hr) && hD2DDC)
 		{
-			BitBlt(hdc, destX, destY, dispW, dispH, hD2DDC, 0, 0, SRCCOPY);
+			// 和紙の地色の上に墨を自然に乗算合成するため SRCAND を使用
+			// これにより、白地(0xFFFFFFFF)の部分は和紙の色を100%保持し、
+			// ストローク外側の不自然な白色の輪郭・縁取りが完全に消滅する
+			BitBlt(hdc, destX, destY, dispW, dispH, hD2DDC, 0, 0, SRCAND);
 			m_gdiSurface1->ReleaseDC(nullptr);
 		}
 	}
