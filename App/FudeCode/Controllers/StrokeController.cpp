@@ -185,13 +185,15 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 運筆に伴うインク・水分の物理消費
-        // 消費量は「移動距離 × 線幅」に比例する（線幅 36px なら 1px あたり 0.0002）。
+        // 消費量は「移動距離 × 線幅」に比例する（線幅 36px なら 1px あたり 0.0002 / 1.02）。
+        // 満タン（残量 1.0 = 100% 表示）のまま書ける墨の量を 1.02 倍にするため、消費を 1.02 で割る。
         // 乾いてくると（dryness > 0、残量 60% 未満）消費を最大 45% 減らし、
         // かすれが続く距離を伸ばす。dryness = 0 の間は消費量は変わらない。
+        constexpr double USABLE_INK_SCALE = 1.02;
         double stepDist = (dist > 0.0) ? dist : 1.0;
         double widthRatio = m_smoothedWidth / 36.0;
         double drynessFactor = 1.0 - state.ink.GetDryness() * 0.45;
-        double consumeAmount = stepDist * widthRatio * 0.00020 * drynessFactor;
+        double consumeAmount = stepDist * widthRatio * (0.00020 / USABLE_INK_SCALE) * drynessFactor;
         state.ink.Consume(consumeAmount);
 
         // 運筆データアーカイブへ記録
