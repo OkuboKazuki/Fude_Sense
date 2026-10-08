@@ -556,9 +556,19 @@ bool GpuInk::CaptureSnapshot(InkSnapshot& out)
 
 	if (m_width <= 0 || m_height <= 0) return false;
 
+	// 未アップロードの墨・水分がある場合（終筆直後など）は、まず GPU へアップロード
+	// 背景スレッドでにじみが進んでいた場合のみ、GPU の最新にじみ結果を CPU へ同期
 	if (m_gpuSim.IsAvailable())
 	{
-		m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+		if (m_needsGpuUpload)
+		{
+			m_gpuSim.UploadFromCpu(m_ink.data(), m_wetField.data(), m_width, m_height);
+			m_needsGpuUpload = false;
+		}
+		else
+		{
+			m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+		}
 	}
 
 	const size_t pixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
@@ -1058,9 +1068,15 @@ void GpuInk::EndStroke()
 		m_uploadMaxY = -1;
 	}
 
+	// 2. CPU で打刻された終筆を含む最新の墨・水分を、GPU へ確実にアップロード
+	// これにより、GPU 側にも終筆が 100% 確実に届き、直後のスナップショットで終筆が消えるのを完全に防止する
 	if (m_gpuSim.IsAvailable())
 	{
-		m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+		if (m_needsGpuUpload)
+		{
+			m_gpuSim.UploadFromCpu(m_ink.data(), m_wetField.data(), m_width, m_height);
+			m_needsGpuUpload = false;
+		}
 	}
 }
 
@@ -1392,7 +1408,15 @@ void GpuInk::GetInkSnapshot(std::vector<int>& outInk, int& outWidth, int& outHei
 	std::lock_guard<std::mutex> lock(m_mutex);
 	if (m_gpuSim.IsAvailable())
 	{
-		m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+		if (m_needsGpuUpload)
+		{
+			m_gpuSim.UploadFromCpu(m_ink.data(), m_wetField.data(), m_width, m_height);
+			m_needsGpuUpload = false;
+		}
+		else
+		{
+			m_gpuSim.DownloadInkAndWet(m_ink.data(), m_wetField.data(), m_width, m_height);
+		}
 	}
 	outWidth = m_width;
 	outHeight = m_height;
