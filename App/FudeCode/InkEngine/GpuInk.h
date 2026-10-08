@@ -171,4 +171,5 @@ private:
 	// Direct3D 11 Compute Shader GPU 浸透シミュレータ
 	GpuSimulator m_gpuSim;
 	bool m_needsGpuUpload = false;
+	int  m_gpuDiffusionSteps = 0;       // シミュレーション安全収束用カウンタ
 };

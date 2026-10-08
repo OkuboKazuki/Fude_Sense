@@ -497,6 +497,7 @@ void GpuInk::Clear()
 			m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 		}
 		m_needsGpuUpload = true;
+		m_gpuDiffusionSteps = 0;
 	}
 }
 
@@ -660,6 +661,7 @@ void GpuInk::FinishRestore_NoLock()
 		m_pInkBitmap->CopyFromMemory(&rect, m_pixelBuffer.data(), m_width * sizeof(uint32_t));
 	}
 	m_needsGpuUpload = true;
+	m_gpuDiffusionSteps = 0;
 }
 
 int GpuInk::SettleDiffusion(int maxSteps)
@@ -711,10 +713,12 @@ bool GpuInk::PropagateInk_NoLock()
 		{
 			if (m_gpuSim.StepSimulation())
 			{
-				int rMinX = std::max(0, m_activeMinX - 2);
-				int rMinY = std::max(0, m_activeMinY - 2);
-				int rMaxX = std::min(m_width - 1, m_activeMaxX + 2);
-				int rMaxY = std::min(m_height - 1, m_activeMaxY + 2);
+				m_gpuDiffusionSteps++;
+
+				int rMinX = (std::max)(0, m_activeMinX - 2);
+				int rMinY = (std::max)(0, m_activeMinY - 2);
+				int rMaxX = (std::min)(m_width - 1, m_activeMaxX + 2);
+				int rMaxY = (std::min)(m_height - 1, m_activeMaxY + 2);
 
 				// 全画面ではなく、にじみ進行領域（Dirty Rect）のみ局所リードバック（GPU-CPU転送最適化）
 				bool pixelsOk = m_gpuSim.DownloadToPixelsRegion(m_pixelBuffer.data(), m_width, m_height, rMinX, rMinY, rMaxX, rMaxY);
@@ -727,35 +731,53 @@ bool GpuInk::PropagateInk_NoLock()
 				}
 
 				// Direct2D へのアップロード範囲も Dirty Rect に限定
-				m_uploadMinX = std::min(m_uploadMinX, rMinX);
-				m_uploadMinY = std::min(m_uploadMinY, rMinY);
-				m_uploadMaxX = std::max(m_uploadMaxX, rMaxX);
-				m_uploadMaxY = std::max(m_uploadMaxY, rMaxY);
+				m_uploadMinX = (std::min)(m_uploadMinX, rMinX);
+				m_uploadMinY = (std::min)(m_uploadMinY, rMinY);
+				m_uploadMaxX = (std::max)(m_uploadMaxX, rMaxX);
+				m_uploadMaxY = (std::max)(m_uploadMaxY, rMaxY);
 
-				// 次の回に墨を送り出せる画素（濃く、まだ濡れている）の範囲を取り直す。
-				// 墨が動くのはその周囲 1 画素までで、それは今読み戻した範囲に収まっている。
-				// 送り出す画素が無くなれば、にじみは止まったので計算をやめる。
-				// （範囲を広げるだけだと、乾いた後も半紙全体の計算と読み戻しが延々と続く）
+				// 次の回に墨を送り出せる画素（境界に勾配があり、まだ濡れている進行フロンティア）のみを追跡。
+				// 平坦な線の内側（周囲も自分以上の濃度）は除外することで、数ステップで確実に自然収束させる。
+				constexpr int kGpuSettleSteps = 16;
 				int nextMinX = INT_MAX, nextMinY = INT_MAX, nextMaxX = -1, nextMaxY = -1;
-				for (int y = rMinY; y <= rMaxY; ++y)
+
+				if (m_inStroke.load(std::memory_order_relaxed) || m_gpuDiffusionSteps < kGpuSettleSteps)
 				{
-					size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(m_width);
-					for (int x = rMinX; x <= rMaxX; ++x)
+					for (int y = rMinY; y <= rMaxY; ++y)
 					{
-						size_t i = rowOffset + x;
-						if (m_ink[i] > PROPAGATION_THRESHOLD && m_wetField[i] > WET_THRESHOLD)
+						size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(m_width);
+						for (int x = rMinX; x <= rMaxX; ++x)
 						{
-							if (x < nextMinX) nextMinX = x;
-							if (x > nextMaxX) nextMaxX = x;
-							if (y < nextMinY) nextMinY = y;
-							if (y > nextMaxY) nextMaxY = y;
+							size_t i = rowOffset + x;
+							int curInk = m_ink[i];
+							if (curInk > PROPAGATION_THRESHOLD && m_wetField[i] > WET_THRESHOLD)
+							{
+								// 4近傍に自分より薄い画素が存在するか（にじみ進行フロンティアか）？
+								bool canSpread = (x > 0 && curInk > m_ink[i - 1]) ||
+								                 (x + 1 < m_width && curInk > m_ink[i + 1]) ||
+								                 (y > 0 && curInk > m_ink[i - m_width]) ||
+								                 (y + 1 < m_height && curInk > m_ink[i + m_width]);
+								if (canSpread)
+								{
+									if (x < nextMinX) nextMinX = x;
+									if (x > nextMaxX) nextMaxX = x;
+									if (y < nextMinY) nextMinY = y;
+									if (y > nextMaxY) nextMaxY = y;
+								}
+							}
 						}
 					}
 				}
+
 				m_activeMinX = nextMinX;
 				m_activeMinY = nextMinY;
 				m_activeMaxX = nextMaxX;
 				m_activeMaxY = nextMaxY;
+
+				if (m_activeMinX > m_activeMaxX)
+				{
+					m_gpuDiffusionSteps = 0;
+				}
 
 				return true;
 			}
@@ -1116,6 +1138,7 @@ void GpuInk::StampBrush(double cx, double cy, double radius, unsigned char alpha
 	if (stampChanged)
 	{
 		m_needsGpuUpload = true;
+		m_gpuDiffusionSteps = 0;
 	}
 }
 
@@ -1232,18 +1255,28 @@ void GpuInk::Render(HDC hdc, int destX, int destY, int dispW, int dispH)
 		m_dispHeight = dispH;
 
 		// Direct2D ビットマップへ未更新ピクセルバッファを転送/更新
-		if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY)
+		if (m_uploadMinX <= m_uploadMaxX && m_uploadMinY <= m_uploadMaxY &&
+			m_uploadMinX < m_width && m_uploadMinY < m_height &&
+			m_uploadMaxX >= 0 && m_uploadMaxY >= 0)
 		{
-			uint32_t minX = static_cast<uint32_t>(std::max(0, m_uploadMinX));
-			uint32_t minY = static_cast<uint32_t>(std::max(0, m_uploadMinY));
-			uint32_t maxX = static_cast<uint32_t>(std::min(m_width - 1, m_uploadMaxX));
-			uint32_t maxY = static_cast<uint32_t>(std::min(m_height - 1, m_uploadMaxY));
+			int clampedMinX = (std::max)(0, m_uploadMinX);
+			int clampedMinY = (std::max)(0, m_uploadMinY);
+			int clampedMaxX = (std::min)(m_width - 1, m_uploadMaxX);
+			int clampedMaxY = (std::min)(m_height - 1, m_uploadMaxY);
 
-			D2D1_RECT_U dirtyRect = D2D1::RectU(minX, minY, maxX + 1, maxY + 1);
-			size_t offset = static_cast<size_t>(minY) * static_cast<size_t>(m_width) + static_cast<size_t>(minX);
-			const uint32_t* srcPtr = m_pixelBuffer.data() + offset;
+			if (clampedMinX <= clampedMaxX && clampedMinY <= clampedMaxY)
+			{
+				uint32_t minX = static_cast<uint32_t>(clampedMinX);
+				uint32_t minY = static_cast<uint32_t>(clampedMinY);
+				uint32_t maxX = static_cast<uint32_t>(clampedMaxX);
+				uint32_t maxY = static_cast<uint32_t>(clampedMaxY);
 
-			m_pInkBitmap->CopyFromMemory(&dirtyRect, srcPtr, m_width * sizeof(uint32_t));
+				D2D1_RECT_U dirtyRect = D2D1::RectU(minX, minY, maxX + 1, maxY + 1);
+				size_t offset = static_cast<size_t>(minY) * static_cast<size_t>(m_width) + static_cast<size_t>(minX);
+				const uint32_t* srcPtr = m_pixelBuffer.data() + offset;
+
+				m_pInkBitmap->CopyFromMemory(&dirtyRect, srcPtr, m_width * sizeof(uint32_t));
+			}
 
 			m_uploadMinX = INT_MAX;
 			m_uploadMinY = INT_MAX;

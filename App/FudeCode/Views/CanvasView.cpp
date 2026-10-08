@@ -493,6 +493,12 @@ struct ReplayCacheState {
     int paperW = 0;
     int paperH = 0;
     bool masterValid = false;
+
+    // インポート記録の全体墨スナップショットキャッシュ（WM_PAINT毎の再計算・GPU再生成を排除）
+    std::vector<int> importedFullInk;
+    int importedFullInkW = 0;
+    int importedFullInkH = 0;
+    unsigned importedFullInkRev = 0;
 };
 
 ReplayCacheState g_replayCache;
@@ -796,6 +802,10 @@ void CanvasView::ReleaseReplayCache() {
     g_replayCache.revision = 0;
     g_replayCache.paperW = 0;
     g_replayCache.paperH = 0;
+    g_replayCache.importedFullInk.clear();
+    g_replayCache.importedFullInkW = 0;
+    g_replayCache.importedFullInkH = 0;
+    g_replayCache.importedFullInkRev = 0;
     g_replayInk.Release();
 }
 
@@ -827,11 +837,20 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
                 int inkW = 0, inkH = 0;
                 if (state.viewingImport) {
                     // 読み込んだ記録の墨は半紙に無いので、別の墨へ最後まで引き直して形を取る。
-                    // 形を取ったら用は済むので、GPU の資源はすぐ手放す。
-                    ReplayInk fullInk;
-                    if (fullInk.Update(session, session.GetReplayTotalDurationMs(), canvasW, canvasH, pw, ph, false)) {
-                        fullInk.GetInkSnapshot(ink, inkW, inkH);
+                    // 毎回 ReplayInk を生成・シミュレーション・破棄するのを防ぐため、
+                    // リビジョン・解像度が一致している間は事前ベイク結果を使い回す。
+                    if (g_replayCache.importedFullInkRev != rev || g_replayCache.importedFullInk.empty() ||
+                        g_replayCache.importedFullInkW != canvasW || g_replayCache.importedFullInkH != canvasH)
+                    {
+                        ReplayInk fullInk;
+                        if (fullInk.Update(session, session.GetReplayTotalDurationMs(), canvasW, canvasH, pw, ph, false)) {
+                            fullInk.GetInkSnapshot(g_replayCache.importedFullInk, g_replayCache.importedFullInkW, g_replayCache.importedFullInkH);
+                            g_replayCache.importedFullInkRev = rev;
+                        }
                     }
+                    ink = g_replayCache.importedFullInk;
+                    inkW = g_replayCache.importedFullInkW;
+                    inkH = g_replayCache.importedFullInkH;
                 } else {
                     gpuInk.GetInkSnapshot(ink, inkW, inkH);
                 }
