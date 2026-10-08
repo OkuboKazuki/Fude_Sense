@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <vector>
 #include <cstddef>
 #include "InkSnapshot.h"
@@ -49,7 +50,7 @@ public:
 
     void Clear();
 
-    // 紙だけ表示の出入りで半紙が90度倒れたとき、控えも同じ向きへ回して残す。
+    // 紙だけ表示の出入りで半紙が90度倒れたとき、控えも同じ向きへ残す。
     // 墨の控えは新しい半紙の寸法 canvasW x canvasH へ、復元用の1画は
     // TrajectorySession::RotateQuarter と同じように回す。
     // 回せなかった場合は、書き戻せない控えを残さないよう履歴を全部捨てて false を返す。
@@ -65,10 +66,10 @@ private:
     // 今の状態を控えへ取る（戻す・復元の直前に使う）
     bool CaptureCurrent(GpuInk& gpuInk, const InkModel& ink, UndoEntry& out);
     void Trim();
-    void DropOldest(std::vector<UndoEntry>& stack);
+    void DropOldest(std::deque<UndoEntry>& stack);
     void ClearRedo();
 
-    std::vector<UndoEntry> m_undo;
-    std::vector<UndoEntry> m_redo;
+    std::deque<UndoEntry> m_undo;
+    std::deque<UndoEntry> m_redo;
     size_t m_bytes = 0;
 };

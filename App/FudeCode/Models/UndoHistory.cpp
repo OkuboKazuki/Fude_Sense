@@ -116,7 +116,7 @@ bool UndoHistory::Redo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& traject
 bool UndoHistory::RotateQuarter(bool counterClockwise, int canvasW, int canvasH, const RECT& oldPaper, const RECT& newPaper) {
     try {
         size_t bytes = 0;
-        for (std::vector<UndoEntry>* stack : { &m_undo, &m_redo }) {
+        for (std::deque<UndoEntry>* stack : { &m_undo, &m_redo }) {
             for (UndoEntry& e : *stack) {
                 if (!GpuInk::RotateSnapshot(e.ink, counterClockwise, canvasW, canvasH)) {
                     Clear();
@@ -141,8 +141,8 @@ bool UndoHistory::RotateQuarter(bool counterClockwise, int canvasW, int canvasH,
 }
 
 void UndoHistory::Clear() {
-    std::vector<UndoEntry>().swap(m_undo);
-    std::vector<UndoEntry>().swap(m_redo);
+    std::deque<UndoEntry>().swap(m_undo);
+    std::deque<UndoEntry>().swap(m_redo);
     m_bytes = 0;
 }
 
@@ -150,7 +150,7 @@ void UndoHistory::ClearRedo() {
     for (const UndoEntry& e : m_redo) {
         m_bytes = (m_bytes >= e.bytes) ? (m_bytes - e.bytes) : 0;
     }
-    std::vector<UndoEntry>().swap(m_redo);
+    std::deque<UndoEntry>().swap(m_redo);
 }
 
 void UndoHistory::Trim() {
@@ -163,9 +163,9 @@ void UndoHistory::Trim() {
     while (m_bytes > UNDO_MAX_BYTES && m_redo.size() > 1) DropOldest(m_redo);
 }
 
-void UndoHistory::DropOldest(std::vector<UndoEntry>& stack) {
+void UndoHistory::DropOldest(std::deque<UndoEntry>& stack) {
     if (stack.empty()) return;
     const size_t bytes = stack.front().bytes;
     m_bytes = (m_bytes >= bytes) ? (m_bytes - bytes) : 0;
-    stack.erase(stack.begin());
+    stack.pop_front();
 }
