@@ -123,10 +123,15 @@ void CSMain(uint3 DTid : SV_DispatchThreadID)
     g_inkOut[pos] = finalInk;
     g_wetOut[pos] = newWet;
 
-    // 4. カラー算出 (白〜黒の ARGB ピクセル)
-    float inkRatio = saturate((float)finalInk / 255.0f);
-    float c = 1.0f - inkRatio;
-    g_pixelOut[pos] = float4(c, c, c, 1.0f);
+    // 4. カラー算出 (にじみによって墨汁が移動した画素のみピクセルを更新)
+    // これにより、CPU で打刻された鮮明な穂先やかすれの繊細なスジが
+    // 無関係な全画面上書きによって破壊されるのを完全に防ぐ
+    if (deltaInk != 0)
+    {
+        float inkRatio = saturate((float)finalInk / 255.0f);
+        float c = 1.0f - inkRatio;
+        g_pixelOut[pos] = float4(c, c, c, 1.0f);
+    }
 }
 )";
 
@@ -171,7 +176,7 @@ bool GpuSimulator::CreateDeviceAndShader()
 {
     if (m_device && m_computeShader) return true;
 
-    UINT createDeviceFlags = 0;
+    UINT createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 #if defined(_DEBUG)
     // createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -293,17 +298,17 @@ bool GpuSimulator::CreateTextures(int width, int height)
         if (FAILED(hr)) return false;
     }
 
-    // 3. ピクセル出力テクスチャ (R8G8B8A8_UNORM)
+    // 3. ピクセル出力テクスチャ (B8G8R8A8_UNORM - Direct2D 互換)
     {
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = width;
         desc.Height = height;
         desc.MipLevels = 1;
         desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+        desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
         HRESULT hr = m_device->CreateTexture2D(&desc, nullptr, &m_texPixel);
         if (FAILED(hr)) return false;
@@ -323,7 +328,7 @@ bool GpuSimulator::CreateTextures(int width, int height)
         desc.Usage = D3D11_USAGE_STAGING;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
         m_device->CreateTexture2D(&desc, nullptr, &m_stagingPixel);
 
         desc.Format = DXGI_FORMAT_R32_SINT;
@@ -574,3 +579,56 @@ bool GpuSimulator::DownloadInkAndWetRegion(int* dstInk, uint8_t* dstWet, int wid
 
     return true;
 }
+
+bool GpuSimulator::UploadPixels(const uint32_t* pixels, int width, int height)
+{
+    if (!m_available || !m_context || !m_texPixel || width != m_width || height != m_height || !pixels) return false;
+    m_context->UpdateSubresource(m_texPixel.Get(), 0, nullptr, pixels, width * sizeof(uint32_t), 0);
+    return true;
+}
+
+bool GpuSimulator::UploadPixelsRegion(const uint32_t* pixels, int width, int height, int minX, int minY, int maxX, int maxY)
+{
+    if (!m_available || !m_context || !m_texPixel || width != m_width || height != m_height || !pixels) return false;
+    minX = std::max(0, std::min(width - 1, minX));
+    maxX = std::max(0, std::min(width - 1, maxX));
+    minY = std::max(0, std::min(height - 1, minY));
+    maxY = std::max(0, std::min(height - 1, maxY));
+    if (minX > maxX || minY > maxY) return false;
+
+    D3D11_BOX box;
+    box.left = static_cast<UINT>(minX);
+    box.right = static_cast<UINT>(maxX + 1);
+    box.top = static_cast<UINT>(minY);
+    box.bottom = static_cast<UINT>(maxY + 1);
+    box.front = 0;
+    box.back = 1;
+
+    const uint32_t* pSrc = pixels + (static_cast<size_t>(minY) * width + minX);
+    m_context->UpdateSubresource(m_texPixel.Get(), 0, &box, pSrc, width * sizeof(uint32_t), 0);
+    return true;
+}
+
+void GpuSimulator::ClearTextures()
+{
+    if (!m_available || !m_context) return;
+    if (m_texPixel && m_uavPixel)
+    {
+        FLOAT clearWhite[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        m_context->ClearUnorderedAccessViewFloat(m_uavPixel.Get(), clearWhite);
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+        if (m_uavInk[i])
+        {
+            UINT zero[4] = { 0, 0, 0, 0 };
+            m_context->ClearUnorderedAccessViewUint(m_uavInk[i].Get(), zero);
+        }
+        if (m_uavWet[i])
+        {
+            UINT zero[4] = { 0, 0, 0, 0 };
+            m_context->ClearUnorderedAccessViewUint(m_uavWet[i].Get(), zero);
+        }
+    }
+}
+

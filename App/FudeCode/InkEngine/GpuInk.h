@@ -7,6 +7,8 @@
 #include <windows.h>
 #include <d2d1.h>
 #include <d2d1_1.h>
+#include <dxgi1_2.h>
+#include <wrl/client.h>
 #include <vector>
 #include <cstdint>
 #include <mutex>
@@ -16,6 +18,8 @@
 
 #include "InkSnapshot.h"
 #include "GpuSimulator.h"
+
+using Microsoft::WRL::ComPtr;
 
 // 1 セグメント分の運筆パラメータ
 // 運筆方向・乾き具合など、今後の描画表現に必要な情報をまとめて受け渡す
@@ -97,8 +101,9 @@ private:
 	void ReleaseResources();
 
 	bool Initialize_NoLock(int width, int height);
-	// 描画先と墨のビットマップを作り直す。ビットマップの中身は m_pixelBuffer から取る。
+	// 描画先と墨のビットマップを作り直す。D3D11 テクスチャから共有ビットマップを作成する。
 	bool CreateRenderTarget_NoLock();
+	bool EnsureGdiTarget_NoLock(int width, int height);
 	void EnsureInitialized();
 
 	void StampBrush(double cx, double cy, double radius, unsigned char alpha);
@@ -123,10 +128,18 @@ private:
 	int m_dispWidth = 0;
 	int m_dispHeight = 0;
 
-	// Direct2D リソース
-	ID2D1Factory* m_pD2DFactory = nullptr;
-	ID2D1DCRenderTarget* m_pDCRenderTarget = nullptr;
-	ID2D1Bitmap* m_pInkBitmap = nullptr;
+	// Direct2D 1.1 / DirectX 共有リソース（GPU VRAM 内直接参照）
+	ComPtr<ID2D1Factory1>       m_d2dFactory1;
+	ComPtr<ID2D1Device>         m_d2dDevice;
+	ComPtr<ID2D1DeviceContext>  m_d2dContext;
+	ComPtr<ID2D1Bitmap1>        m_d2dInkBitmap; // m_texPixel を直接指す共有ビットマップ (GPU VRAM内ゼロコピー)
+
+	// GDI 互換レンダーターゲット（ウィンドウの HDC へ BitBlt する用）
+	ComPtr<ID3D11Texture2D>     m_gdiTargetTex;
+	ComPtr<IDXGISurface1>       m_gdiSurface1;
+	ComPtr<ID2D1Bitmap1>        m_gdiTargetBitmap;
+	int                         m_gdiTargetWidth = 0;
+	int                         m_gdiTargetHeight = 0;
 
 	// メモリバッファ (CPU / GPU 物理にじみ計算)
 	std::vector<int> m_ink;

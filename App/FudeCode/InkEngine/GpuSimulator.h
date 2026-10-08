@@ -52,6 +52,16 @@ public:
     bool DownloadInkAndWet(int* dstInk, uint8_t* dstWet, int width, int height);
     bool DownloadInkAndWetRegion(int* dstInk, uint8_t* dstWet, int width, int height, int minX, int minY, int maxX, int maxY);
 
+    // スタンプ打刻ピクセルを GPU テクスチャへ直接部分転送（にじみシミュレーションを挟まず鮮明に反映）
+    bool UploadPixels(const uint32_t* pixels, int width, int height);
+    bool UploadPixelsRegion(const uint32_t* pixels, int width, int height, int minX, int minY, int maxX, int maxY);
+    void ClearTextures();
+
+    // Direct2D 1.1 DirectX 共有連携用アクセサ
+    ComPtr<ID3D11Device>        GetDevice() const { return m_device; }
+    ComPtr<ID3D11DeviceContext> GetContext() const { return m_context; }
+    ComPtr<ID3D11Texture2D>     GetPixelTexture() const { return m_texPixel; }
+
     bool IsAvailable() const { return m_available; }
     // ドライバの更新・GPU のリセット・スリープ復帰などでデバイスが失われたか。
     // 失われたデバイスへの呼び出しは黙って何もしないので、呼び出し側で見て作り直す。
