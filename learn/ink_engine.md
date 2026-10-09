@@ -24,21 +24,20 @@ graph TD
     end
 
     subgraph ViewLayer ["Views レイヤー"]
-        CV["CanvasView (半紙へのSRCAND合成)"]
+        CV["CanvasView (半紙への転送)"]
     end
 
     SC -->|セグメント描画 (DrawSegmentLinear)| GI
     SC -->|インク消費 (Consume)| IM
-    GI -->|CPU描画差分アップロード| GS
-    GS -->|CS浸透シミュレーション & カラー変換| GS
-    GS -->|DXGI共有テクスチャ (B8G8R8A8)| GI
-    GI -->|Direct2D 1.1 ゼロコピー描画| CV
-    GI -->|スナップショット保存・復元 (同期保証)| IS
+    GI -->|GPUテクスチャ転送・シェーダー実行| GS
+    GS -->|Ping-Pong拡散計算結果| GI
+    GI -->|スナップショット保存・復元| IS
     AC -->|Undo/Redo制御| IS
 
     RI -->|内部GpuInkインスタンスを制御| GI
     RI -->|チェックポイント復元| IS
 
+    GI -->|墨テクスチャ (ARGB)| CV
     RI -->|リプレイ墨テクスチャ| CV
 ```
 
@@ -51,19 +50,15 @@ graph TD
 - **責務 (Responsibility)**:
   - 墨汁描画システムの中核クラスです。
   - **ストローク描画**: 始点と終点の線幅・運筆方向・乾き具合（`StrokeSegment`）を受け取り、毛筆の繊維束や粒子をCPUバッファ上に高密度にラスタライズします。
-  - **DirectX Interop (Direct3D 11 & Direct2D 1.1) ゼロコピー描画**:
-    - [`GpuSimulator`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuSimulator.h) が保持する `B8G8R8A8_UNORM` ピクセルテクスチャを、Direct2D 1.1 の `ID2D1Bitmap1`（`CreateBitmapFromDxgiSurface`）として VRAM 内で直接共有します。
-    - 描画時に CPU への局所ダウンロード（リードバック）や CPU からの再アップロードを行わず、GPU 内で完結したゼロコピー描画を実現して PCIe バス負荷と描画遅延を最小化します。
-  - **物理にじみ進行**: バックグラウンドスレッドまたはフレーム更新時に、和紙の水分フィールド（`m_wetField`）と墨量バッファ（`m_ink`）を用いて墨汁の浸透・拡散（セルラーオートマトン計算）を進めます（GPU利用時は Compute Shader）。
-  - **終筆同期保証**: ストローク終了時（`EndStroke`）やスナップショット取得（`CaptureSnapshot`）において、CPU側で描画された終筆を含む最新の墨汁データを確実に GPU へフラッシュ・同期し、Undo 時に終筆が欠落する問題を防止します。
+  - **物理にじみ進行**: バックグラウンドスレッドまたはフレーム更新時に、和紙の水分フィールド（`m_wetField`）と墨量バッファ（`m_ink`）を用いて墨汁の浸透・拡散（セルラーオートマトン計算）を進めます。
+  - **GPU連携**: [`GpuSimulator`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuSimulator.h) が利用可能な場合は Direct3D 11 Compute Shader へ処理を委譲し、PCIeバス帯域を節約するため Dirty Rect のみを局所ダウンロードします。
 - **入力 (Input)**:
   - `DrawSegmentLinear(const StrokeSegment& seg)`: 線分パラメータ（座標、線幅、方向、乾き具合、濃度）
-  - `EndStroke()`: ストローク終了通知（終筆データの GPU 同期）
   - `UpdatePen(int z, double alt, double azim, bool isUp)`: ペン姿勢情報
   - `Initialize(HWND hWnd, int width, int height)`: 初期化寸法
 - **出力 (Output)**:
-  - `Render(HDC dc, int x, int y)`: Direct2D 1.1 共有ビットマップによる半紙DCへの墨汁転送
-  - `CaptureSnapshot(InkSnapshot& out)`: 現在の墨量・水分のスナップショット出力（GPUと最新同期済み）
+  - `Render(HDC dc, int x, int y)`: 描画された墨汁テクスチャのGDI転送
+  - `CaptureSnapshot(InkSnapshot& out)`: 現在の墨量・水分のスナップショット出力
 - **使用されている定数の名前 (Constants used)**:
   - 墨汁粒子アルファ基準値: `255`。
   - 打刻刻み幅 (`step`): `std::max(0.5, std::min(maxRadius * 0.06, 1.0))`（スタンプ間隔を最大1.0px以内に抑え、線の外周波打ち・数珠つなぎアーティファクトを排除）。
@@ -76,13 +71,11 @@ graph TD
 - **責務 (Responsibility)**:
   - Direct3D 11 のコンピュートシェーダー（Compute Shader CS 5.0）を用いて、GPU上で並列に墨汁の水分拡散・浸透シミュレーションを実行します。
   - Ping-Pong テクスチャ構造（墨量テクスチャ2面、水分テクスチャ2面）により、毎フレームの競合なし更新を実現します。
-  - 拡散計算後、カラー変換シェーダーにより墨汁ピクセルテクスチャ（`m_texPixel`: `DXGI_FORMAT_B8G8R8A8_UNORM`）を生成し、Direct2D 1.1 の DirectX Interop 共有用リソースとして提供します。
 - **入力 (Input)**:
   - `UploadFromCpu(const int* inkData, const uint8_t* wetData, ...)`: CPU側で描画された墨・水分
   - 定数バッファ `SimConstantBuffer`: 幅・高さ・物理シミュレーション係数
 - **出力 (Output)**:
-  - `GetPixelResource()`: Direct2D 1.1 が共有ビットマップとして直接参照するための Direct3D 11 テクスチャリソース
-  - `DownloadToPixelsRegion(...)`: 画像エクスポートやフォールバック用のピクセルバッファ取得
+  - `DownloadToPixelsRegion(...)`: 画面表示用のARGBピクセルバッファ（局所矩形のみ転送可能）
   - `DownloadInkAndWet(...)`: Undo/Redo保存用の墨量・水分バッファ
 - **使用されている定数の名前 (Constants used)**:
   - `SimConstantBuffer` 内の物理パラメータ:
