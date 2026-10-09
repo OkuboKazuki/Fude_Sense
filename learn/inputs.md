@@ -54,7 +54,7 @@ graph TD
   - `NOMINMAX`: Windows ヘッダーによる `min`/`max` マクロ汚染の防止。
 - **保持する主要フィールド**:
   - `x`, `y`: クライアント領域基準の座標 (px)
-  - `z`: ペン先とタブレット表面の距離/ホバーZ (0: 接触)
+  - `z`: ペン先とタブレット表面の距離/ホバーZ (0: 接触, 1以上: ホバー)
   - `pressure`: 正規化された筆圧 ($0.0 \sim 1.0$)
   - `altitudeDegrees`: 筆先の仰角 ($0.0^\circ$: 水平 $\sim 90.0^\circ$: 垂直)
   - `azimuthRad`: 筆先の方位角 ($0 \sim 2\pi$ ラジアン)
@@ -78,9 +78,9 @@ graph TD
   - `PenInputEvent& outEvent`: 正規化されたペン入力イベント
   - 戻り値 `bool`: パケット取得および変換の成否（成功時 `true`）
 - **使用されている定数の名前 (Constants used)**:
-  - `NOMINMAX`: マクロ汚染防止。
   - `gpWTPacket`: Wintab32 DLL から動的にロードされたパケット読み出し関数ポインタ。
-  - `minThreshold`: 微弱なノイズ筆圧の足切り閾値（通常 `0` または `maxPrs * 0.01`）。
+  - `minThreshold = 0`: 筆圧閾値。
+  - `wintab.GetMaxPressure`: コンテキスト固有の最大筆圧（フォールバック時 `1024.0`）。
 
 ---
 
@@ -89,6 +89,9 @@ graph TD
 - **責務 (Responsibility)**:
   - Windows 8 / 10 / 11 の標準ポインター入力 API (`WM_POINTERDOWN`, `WM_POINTERUPDATE`, `WM_POINTERUP`) を受け取り、Windows Ink 対応ペンやタッチデジタイザーからの入力を [`PenInputEvent`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Inputs/PenInputEvent.h) へ変換します。
   - ポインタータイプが `PT_PEN`（デジタイザーペン）であるか判定し、Windows が提供する $X/Y$ 傾き角（`tiltX`, `tiltY`: $-90^\circ \sim +90^\circ$）から三角関数を用いて仰角（altitude）と方位角（azimuth）を正確に数理変換します。
+    - $r = \sqrt{\tan^2(\text{tiltX}) + \tan^2(\text{tiltY})}$
+    - $\text{altRad} = \text{atan2}(1.0, r)$
+    - $\text{azimuthRad} = \text{atan2}(\tan(\text{tiltX}), -\tan(\text{tiltY}))$
 - **入力 (Input)**:
   - `HWND hWnd`: ウィンドウハンドル
   - `UINT message`: Windows メッセージ (`WM_POINTER*`)
@@ -117,6 +120,5 @@ graph TD
 - **出力 (Output)**:
   - 戻り値 `PenInputEvent`: 擬似ペン入力イベント（押下時は筆圧 `0.5`、高度角 `90.0` 度（垂直）として生成）
 - **使用されている定数の名前 (Constants used)**:
-  - `NOMINMAX`: マクロ汚染防止。
   - マウス押下時標準筆圧値: `0.5`。
   - 垂直高度角: `90.0`。

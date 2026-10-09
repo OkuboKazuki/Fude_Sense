@@ -15,12 +15,13 @@ graph TD
         MsgWT["WT_PACKET"]
         MsgPtr["WM_POINTER*"]
         MsgMouse["WM_LBUTTONDOWN 等"]
+        MsgKey["WM_KEYDOWN (F11, F9, Ctrl+Z, Ctrl+Y, Esc)"]
         MsgPaint["WM_PAINT"]
-        MsgTimer["WM_TIMER<br>(Replay / Transition / TitleAnim)"]
+        MsgTimer["WM_TIMER<br>(Replay: 101, Transition: 102, TitleAnim: 103)"]
     end
 
     subgraph EntryLayer ["アプリケーションエントリ"]
-        MainApp["WacomMT_Scribble.cpp<br>(WndProc / メインウィンドウ)"]
+        MainApp["WacomMT_Scribble.cpp<br>(WndProc / メインウィンドウ / ショートカット)"]
     end
 
     subgraph ServiceLayer ["Services レイヤー"]
@@ -39,15 +40,17 @@ graph TD
     MsgWT --> MainApp
     MsgPtr --> MainApp
     MsgMouse --> MainApp
+    MsgKey --> MainApp
     MsgPaint --> MainApp
     MsgTimer --> MainApp
 
     MainApp -->|タブレット初期化・解放| WM
     WM -->|DLL関数呼び出し| WU
-    MainApp -->|保存コマンド発行| IE
+    MainApp -->|画像保存・クリップボード発行| IE
 
     MainApp -->|入力パケット| Adapters
     Adapters --> Controllers
+    MainApp -->|ショートカットキー・UI操作| Controllers
     MainApp -->|描画トリガー| Views
 ```
 
@@ -63,16 +66,23 @@ graph TD
     - `WT_PACKET`: Wintab アダプタ経由で [`StrokeController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h) へ転送。
     - `WM_POINTERDOWN` / `WM_POINTERUPDATE` / `WM_POINTERUP`: Windows Pointer アダプタ経由で [`StrokeController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h) へ転送。
     - `WM_LBUTTONDOWN` / `WM_MOUSEMOVE` / `WM_LBUTTONUP`: [`AppController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/AppController.h) またはマウスアダプタへ転送。
-    - `WM_CHAR`: お手本文字の入力ハンドリング。
+    - `WM_CHAR`: お手本文字の入力ハンドリング（IME確定文字）。
     - `WM_PAINT`: [`MainView::Render`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Views/MainView.h) の実行。
     - `WM_SIZE`: レイアウト再計算と描画エンジンのリサイズ。
     - `WM_TIMER`:
-      - `REPLAY_TIMER_ID`: 運筆リプレイ再生時刻の進行。
-      - `TRANSITION_TIMER_ID`: タイトル画面からスタジオ画面へのアルファブレンド遷移演出の進行。
-      - `TITLE_ANIM_TIMER_ID`: タイトル画面でのロゴ・テキストのブレスアニメーション更新。
-  - **全画面表示 (F11)**: `ToggleFullscreen` 関数により、モニタ全体へのボーダーレス全画面化と通常ウィンドウ復帰を管理。
-  - **紙を大きくする（横向き）表示 (F9)**: メニューを畳んで半紙を横向き最大化表示。
-  - **ショートカット制御 (IsStudioAcceptingKeys)**: タイトル画面および画面遷移中は F11 以外の制作キーをブロック。
+      - `REPLAY_TIMER_ID` (`101`): 運筆リプレイ再生時刻の進行。
+      - `TRANSITION_TIMER_ID` (`102`): タイトル画面からスタジオ画面へのアルファブレンド遷移演出の進行。
+      - `TITLE_ANIM_TIMER_ID` (`103`): タイトル画面でのロゴ・テキストのブレスアニメーション更新。
+  - **キーボードショートカット制御**:
+    - `F11`: `ToggleFullscreen` によるボーダーレス全画面表示切替（マルチモニタ対応、元のウィンドウスタイルと配置を完全退避・復元。お手本入力中も常時有効）。
+    - `F9`: 紙を大きくする（横向き）表示の切り替え（`AppController::SetPaperOnly`）。
+    - `Esc`: 全消し確認モーダルの呼び出し / モーダル表示中のキャンセル。
+    - `Ctrl + Z`: 一画戻す（`AppController::UndoStroke`）。
+    - `Ctrl + Shift + Z` / `Ctrl + Y`: 一画復元（`AppController::RedoStroke`）。
+    - `Alt + /` / `Alt + ?`: バージョン情報ダイアログ（About）。
+  - **入力保護 ([`IsStudioAcceptingKeys`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/WacomMT_Scribble.cpp#L81))**:
+    - タイトル画面および画面遷移中は、F11 以外のすべてのショートカットを遮断し、裏でスタジオ状態が変わることを防止。
+    - お手本文字の入力中（`g_appState.otehon.isTyping`）は、文字入力以外のショートカットを一時遮断。
 - **入力 (Input)**:
   - Windows メッセージ（`HWND`, `UINT message`, `WPARAM wParam`, `LPARAM lParam`）
 - **出力 (Output)**:
@@ -119,18 +129,25 @@ graph TD
 ### 2.4 [ImageExporter.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/ImageExporter.h) / [ImageExporter.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/ImageExporter.cpp)
 
 - **責務 (Responsibility)**:
-  - 半紙上に描かれた墨汁作品を、デスクトップへの画像ファイル保存（高画質 WIC PNG / BMP 形式）またはクリップボードへの転送（DIB 形式）を行う画像エクスポートサービスです。
-  - 画面上の縮小表示ではなく、半紙のネイティブ解像度で墨汁テクスチャ、お手本文字、および朱赤の落款印を綺麗に合成して出力します。
-  - **保存失敗時のクリーンアップと通知**: 保存処理の途中でディスク容量不足や書き込み失敗が発生した場合、中途半端な壊れたファイルを残さないよう削除（`DeleteFileW`）し、`AppState::SetSaveFeedback` を介してエラー通知フラグを立ててユーザーに明示します。
+  - 半紙上に描かれた墨汁作品を、デスクトップへの高画質画像ファイル保存（WIC PNG / BMP 形式）またはクリップボードへの転送（`CF_BITMAP` 形式）を行う画像エクスポートサービスです。
+  - **出力内容**:
+    - お手本や下敷き罫線は揮毫の下敷きであって作品の一部ではないため書き出しには含めず、純粋に和紙の地色の上に墨汁ストローク（`gpuInk.Render`）のみを高解像度でレンダリングして出力します。
+  - **ファイル命名規則**:
+    - デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png`（WIC失敗時は `.bmp`）として保存。
+  - **破損ファイルのクリーンアップ**:
+    - 保存途中で容量不足や書き込み失敗が発生した場合、壊れたファイルを残さないよう直ちに削除（`DeleteFileW`）を実行。
+  - **フィードバック通知**:
+    - `AppState::SetSaveFeedback` を介して、成功時は緑（`✓ デスクトップにPNG保存しました` など）、失敗時は赤のエラーメッセージをポップアップ表示します。
 - **入力 (Input)**:
   - `HWND hWnd`: 親ウィンドウ
   - `GpuInk& gpuInk`: 墨テクスチャ
-  - `AppState& state`: 半紙の向き・寸法・お手本設定
+  - `AppState& state`: 半紙の寸法・UI状態
   - `bool toClipboard`: クリップボードにコピーするか、ファイル保存するか
 - **出力 (Output)**:
-  - ファイル出力（デスクトップ上に `Fudesence_YYYYMMDD_HHMMSS.png` または `.bmp`）
-  - クリップボードへのビットマップデータ格納
+  - ファイル出力（デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png` または `.bmp`）
+  - クリップボードへのビットマップデータ格納 (`CF_BITMAP`)
   - 戻り値 `bool`: エクスポート成否
 - **使用されている定数の名前 (Constants used)**:
-  - `CF_DIB`: Win32 クリップボード形式（Device Independent Bitmap）。
+  - `CF_BITMAP`: Win32 クリップボード形式。
   - `GUID_ContainerFormatPng`: WIC (Windows Imaging Component) の PNG エンコーダー GUID。
+  - `GUID_WICPixelFormat24bppBGR`: WIC 24bpp BGR ピクセルフォーマット。
