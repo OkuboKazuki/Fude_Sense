@@ -31,8 +31,10 @@
   - 左側フローティングメニュー、硯パネル、モーダル、文机背景などの UI 部品は Win32 GDI で実装。
   - 軽量・低レイテンシで確実な描画とフリッカーフリー（ダブルバッファリング）を実現し、Windows 10/11 の GDI Scaling により高 DPI 環境でもシャープに描画されます。
 - **墨汁物理シミュレーション層 (Direct2D / Direct3D 11 Compute Shader)**:
-  - 半紙上の墨汁浸透・水分拡散・セルラーオートマトン計算には Direct3D 11 Compute Shader および Direct2D を採用。
-  - 運筆の筆跡周辺（Dirty Rect）のみを GPU から局所リードバックすることで、PCIe バス帯域の消費を最小限に抑え、低遅延なリアルタイム運筆レスポンスを実現しています。
+  - 半紙上の墨汁浸透・水分拡散・セルラーオートマトン計算には Direct3D 11 Compute Shader を採用。
+  - Direct3D 11 で生成した `B8G8R8A8_UNORM` ピクセルテクスチャを Direct2D 1.1 の `ID2D1Bitmap1`（DirectX Interop: `CreateBitmapFromDxgiSurface`）として VRAM 内で直接共有（ゼロコピー描画）。
+  - 毎フレームの GPU ↔ CPU 往復転送（PCIe バス帯域の消費）を完全撤廃し、極めて低遅延なリアルタイム運筆レスポンスを実現しています。
+  - 半紙への墨汁描画は `SRCAND` による乗算合成を行うことで、アンチエイリアス境界の白縁取りを解消し、和紙の地色に自然に墨が染み込む表現を可能にしています。
 
 ### 状態管理のファサード設計 (AppState)
 - `AppState` は、Models (筆・紙・お手本・物理パラメータ), Controllers (運筆・UI制御), Views (各UIパネル) の間を仲介する統合ファサード（Facade）として設計されています。
