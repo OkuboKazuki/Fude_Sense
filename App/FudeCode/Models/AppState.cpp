@@ -140,7 +140,7 @@ void AppState::Layout(int w, int h) {
         int analysisTop = topOff + importH + 10;
 
         int availSubH = ui.rSub.bottom - analysisTop - 18;
-        int replayH = 126;
+        int replayH = 140;
         int metricsH = 106;
         int compassH = 192;
         int graphH = (std::max)(150, availSubH - replayH - metricsH - compassH - 42);
@@ -161,11 +161,15 @@ void AppState::Layout(int w, int h) {
 
         UpdateReplaySeekThumb();
 
-        int btnY = repTop + 62;
+        // 運筆再生ボタンだけ一回り大きくして目立たせる。ほかのボタンは元の高さのまま、
+        // 運筆再生ボタンの高さの中央へそろえる。
+        int playY = repTop + 62;
+        int playH = 60;
         int btnH = 46;
+        int btnY = playY + (playH - btnH) / 2;
         ui.rReplayResetBtn = { repLeft + 16, btnY, repLeft + 16 + 42, btnY + btnH };
         ui.rReplayPrevBtn  = { ui.rReplayResetBtn.right + 8, btnY, ui.rReplayResetBtn.right + 8 + 44, btnY + btnH };
-        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, btnY, ui.rReplayPrevBtn.right + 8 + 120, btnY + btnH };
+        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, playY, ui.rReplayPrevBtn.right + 8 + 164, playY + playH };
         ui.rReplayNextBtn  = { ui.rReplayPlayBtn.right + 8, btnY, ui.rReplayPlayBtn.right + 8 + 44, btnY + btnH };
 
         int spdW = 54;

@@ -148,7 +148,9 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     COLORREF playBg = !hasRecording ? DIS_BG : isPlaying ? (hPlay ? RGB(200, 70, 60) : RGB(170, 50, 45)) : (hPlay ? RGB(40, 160, 230) : RGB(28, 130, 200));
     COLORREF playBorder = !hasRecording ? DIS_BORDER : (isPlaying ? RGB(255, 110, 100) : RGB(80, 190, 255));
     Box(dc, state.ui.rReplayPlayBtn, playBg, playBorder, 1, 6);
-    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 一時停止" : L"▶ 運筆再生", fBtnIcon, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
+    HFONT fPlay = CreateCustomFont(26, FW_BOLD);
+    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 一時停止" : L"▶ 運筆再生", fPlay, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
+    DeleteObject(fPlay);
 
     // 次画 (⏭)
     bool hNext = (state.ui.hoverReplayBtn == 4);
