@@ -219,6 +219,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     state.otehon.isTyping = false;
     state.otehon.isDraggingOpacity = false;
     state.brush.isDraggingHardness = false;
+    state.ui.isDraggingInkAmount = false;
     state.ui.hoverPaperOnly = 0;
 
     // 書いていた墨を控える（半紙を作り直すと消えるため）
@@ -670,7 +671,16 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     }
 
     // 4. 右側 硯・墨補充・一画戻す・一画復元・全消し
-    if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
+    if (PtIn(ui.rInkBadge, pt)) {
+        // 墨残量ゲージ: 押した位置へ残量を合わせ、離すまで左右の動きに追従させる
+        ui.isDraggingInkAmount = true;
+        SetCapture(hWnd);
+        state.SetInkAmountFromBadgeX(pt.x);
+        // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
+        ui.suppressPenUntilLift = true;
+        InvalidateRect(hWnd, &ui.rRight, FALSE);
+        return true;
+    } else if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
         RefillByPress(state, penPressure);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
@@ -706,6 +716,11 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
     }
     if (state.replay.isDraggingSeekBar) {
         state.replay.isDraggingSeekBar = false;
+        ReleaseCapture();
+        handled = true;
+    }
+    if (state.ui.isDraggingInkAmount) {
+        state.ui.isDraggingInkAmount = false;
         ReleaseCapture();
         handled = true;
     }
@@ -783,6 +798,12 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         norm = Clamp(norm, 0.0, 1.0);
         state.brush.hardness = 0.1 + norm * (2.0 - 0.1);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
+        return true;
+    }
+
+    if (ui.isDraggingInkAmount && (wParam & MK_LBUTTON)) {
+        state.SetInkAmountFromBadgeX(pt.x);
+        InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     }
 
@@ -892,6 +913,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = 4;
         else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
         else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = 6;
+        else if (PtIn(ui.rInkBadge, pt)) ui.hoverInkStone = 7;
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 

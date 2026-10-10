@@ -195,6 +195,9 @@ struct UIState {
     // ペンで硯・「墨を補充」を押している最中。離すまでの筆圧に応じて墨を含ませる。
     bool isPenRefilling = false;
 
+    // 硯の上の墨残量ゲージをつかんで、残量を直接動かしている最中
+    bool isDraggingInkAmount = false;
+
     // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
     // 硯が無いので、墨の補充は半紙の右のボタンから行う。
     bool paperOnly = false;
@@ -234,6 +237,7 @@ struct UIState {
     UIWidget rAnalysisImportBtn{};   // 運筆アーカイブを読み込む
     UIWidget rAnalysisBackBtn{};     // 読み込んだ記録を閉じて自分の記録に戻る（表示中だけ）
     UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
+    UIWidget rInkBadge{};          // 右パネル: 硯の上の墨残量ゲージ（左右に動かして残量を決める）
     UIWidget rPaperOnlyBtn{};      // 右パネル: 紙だけ表示に入る
     UIWidget rPaperOnlyExitBtn{};  // 紙だけ表示中: 通常表示に戻る（墨の補充は rInkRefillBtn を半紙の右へ置き直す）
     UIWidget rPaperOnlyClearBtn{}; // 紙だけ表示中: 筆跡を消す（確認なしで消去）
@@ -281,6 +285,9 @@ public:
 
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);
+
+    // 墨残量ゲージ上の横位置 x に合わせて墨の残量を決める（左端が空、右端が満タン）
+    void SetInkAmountFromBadgeX(int x);
 
     // シークバーのツマミ位置だけを再計算する
     void UpdateReplaySeekThumb();
