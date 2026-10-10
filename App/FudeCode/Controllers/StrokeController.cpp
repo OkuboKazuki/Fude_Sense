@@ -25,6 +25,14 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     gpuInk.UpdatePen(event.z, event.altitudeDegrees, event.azimuthRad, event.pressure <= 0.0);
     m_lastRawPressure = event.pressure;
 
+    // モーダルダイアログ（保存/読み込み等）表示中で親ウィンドウが無効化されている間は運筆を破棄し、
+    // ダイアログを閉じた後もペンが離れるまで描画をロックする
+    if (hWnd && !IsWindowEnabled(hWnd)) {
+        ResetStroke(gpuInk, &state);
+        state.ui.suppressPenUntilLift = true;
+        return;
+    }
+
     // 硯・「墨を補充」をペンで押している間は、強く押し込むほど墨を継ぎ足す
     if (state.ui.isPenRefilling) {
         if (event.pressure > 0.0) {
@@ -73,6 +81,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // 解析タブ表示中は運筆そのものを受け付けない（紙だけ表示ではリプレイを描かないので受け付ける）。
     // タイトル画面表示中や遷移アニメーション中も受け付けない。
     bool canDrawInk = (state.currentScreen == AppScreen::Studio)
+        && (!hWnd || IsWindowEnabled(hWnd))
         && !state.isTransitioning
         && !state.ui.showClearConfirm
         && (state.ui.paperOnly || state.ui.leftTab != LeftTab::Analysis)

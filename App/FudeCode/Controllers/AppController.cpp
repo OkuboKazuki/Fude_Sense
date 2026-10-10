@@ -564,14 +564,18 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 }
             } else if (ui.leftTab == LeftTab::Save) {
                 if (PtIn(ui.rSaveBtnPng, pt)) {
+                    state.ui.suppressPenUntilLift = true;
                     ImageExporter::ExportCanvas(hWnd, gpuInk, state, false);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnClip, pt)) {
+                    state.ui.suppressPenUntilLift = true;
                     ImageExporter::ExportCanvas(hWnd, gpuInk, state, true);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnJson, pt)) {
+                    // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
+                    state.ui.suppressPenUntilLift = true;
                     switch (TrajectorySession::PromptSaveArchiveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
                     case TrajectorySession::SaveResult::Saved:
                         state.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
@@ -582,9 +586,13 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     case TrajectorySession::SaveResult::Canceled:
                         break;
                     }
+                    // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
+                    state.ui.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnCsv, pt)) {
+                    // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
+                    state.ui.suppressPenUntilLift = true;
                     switch (TrajectorySession::PromptSaveArchiveCsv(hWnd, state.trajectory)) {
                     case TrajectorySession::SaveResult::Saved:
                         state.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
@@ -595,6 +603,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     case TrajectorySession::SaveResult::Canceled:
                         break;
                     }
+                    // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
+                    state.ui.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
