@@ -20,15 +20,15 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         RECT rCard = { ui.rSub.left + 18, ui.rSubLarge.bottom + 14, ui.rSub.right - 18, ui.rSubLarge.bottom + 134 };
         Box(dc, rCard, RGB(32, 35, 44), RGB(52, 58, 72), 1, 10);
 
-        HFONT fTitle = CreateCustomFont(20, FW_BOLD);
-        RECT rTitle = { rCard.left + 18, rCard.top + 14, rCard.left + 240, rCard.top + 42 };
+        HFONT fTitle = CreateCustomFont(28, FW_BOLD);
+        RECT rTitle = { rCard.left + 18, rCard.top + 10, rCard.left + 300, rCard.top + 46 };
         DrawTextCustom(dc, rTitle, L"筆の硬さ（感度補正）", fTitle, RGB(225, 230, 240));
 
         wchar_t valBuf[64];
         double hardness = state.brush.hardness;
         const wchar_t* hardState = (hardness < 0.3) ? L"超極軟" : ((hardness < 0.7) ? L"柔らかめ" : ((hardness > 1.2) ? L"硬め" : L"標準"));
         swprintf_s(valBuf, 64, L"%.2f (%s)", hardness, hardState);
-        RECT rVal = { rCard.right - 200, rCard.top + 14, rCard.right - 18, rCard.top + 42 };
+        RECT rVal = { rCard.right - 210, rCard.top + 10, rCard.right - 18, rCard.top + 46 };
         DrawTextCustom(dc, rVal, valBuf, fTitle, RGB(110, 180, 255), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
         DeleteObject(fTitle);
 
