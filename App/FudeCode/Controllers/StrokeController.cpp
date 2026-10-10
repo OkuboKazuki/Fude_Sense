@@ -267,7 +267,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             if (now - m_lastInkStoneInvalidateTick >= 33) {
                 RECT rcStoneArea = {
                     state.ui.rInkStoneLarge.left,
-                    state.ui.rInkStoneLarge.top - 36,
+                    state.ui.rInkStoneLarge.top - (int)(36 * state.ui.inkStoneScale + 0.5),
                     state.ui.rInkStoneLarge.right,
                     state.ui.rInkStoneLarge.bottom
                 };
@@ -294,7 +294,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
             if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
                 RECT rcStoneArea = {
                     state.ui.rInkStoneLarge.left,
-                    state.ui.rInkStoneLarge.top - 36,
+                    state.ui.rInkStoneLarge.top - (int)(36 * state.ui.inkStoneScale + 0.5),
                     state.ui.rInkStoneLarge.right,
                     state.ui.rInkStoneLarge.bottom
                 };
