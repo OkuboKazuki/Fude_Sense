@@ -509,6 +509,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// これがないとホームボタンでタイトルへ戻った後、マウスのクリックが
 		// ロックに阻まれてスタジオ画面へ入れなくなる。
 		g_appState.ui.suppressPenUntilLift = false;
+		g_appState.ui.isWiping = false;
 
 		if (s_isMouseDrawing)
 		{
@@ -616,6 +617,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
 			g_appState.ui.suppressPenUntilLift = false;
 			g_appState.ui.isPenRefilling = false;
+			g_appState.ui.isWiping = false;
 		}
 		break;
 	}
