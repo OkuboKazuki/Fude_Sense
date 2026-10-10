@@ -16,6 +16,8 @@ public:
     static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure = -1.0);
     static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state);
     static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state);
+    // カーソル形状の制御（半紙上は十字カーソル、テキスト入力欄はIビーム、UIパネルや外側は標準カーソル）
+    static bool OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state);
     // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。
     // 入力中なら true を返し、呼び出し側は他のキー処理を行わない。
     static bool OnChar(HWND hWnd, wchar_t ch, AppState& state);

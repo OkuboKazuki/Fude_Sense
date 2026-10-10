@@ -902,3 +902,64 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     return true;
 }
 
+bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state) {
+    // クライアント領域外（タイトルバーやウィンドウ枠など）はOS標準のサイズ変更カーソル等に委ねる
+    if (LOWORD(lParam) != HTCLIENT) {
+        return false;
+    }
+
+    // タイトル画面表示中、または墨染めフェード遷移中は通常の矢印カーソル
+    if (state.currentScreen != AppScreen::Studio || state.isTransitioning) {
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        return true;
+    }
+
+    POINT pt;
+    if (!GetCursorPos(&pt) || !ScreenToClient(hWnd, &pt)) {
+        return false;
+    }
+
+    // 全消し確認モーダル表示中はモーダル操作のため矢印カーソル
+    if (state.ui.showClearConfirm) {
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        return true;
+    }
+
+    // 紙だけ表示中の場合
+    if (state.ui.paperOnly) {
+        // 右端の操作帯（ボタン領域）上なら矢印カーソル
+        if (PtIn(state.ui.rPaperOnlyBar, pt)) {
+            SetCursor(LoadCursor(NULL, IDC_ARROW));
+            return true;
+        }
+        // 半紙領域内なら十字カーソル
+        if (PtIn(state.ui.rPaper, pt)) {
+            static HCURSOR hCursorCross = LoadCursor(NULL, IDC_CROSS);
+            SetCursor(hCursorCross);
+            return true;
+        }
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        return true;
+    }
+
+    // 通常スタジオ画面
+    // お手本テキスト入力ボックス上であれば I ビーム（テキストカーソル）
+    if (state.ui.leftTab == LeftTab::Otehon && PtIn(state.ui.rOtehonInputBox, pt)) {
+        SetCursor(LoadCursor(NULL, IDC_IBEAM));
+        return true;
+    }
+
+    // 半紙（キャンバス）領域内であれば十字カーソル
+    if (PtIn(state.ui.rPaper, pt)) {
+        static HCURSOR hCursorCross = LoadCursor(NULL, IDC_CROSS);
+        SetCursor(hCursorCross);
+        return true;
+    }
+
+    // UIパネル（左メニュー・右の硯・文机背景など）は標準矢印カーソル
+    static HCURSOR hCursorArrow = LoadCursor(NULL, IDC_ARROW);
+    SetCursor(hCursorArrow);
+    return true;
+}
+
+
