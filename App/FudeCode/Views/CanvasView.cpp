@@ -283,6 +283,8 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
 
 void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
     if (!state.otehon.isVisible) return;
+    // 解析タブ表示中は、お手本のON/OFFにかかわらず非表示にする
+    if (state.ui.leftTab == LeftTab::Analysis) return;
 
     const UIState& ui = state.ui;
     const double opacity = state.otehon.opacity;

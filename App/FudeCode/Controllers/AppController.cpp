@@ -41,10 +41,22 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     state.trajectory.Clear();
     state.undo.Clear();
     state.replay.Reset();
-    // 読み込んだ記録を見ている間は、消えるのは自分の墨と記録だけ。解析はそのまま続ける
+
+    // 読み込んだ記録を見ている間であれば、インポート状態を解除する
     if (state.viewingImport) {
-        SyncReplayTimeline(hWnd, state);
+        if (state.replay.state == ReplayState::Playing) {
+            state.replay.state = ReplayState::Paused;
+            KillTimer(hWnd, REPLAY_TIMER_ID);
+        }
+        state.viewingImport = false;
+        state.importedName.clear();
+        state.importedTrajectory = TrajectorySession();
     }
+
+    // 全消し確定時は「筆」タブへ移動
+    state.ui.leftTab = LeftTab::Brush;
+    state.replay.state = ReplayState::Stopped;
+
     state.ui.showClearConfirm = false;
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
@@ -136,6 +148,42 @@ void AppController::CloseImportedArchive(HWND hWnd, AppState& state) {
     state.importedName.clear();
     state.importedTrajectory = TrajectorySession();  // 読み込んだ記録のメモリを手放す
     ShowAnalysisSessionFromEnd(hWnd, state);
+}
+
+void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
+    if (state.ui.leftTab == newTab) {
+        return;
+    }
+
+    // 解析メニューでインポートした後、別のタブに移動したときにインポート状態を解除
+    if (state.viewingImport && newTab != LeftTab::Analysis) {
+        CloseImportedArchive(hWnd, state);
+    }
+
+    state.ui.leftTab = newTab;
+
+    if (newTab == LeftTab::Analysis) {
+        SyncReplayTimeline(hWnd, state);
+        if (state.replay.currentTimeMs == 0) {
+            // 開いた直後は書き上がった状態を見せる
+            state.replay.currentTimeMs = state.replay.totalDurationMs;
+            state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
+                state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+        }
+        state.replay.state = ReplayState::Paused;
+    } else {
+        if (state.replay.state == ReplayState::Playing) {
+            KillTimer(hWnd, REPLAY_TIMER_ID);
+        }
+        state.replay.state = ReplayState::Stopped;
+    }
+
+    RECT rc = { 0, 0, 0, 0 };
+    GetClientRect(hWnd, &rc);
+    if (rc.right > 0 && rc.bottom > 0) {
+        state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+    }
+    InvalidateRect(hWnd, NULL, FALSE);
 }
 
 // 直前の1画を取り消す。
@@ -332,6 +380,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
 
     // 1.8 ホームボタン「🏠」（タイトル画面へ戻る）
     if (PtIn(ui.rTbHomeBtn, pt)) {
+        if (state.viewingImport) {
+            CloseImportedArchive(hWnd, state);
+        }
         state.currentScreen = AppScreen::Title;
         state.isTransitioning = false;
         state.transitionProgress = 0.0f;
@@ -355,36 +406,19 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 3. 開いているときのフローティングメニュータブ・詳細操作
     if (ui.isSubPanelOpen) {
         if (PtIn(ui.rTbBrush, pt)) {
-            ui.leftTab = LeftTab::Brush;
-            state.replay.state = ReplayState::Stopped;
-            InvalidateRect(hWnd, NULL, FALSE);
+            SelectTab(hWnd, state, LeftTab::Brush);
             return true;
         } else if (PtIn(ui.rTbPaper, pt)) {
-            ui.leftTab = LeftTab::Paper;
-            state.replay.state = ReplayState::Stopped;
-            InvalidateRect(hWnd, NULL, FALSE);
+            SelectTab(hWnd, state, LeftTab::Paper);
             return true;
         } else if (PtIn(ui.rTbAnalysis, pt)) {
-            ui.leftTab = LeftTab::Analysis;
-            SyncReplayTimeline(hWnd, state);
-            if (state.replay.currentTimeMs == 0) {
-                // 開いた直後は書き上がった状態を見せる
-                state.replay.currentTimeMs = state.replay.totalDurationMs;
-                state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-            }
-            state.replay.state = ReplayState::Paused;
-            state.Layout(w, h);
-            InvalidateRect(hWnd, NULL, FALSE);
+            SelectTab(hWnd, state, LeftTab::Analysis);
             return true;
         } else if (PtIn(ui.rTbSave, pt)) {
-            ui.leftTab = LeftTab::Save;
-            state.replay.state = ReplayState::Stopped;
-            InvalidateRect(hWnd, NULL, FALSE);
+            SelectTab(hWnd, state, LeftTab::Save);
             return true;
         } else if (PtIn(ui.rTbOtehon, pt)) {
-            ui.leftTab = LeftTab::Otehon;
-            state.replay.state = ReplayState::Stopped;
-            InvalidateRect(hWnd, NULL, FALSE);
+            SelectTab(hWnd, state, LeftTab::Otehon);
             return true;
         }
 
