@@ -141,7 +141,7 @@ void AppState::Layout(int w, int h) {
 
         int availSubH = ui.rSub.bottom - analysisTop - 18;
         int replayH = 126;
-        int metricsH = 88;
+        int metricsH = 106;
         int compassH = 192;
         int graphH = (std::max)(150, availSubH - replayH - metricsH - compassH - 42);
 

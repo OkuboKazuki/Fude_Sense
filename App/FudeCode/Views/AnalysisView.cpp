@@ -211,20 +211,21 @@ void AnalysisView::DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& sta
     auto DrawMetricItem = [&](int colIdx, const wchar_t* title, const wchar_t* valStr, COLORREF valColor) {
         RECT rItem = { rBox.left + 10 + colIdx * colW, rBox.top + 6, rBox.left + 10 + (colIdx + 1) * colW - 4, rBox.bottom - 6 };
         
-        RECT rTitle = { rItem.left, rItem.top, rItem.right, rItem.top + 26 };
-        HFONT fTitle = CreateCustomFont(18, FW_BOLD);
-        Center(dc, rTitle, title, fTitle, RGB(150, 160, 180));
+        // 項目名は列の幅（約 96px）に収まる上限の大きさ
+        RECT rTitle = { rItem.left, rItem.top, rItem.right, rItem.top + 30 };
+        HFONT fTitle = CreateCustomFont(22, FW_BOLD);
+        Center(dc, rTitle, title, fTitle, RGB(245, 248, 252));
         DeleteObject(fTitle);
 
-        RECT rVal = { rItem.left, rItem.top + 26, rItem.right, rItem.bottom };
-        HFONT fVal = CreateCustomFont(30, FW_BOLD);
+        RECT rVal = { rItem.left, rItem.top + 30, rItem.right, rItem.bottom };
+        HFONT fVal = CreateCustomFont(38, FW_BOLD);
         Center(dc, rVal, valStr, fVal, valColor);
         DeleteObject(fVal);
     };
 
     wchar_t bufPrs[32];
     swprintf_s(bufPrs, 32, L"%.0f%%", curPrs * 100.0);
-    DrawMetricItem(0, L"筆圧 (圧)", bufPrs, curPrs > 0.05 ? RGB(80, 210, 255) : RGB(160, 170, 185));
+    DrawMetricItem(0, L"筆圧 (圧)", bufPrs, curPrs > 0.05 ? RGB(80, 210, 255) : RGB(245, 248, 252));
 
     wchar_t bufTilt[32];
     swprintf_s(bufTilt, 32, L"%.0f°", curAlt);
@@ -243,8 +244,8 @@ void AnalysisView::DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& sta
     }
     // 乾き始める残量（KASURE_START_LEVEL = 60%）を下回ったら色を変える。
     // 見た目のかすれが現れるのはもっと後（残量 25～30% あたり）。
-    COLORREF inkColor = (curInk < 0.0) ? RGB(160, 170, 185)
-                      : (curInk >= InkModel::KASURE_START_LEVEL ? RGB(225, 230, 240) : RGB(255, 140, 120));
+    COLORREF inkColor = (curInk < 0.0 || curInk >= InkModel::KASURE_START_LEVEL)
+                      ? RGB(245, 248, 252) : RGB(255, 140, 120);
     DrawMetricItem(3, L"墨残量", bufInk, inkColor);
 
     wchar_t bufStroke[32];
@@ -346,15 +347,15 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
 
     // 右側数値詳細リスト
     int infoLeft = centerX + radius + 18;
-    int infoTop = centerY - 50;  // 3行（1行 34px）を円の高さの中央へ
-    HFONT fInfo = CreateCustomFont(19, FW_NORMAL);
-    HFONT fInfoB = CreateCustomFont(23, FW_BOLD);
+    int infoTop = centerY - 59;  // 3行（1行 40px）を円の高さの中央へ
+    HFONT fInfo = CreateCustomFont(22, FW_BOLD);
+    HFONT fInfoB = CreateCustomFont(28, FW_BOLD);
 
     auto DrawInfoRow = [&](int rowIdx, const wchar_t* label, const wchar_t* val, COLORREF c) {
-        int y = infoTop + rowIdx * 34;
-        RECT rL = { infoLeft, y, infoLeft + 64, y + 32 };
-        DrawTextCustom(dc, rL, label, fInfo, RGB(150, 160, 178));
-        RECT rV = { infoLeft + 68, y, rBox.right - 8, y + 32 };
+        int y = infoTop + rowIdx * 40;
+        RECT rL = { infoLeft, y, infoLeft + 72, y + 38 };
+        DrawTextCustom(dc, rL, label, fInfo, RGB(245, 248, 252));
+        RECT rV = { infoLeft + 76, y, rBox.right - 8, y + 38 };
         DrawTextCustom(dc, rV, val, fInfoB, c);
     };
 
