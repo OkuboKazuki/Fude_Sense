@@ -5,6 +5,19 @@
 #include <cmath>
 #include <algorithm>
 
+namespace {
+
+// その書体で描いたときの文字列の幅。桁数や文言で幅が変わる表示を、はみ出さずに並べるのに使う。
+int TextWidth(HDC dc, HFONT f, const wchar_t* s) {
+    HFONT old = (HFONT)SelectObject(dc, f);
+    SIZE ext{ 0, 0 };
+    GetTextExtentPoint32W(dc, s, lstrlenW(s), &ext);
+    SelectObject(dc, old);
+    return ext.cx;
+}
+
+} // namespace
+
 void AnalysisView::Draw(HDC dc, const AppState& state) {
     DrawImportBar(dc, state);
     DrawReplayControls(dc, state.ui.rAnalysisReplayBox, state);
@@ -20,7 +33,7 @@ void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
     bool hovImport = (ui.hoverReplayBtn == 9);
     Box(dc, ui.rAnalysisImportBtn, hovImport ? RGB(68, 58, 34) : RGB(48, 42, 26),
         hovImport ? RGB(200, 155, 55) : RGB(135, 105, 40), 1, 8);
-    HFONT fImport = CreateCustomFont(15, FW_BOLD);
+    HFONT fImport = CreateCustomFont(22, FW_BOLD);
     Center(dc, ui.rAnalysisImportBtn,
         state.viewingImport ? L"📂 別の運筆アーカイブを読み込む" : L"📂 運筆アーカイブを読み込んで解析 (JSON / CSV)",
         fImport, RGB(255, 246, 225));
@@ -30,7 +43,7 @@ void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
         bool hovBack = (ui.hoverReplayBtn == 10);
         Box(dc, ui.rAnalysisBackBtn, hovBack ? RGB(46, 52, 64) : RGB(34, 38, 46),
             hovBack ? RGB(100, 120, 160) : RGB(58, 66, 84), 1, 8);
-        HFONT fBack = CreateCustomFont(15, FW_BOLD);
+        HFONT fBack = CreateCustomFont(22, FW_BOLD);
         Center(dc, ui.rAnalysisBackBtn, L"↩ 自分の記録に戻る", fBack, RGB(220, 228, 242));
         DeleteObject(fBack);
     }
@@ -51,17 +64,6 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     const COLORREF DIS_TEXT   = RGB(88, 95, 110);
 
     // 1. ヘッダー: タイトル & 時刻表示
-    RECT rHeader = { rBox.left + 14, rBox.top + 8, rBox.right - 264, rBox.top + 28 };
-    HFONT fHeader = CreateCustomFont(14, FW_BOLD);
-    if (state.viewingImport) {
-        std::wstring title = L"読み込んだ記録: " + state.importedName;
-        DrawTextCustom(dc, rHeader, title.c_str(), fHeader, RGB(240, 200, 110),
-            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-    } else {
-        DrawTextCustom(dc, rHeader, L"運筆プロセス再現（筆圧可視化＆解析）", fHeader, RGB(210, 220, 240));
-    }
-    DeleteObject(fHeader);
-
     double curSec = static_cast<double>(rep.currentTimeMs) / 1000.0;
     double totSec = static_cast<double>(rep.totalDurationMs) / 1000.0;
     int curStrokeDisplay = (rep.currentSample.strokeIndex >= 0) ? (rep.currentSample.strokeIndex + 1) : ((strokeCount > 0) ? 1 : 0);
@@ -73,10 +75,23 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
         swprintf_s(timeBuf, 64, L"0.00s / 0.00s (筆記待ち)");
     }
 
-    RECT rTime = { rBox.right - 260, rBox.top + 8, rBox.right - 14, rBox.top + 28 };
-    HFONT fTime = CreateCustomFont(13, FW_BOLD);
+    // 時刻表示は桁数で幅が変わるので、先に幅を測って右へ寄せ、残りをタイトルに使う
+    HFONT fTime = CreateCustomFont(20, FW_BOLD);
+    RECT rTime = { rBox.right - 14 - TextWidth(dc, fTime, timeBuf), rBox.top + 6, rBox.right - 14, rBox.top + 30 };
     DrawTextCustom(dc, rTime, timeBuf, fTime, RGB(160, 190, 230), DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
     DeleteObject(fTime);
+
+    RECT rHeader = { rBox.left + 14, rBox.top + 6, rTime.left - 12, rBox.top + 30 };
+    HFONT fHeader = CreateCustomFont(20, FW_BOLD);
+    if (state.viewingImport) {
+        std::wstring title = L"読み込んだ記録: " + state.importedName;
+        DrawTextCustom(dc, rHeader, title.c_str(), fHeader, RGB(240, 200, 110),
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    } else {
+        DrawTextCustom(dc, rHeader, L"運筆プロセス再現（筆圧可視化＆解析）", fHeader, RGB(210, 220, 240),
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    }
+    DeleteObject(fHeader);
 
     // 2. シークバー
     const RECT& rTrack = state.ui.rReplaySeekTrack;
@@ -115,7 +130,7 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     Box(dc, rThumb, thumbColor, thumbBorder, 2, 4);
 
     // 3. 再生操作ボタン
-    HFONT fBtnIcon = CreateCustomFont(15, FW_BOLD);
+    HFONT fBtnIcon = CreateCustomFont(22, FW_BOLD);
 
     // 最初に戻る (↺)
     bool hReset = (state.ui.hoverReplayBtn == 1);
@@ -143,7 +158,7 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     DeleteObject(fBtnIcon);
 
     // 4. 再生速度切替ボタン (0.5x, 1.0x, 2.0x)
-    HFONT fSpd = CreateCustomFont(13, FW_BOLD);
+    HFONT fSpd = CreateCustomFont(20, FW_BOLD);
     const double spdVals[3] = { 0.5, 1.0, 2.0 };
     const wchar_t* spdLabels[3] = { L"0.5x", L"1.0x", L"2.0x" };
 
@@ -196,13 +211,13 @@ void AnalysisView::DrawMetricsCard(HDC dc, const RECT& rBox, const AppState& sta
     auto DrawMetricItem = [&](int colIdx, const wchar_t* title, const wchar_t* valStr, COLORREF valColor) {
         RECT rItem = { rBox.left + 10 + colIdx * colW, rBox.top + 6, rBox.left + 10 + (colIdx + 1) * colW - 4, rBox.bottom - 6 };
         
-        RECT rTitle = { rItem.left, rItem.top, rItem.right, rItem.top + 20 };
-        HFONT fTitle = CreateCustomFont(12, FW_BOLD);
+        RECT rTitle = { rItem.left, rItem.top, rItem.right, rItem.top + 26 };
+        HFONT fTitle = CreateCustomFont(18, FW_BOLD);
         Center(dc, rTitle, title, fTitle, RGB(150, 160, 180));
         DeleteObject(fTitle);
 
-        RECT rVal = { rItem.left, rItem.top + 20, rItem.right, rItem.bottom };
-        HFONT fVal = CreateCustomFont(18, FW_BOLD);
+        RECT rVal = { rItem.left, rItem.top + 26, rItem.right, rItem.bottom };
+        HFONT fVal = CreateCustomFont(30, FW_BOLD);
         Center(dc, rVal, valStr, fVal, valColor);
         DeleteObject(fVal);
     };
@@ -241,19 +256,22 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
     using namespace RenderUtils;
     Box(dc, rBox, RGB(24, 27, 34), RGB(45, 52, 66), 1, 8);
 
-    RECT rHeader = { rBox.left + 12, rBox.top + 8, rBox.right - 12, rBox.top + 26 };
-    HFONT fHeader = CreateCustomFont(13, FW_BOLD);
+    RECT rHeader = { rBox.left + 12, rBox.top + 6, rBox.right - 12, rBox.top + 32 };
+    HFONT fHeader = CreateCustomFont(20, FW_BOLD);
     DrawTextCustom(dc, rHeader, L"筆姿勢・傾きレーダー（方位＆高度角）", fHeader, RGB(200, 210, 230));
     DeleteObject(fHeader);
 
+    // 円の上下に方位ラベルを置く。上のラベルが見出しに重ならないよう、見出しの下から割り付ける
+    const int headerH = 32;
+    const int labelH = 20;
     int boxW = RW(rBox);
     int boxH = RH(rBox);
     int centerX = rBox.left + boxW / 2 - 40;
-    int centerY = rBox.top + 26 + (boxH - 32) / 2;
     int r1 = centerX - rBox.left - 18;
-    int r2 = (boxH - 40) / 2;
+    int r2 = (boxH - headerH - 6 - labelH * 2) / 2;
     int radius = (r1 < r2) ? r1 : r2;
     if (radius < 26) radius = 26;
+    int centerY = rBox.top + headerH + labelH + radius;
 
     // 背景同心円 (90° 中心、60°, 30°, 0° 外周)
     HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(42, 48, 62));
@@ -274,10 +292,10 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
     DeleteObject(gridPen);
 
     // 方位ラベル
-    HFONT fLabel = CreateCustomFont(11, FW_BOLD);
-    RECT rN = { centerX - 18, centerY - radius - 14, centerX + 18, centerY - radius };
+    HFONT fLabel = CreateCustomFont(17, FW_BOLD);
+    RECT rN = { centerX - 30, centerY - radius - labelH, centerX + 30, centerY - radius };
     Center(dc, rN, L"上 (N)", fLabel, RGB(140, 150, 168));
-    RECT rS = { centerX - 18, centerY + radius, centerX + 18, centerY + radius + 14 };
+    RECT rS = { centerX - 30, centerY + radius, centerX + 30, centerY + radius + labelH };
     Center(dc, rS, L"下 (S)", fLabel, RGB(140, 150, 168));
     DeleteObject(fLabel);
 
@@ -328,15 +346,15 @@ void AnalysisView::DrawTiltCompass(HDC dc, const RECT& rBox, const AppState& sta
 
     // 右側数値詳細リスト
     int infoLeft = centerX + radius + 18;
-    int infoTop = rBox.top + 32;
-    HFONT fInfo = CreateCustomFont(12, FW_NORMAL);
-    HFONT fInfoB = CreateCustomFont(14, FW_BOLD);
+    int infoTop = centerY - 50;  // 3行（1行 34px）を円の高さの中央へ
+    HFONT fInfo = CreateCustomFont(19, FW_NORMAL);
+    HFONT fInfoB = CreateCustomFont(23, FW_BOLD);
 
     auto DrawInfoRow = [&](int rowIdx, const wchar_t* label, const wchar_t* val, COLORREF c) {
-        int y = infoTop + rowIdx * 28;
-        RECT rL = { infoLeft, y, infoLeft + 54, y + 22 };
+        int y = infoTop + rowIdx * 34;
+        RECT rL = { infoLeft, y, infoLeft + 64, y + 32 };
         DrawTextCustom(dc, rL, label, fInfo, RGB(150, 160, 178));
-        RECT rV = { infoLeft + 56, y, rBox.right - 8, y + 22 };
+        RECT rV = { infoLeft + 68, y, rBox.right - 8, y + 32 };
         DrawTextCustom(dc, rV, val, fInfoB, c);
     };
 
@@ -428,7 +446,7 @@ void BakeWaveform(HDC targetDC, int plotW, int plotH, const AppState& state) {
     DWORD totalDur = state.replay.totalDurationMs;
 
     if (strokes.empty() || totalDur == 0) {
-        HFONT fEmpty = CreateCustomFont(13, FW_NORMAL);
+        HFONT fEmpty = CreateCustomFont(19, FW_NORMAL);
         Center(targetDC, rLocal, L"（筆記した軌跡の波形と再生位置が表示されます）", fEmpty, RGB(110, 120, 140));
         DeleteObject(fEmpty);
         return;
@@ -540,22 +558,24 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
     Box(dc, rBox, RGB(20, 23, 30), RGB(45, 52, 66), 1, 8);
 
     // ヘッダー & 凡例
-    RECT rHeader = { rBox.left + 12, rBox.top + 8, rBox.left + 180, rBox.top + 28 };
-    HFONT fHeader = CreateCustomFont(13, FW_BOLD);
-    DrawTextCustom(dc, rHeader, L"運筆波形（筆圧・速度推移）", fHeader, RGB(200, 210, 230));
-    DeleteObject(fHeader);
-
-    // 凡例
-    HFONT fLegend = CreateCustomFont(11, FW_BOLD);
-    RECT rLeg0 = { rBox.right - 250, rBox.top + 8, rBox.right - 185, rBox.top + 26 };
-    DrawTextCustom(dc, rLeg0, L"■ 墨残量", fLegend, RGB(200, 205, 215));
-
-    RECT rLeg1 = { rBox.right - 180, rBox.top + 8, rBox.right - 95, rBox.top + 26 };
-    DrawTextCustom(dc, rLeg1, L"■ 筆圧 (0-100%)", fLegend, RGB(80, 210, 255));
-
-    RECT rLeg2 = { rBox.right - 90, rBox.top + 8, rBox.right - 10, rBox.top + 26 };
-    DrawTextCustom(dc, rLeg2, L"■ 速度 (px/s)", fLegend, RGB(255, 190, 70));
+    // 凡例。右端から幅を測って詰めて並べ、残りを見出しに使う
+    HFONT fLegend = CreateCustomFont(17, FW_BOLD);
+    int legendRight = rBox.right - 12;
+    auto DrawLegend = [&](const wchar_t* label, COLORREF color) {
+        RECT r = { legendRight - TextWidth(dc, fLegend, label), rBox.top + 6, legendRight, rBox.top + 30 };
+        DrawTextCustom(dc, r, label, fLegend, color);
+        legendRight = r.left - 12;
+    };
+    DrawLegend(L"■ 速度 (px/s)", RGB(255, 190, 70));
+    DrawLegend(L"■ 筆圧 (0-100%)", RGB(80, 210, 255));
+    DrawLegend(L"■ 墨残量", RGB(200, 205, 215));
     DeleteObject(fLegend);
+
+    RECT rHeader = { rBox.left + 12, rBox.top + 4, legendRight, rBox.top + 30 };
+    HFONT fHeader = CreateCustomFont(20, FW_BOLD);
+    DrawTextCustom(dc, rHeader, L"運筆波形（筆圧・速度推移）", fHeader, RGB(200, 210, 230),
+        DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    DeleteObject(fHeader);
 
     // グラフプロット領域
     RECT rPlot = { rBox.left + 38, rBox.top + 32, rBox.right - 14, rBox.bottom - 20 };
@@ -567,12 +587,12 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
     int y100 = rPlot.top;
 
     // 目盛りラベル
-    HFONT fTick = CreateCustomFont(11, FW_BOLD);
-    RECT rL100 = { rBox.left + 2, y100 - 6, rPlot.left - 4, y100 + 10 };
+    HFONT fTick = CreateCustomFont(17, FW_BOLD);
+    RECT rL100 = { rBox.left + 2, y100 - 4, rPlot.left - 4, y100 + 16 };
     DrawTextCustom(dc, rL100, L"1.0", fTick, RGB(130, 140, 160), DT_RIGHT | DT_SINGLELINE);
-    RECT rL50 = { rBox.left + 2, y50 - 6, rPlot.left - 4, y50 + 10 };
+    RECT rL50 = { rBox.left + 2, y50 - 10, rPlot.left - 4, y50 + 10 };
     DrawTextCustom(dc, rL50, L"0.5", fTick, RGB(130, 140, 160), DT_RIGHT | DT_SINGLELINE);
-    RECT rL0 = { rBox.left + 2, y0 - 10, rPlot.left - 4, y0 + 6 };
+    RECT rL0 = { rBox.left + 2, y0 - 14, rPlot.left - 4, y0 + 6 };
     DrawTextCustom(dc, rL0, L"0.0", fTick, RGB(130, 140, 160), DT_RIGHT | DT_SINGLELINE);
     DeleteObject(fTick);
 

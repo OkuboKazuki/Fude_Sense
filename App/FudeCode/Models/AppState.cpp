@@ -142,7 +142,7 @@ void AppState::Layout(int w, int h) {
         int availSubH = ui.rSub.bottom - analysisTop - 18;
         int replayH = 126;
         int metricsH = 88;
-        int compassH = 168;
+        int compassH = 192;
         int graphH = (std::max)(150, availSubH - replayH - metricsH - compassH - 42);
 
         ui.rAnalysisReplayBox  = { ui.rSub.left + 18, analysisTop, ui.rSub.right - 18, analysisTop + replayH };
@@ -165,10 +165,10 @@ void AppState::Layout(int w, int h) {
         int btnH = 46;
         ui.rReplayResetBtn = { repLeft + 16, btnY, repLeft + 16 + 42, btnY + btnH };
         ui.rReplayPrevBtn  = { ui.rReplayResetBtn.right + 8, btnY, ui.rReplayResetBtn.right + 8 + 44, btnY + btnH };
-        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, btnY, ui.rReplayPrevBtn.right + 8 + 88, btnY + btnH };
+        ui.rReplayPlayBtn  = { ui.rReplayPrevBtn.right + 8, btnY, ui.rReplayPrevBtn.right + 8 + 120, btnY + btnH };
         ui.rReplayNextBtn  = { ui.rReplayPlayBtn.right + 8, btnY, ui.rReplayPlayBtn.right + 8 + 44, btnY + btnH };
 
-        int spdW = 48;
+        int spdW = 54;
         int spdH = 36;
         int spdY = btnY + (btnH - spdH) / 2;
         ui.rReplaySpeedBtn[2] = { repRight - 16 - spdW, spdY, repRight - 16, spdY + spdH };

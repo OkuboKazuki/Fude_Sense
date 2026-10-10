@@ -1098,15 +1098,21 @@ void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoin
         swprintf_s(hudText, 64, L"%.0f° [空中]", alt);
     }
 
-    int badgeW = isPenDown ? 120 : 76;
-    int badgeH = 22;
+    // バッジの幅は文字に合わせる（筆圧の桁数で変わる）
+    HFONT fBadge = CreateCustomFont(20, FW_BOLD);
+    HFONT oldBadgeFont = (HFONT)SelectObject(dc, fBadge);
+    SIZE hudExt{ 0, 0 };
+    GetTextExtentPoint32W(dc, hudText, lstrlenW(hudText), &hudExt);
+    SelectObject(dc, oldBadgeFont);
+
+    int badgeW = hudExt.cx + 22;
+    int badgeH = 32;
     int badgeX = shaftTopX + ((dirX >= 0) ? 10 : (-badgeW - 10));
-    int badgeY = shaftTopY - 12;
+    int badgeY = shaftTopY - 16;
 
     RECT rBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
     Box(dc, rBadge, RGB(24, 28, 36), activeColor, 1, 4);
 
-    HFONT fBadge = CreateCustomFont(11, FW_BOLD);
     Center(dc, rBadge, hudText, fBadge, activeColor);
     DeleteObject(fBadge);
 }
