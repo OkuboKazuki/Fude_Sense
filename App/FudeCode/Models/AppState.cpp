@@ -295,6 +295,11 @@ void AppState::Layout(int w, int h) {
 
     ui.rRight = { rightSpaceLeft, 0, w, h };
     ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
+    // 硯の内側。上が墨溜まり（墨を含ませる）、下が磨り面（墨を整える）
+    int rim = S(12);
+    ui.rInkPool = { stoneX + rim, stoneY + rim, stoneX + stoneW - rim, stoneY + (int)(stoneH * 0.38) };
+    ui.rInkLand = { stoneX + rim, stoneY + (int)(stoneH * 0.40), stoneX + stoneW - rim, stoneY + stoneH - rim };
+
     // 墨残量ゲージ（硯の真上、中央寄せ）
     int badgeW = S(200);
     int badgeH = S(34);
@@ -325,6 +330,29 @@ void AppState::SetInkAmountFromBadgeX(int x) {
     ink.amount = Clamp(norm, 0.0, 1.0) * INK_MAX_VALUE;
 }
 
+// 硯を磨り面の上端で上下に分ける。縁も近いほうへ含めるので、硯の中に押しても効かない所は残らない。
+bool AppState::IsOnInkStoneLand(POINT pt) const {
+    using namespace RenderUtils;
+    return PtIn(ui.rInkStoneLarge, pt) && pt.y >= ui.rInkLand.top;
+}
+
+// しごく長さは硯の幅を単位にする。硯パネルの拡大率が変わっても、
+// 磨り面を端から端までしごいたときに落ちる量が同じになる。
+// 数えるのは下の部分を通っている間だけ。上の墨溜まりや硯の外へ出ている間は減らさない。
+bool AppState::WipeInkTo(POINT pt, double pressure) {
+    using namespace RenderUtils;
+    double dx = static_cast<double>(pt.x - ui.wipeLastPt.x);
+    double dy = static_cast<double>(pt.y - ui.wipeLastPt.y);
+    ui.wipeLastPt = pt;
+
+    int stoneW = RW(ui.rInkStoneLarge);
+    if (stoneW <= 0 || !IsOnInkStoneLand(pt)) return false;
+
+    double before = ink.amount;
+    ink.Wipe(std::sqrt(dx * dx + dy * dy) / stoneW, pressure);
+    return ink.amount != before;
+}
+
 // 紙だけ表示。机や毛氈は描かず、横に倒した半紙を比率を保って画面いっぱいに広げ、
 // 右端の帯へ「墨を補充」「通常表示に戻る」「筆跡を消す」を並べる。
 // 画面を右回りに90度倒して使う前提で、右端の帯が半紙の「下」になる。
@@ -339,8 +367,9 @@ void AppState::LayoutPaperOnly(int w, int h) {
     ui.rSub = ui.rRight = kNone;
     ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
     ui.rInkStoneLarge = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = ui.rPaperOnlyBtn = kNone;
-    ui.rInkBadge = kNone;
+    ui.rInkBadge = ui.rInkPool = ui.rInkLand = kNone;
     ui.isDraggingInkAmount = false;
+    ui.isWiping = false;
     // 全消し確認モーダル（Esc・筆跡を消すボタンで出す）は倒した向きで読めるよう、幅と高さを入れ替えて組む
     LayoutClearModal(ui, h, w);
     ui.rCanvasArea = { 0, 0, w, h };

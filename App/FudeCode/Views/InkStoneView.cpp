@@ -111,12 +111,15 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
 
     // 2. 硯本体（外枠の黒い影を無くし、スッキリした石のフォルム）
     bool hoverStone = (ui.hoverInkStone == 1);
-    COLORREF stoneBorder = hoverStone ? RGB(75, 130, 210) : RGB(48, 52, 62);
+    // 上の墨溜まりは墨を含ませる所、下の磨り面は筆をしごいて墨を整える所。
+    // 操作が違うので、ペンが乗っている側（しごいている間は磨り面）の枠だけを明るくして区別する。
+    bool landActive = (ui.hoverInkStone == 8) || ui.isWiping;
+    COLORREF stoneBorder = (hoverStone || landActive) ? RGB(75, 130, 210) : RGB(48, 52, 62);
     Box(dc, ui.rInkStoneLarge, RGB(26, 28, 34), stoneBorder, 1, 8);
 
     // 3. 墨溜まり（上部の窪み・墨汁）
-    RECT rPool = { ui.rInkStoneLarge.left + S(12), ui.rInkStoneLarge.top + S(12), ui.rInkStoneLarge.right - S(12), ui.rInkStoneLarge.top + (int)(RH(ui.rInkStoneLarge) * 0.38) };
-    Box(dc, rPool, RGB(10, 11, 14), RGB(36, 40, 50), 1, 6);
+    const RECT& rPool = ui.rInkPool;
+    Box(dc, rPool, RGB(10, 11, 14), hoverStone ? RGB(85, 145, 235) : RGB(36, 40, 50), hoverStone ? 2 : 1, 6);
 
     double inkFrac = Clamp(state.ink.amount / INK_MAX_VALUE, 0.0, 1.0);
     if (inkFrac > 0.01) {
@@ -135,8 +138,8 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     }
 
     // 4. 磨り面（下部の平坦な丘）
-    RECT rLand = { ui.rInkStoneLarge.left + S(12), ui.rInkStoneLarge.top + (int)(RH(ui.rInkStoneLarge) * 0.40), ui.rInkStoneLarge.right - S(12), ui.rInkStoneLarge.bottom - S(12) };
-    Box(dc, rLand, RGB(20, 22, 28), RGB(38, 42, 52), 1, 6);
+    const RECT& rLand = ui.rInkLand;
+    Box(dc, rLand, landActive ? RGB(30, 38, 54) : RGB(20, 22, 28), landActive ? RGB(85, 145, 235) : RGB(38, 42, 52), landActive ? 2 : 1, 6);
 
     // 微細な石目テクスチャライン
     HPEN tp = CreatePen(PS_SOLID, 1, RGB(30, 33, 42));

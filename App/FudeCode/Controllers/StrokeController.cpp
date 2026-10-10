@@ -46,6 +46,19 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
     }
 
+    // 硯の磨り面をペンでしごいている間は、動かした長さと筆圧に応じて墨を落とす
+    if (state.ui.isWiping && !state.ui.wipeByMouse) {
+        if (event.pressure > 0.0) {
+            POINT wipePt = { event.x, event.y };
+            if (state.WipeInkTo(wipePt, event.pressure)) {
+                InvalidateRect(hWnd, &state.ui.rRight, FALSE);
+            }
+        } else {
+            state.ui.isWiping = false;
+            InvalidateRect(hWnd, &state.ui.rRight, FALSE);
+        }
+    }
+
     // UI操作（半紙に重なる全消しモーダル等）の直後は、ペンが紙から一度離れるまで
     // 運筆を受け付けない。接地したままのペンのパケットで墨が落ちるのを防ぐ。
     if (state.ui.suppressPenUntilLift) {

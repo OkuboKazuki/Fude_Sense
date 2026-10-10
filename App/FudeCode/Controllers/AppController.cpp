@@ -680,6 +680,15 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         ui.suppressPenUntilLift = true;
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
+    } else if (state.IsOnInkStoneLand(pt)) {
+        // 硯の下の部分は補充ではなく、筆をしごいて墨を落とす。離すまでの動きで減らす
+        ui.isWiping = true;
+        ui.wipeByMouse = (penPressure < 0.0);
+        ui.wipeLastPt = pt;
+        // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
+        ui.suppressPenUntilLift = true;
+        InvalidateRect(hWnd, &ui.rRight, FALSE);
+        return true;
     } else if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
         RefillByPress(state, penPressure);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
@@ -840,6 +849,17 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
+    // マウスで硯の磨り面をしごいている間。筆圧が無いので中くらいの強さとして扱う
+    if (ui.isWiping && ui.wipeByMouse) {
+        if (wParam & MK_LBUTTON) {
+            if (state.WipeInkTo(pt, REFILL_FULL_PRESSURE * 0.5)) {
+                InvalidateRect(hWnd, &ui.rRight, FALSE);
+            }
+        } else {
+            ui.isWiping = false;
+        }
+    }
+
     // ホバー状態の更新
     TbButton oldTb = ui.hoverTb;
     int oldSub = ui.hoverSub;
@@ -914,6 +934,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
         else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = 6;
         else if (PtIn(ui.rInkBadge, pt)) ui.hoverInkStone = 7;
+        else if (state.IsOnInkStoneLand(pt)) ui.hoverInkStone = 8;
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 

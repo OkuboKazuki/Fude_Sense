@@ -16,6 +16,13 @@ constexpr double REFILL_MIN_AMOUNT = 0.05;
 constexpr double REFILL_MAX_AMOUNT = 0.60;
 constexpr double REFILL_FULL_PRESSURE = 0.8;
 
+// 硯の磨り面（下の部分）で筆をしごいて落とす墨の量。硯の幅 1 つ分の長さをしごいたときに減る量で、
+// 軽く当てると WIPE_MIN_PER_LENGTH、REFILL_FULL_PRESSURE 以上押し当てると WIPE_MAX_PER_LENGTH。
+// しごいても筆は空にならないので、WIPE_FLOOR_AMOUNT より下へは減らさない。
+constexpr double WIPE_MIN_PER_LENGTH = 0.04;
+constexpr double WIPE_MAX_PER_LENGTH = 0.16;
+constexpr double WIPE_FLOOR_AMOUNT = 0.20;
+
 // 墨・硯・運筆インク管理モデル（単一パラメータ設計）
 //
 // 硯および筆の墨残量を単一の物理パラメータ `amount` (0.0 ～ 1.0) で一元管理し、
@@ -49,6 +56,15 @@ struct InkModel {
     void PressRefill(double pressure) {
         double add = RefillAmountFromPressure(pressure);
         amount = (std::max)(amount, (std::min)(refillBaseAmount + add, INK_MAX_VALUE));
+    }
+
+    // 硯の磨り面で筆をしごいて墨を落とす。length は硯の幅を 1 とした、しごいた長さ。
+    // 減り方は残量によらず、長さと筆圧だけで決まる。
+    void Wipe(double length, double pressure) {
+        if (amount <= WIPE_FLOOR_AMOUNT) return;
+        double p = (std::min)((std::max)(pressure / REFILL_FULL_PRESSURE, 0.0), 1.0);
+        double perLength = WIPE_MIN_PER_LENGTH + (WIPE_MAX_PER_LENGTH - WIPE_MIN_PER_LENGTH) * p;
+        amount = (std::max)(WIPE_FLOOR_AMOUNT, amount - perLength * length);
     }
 
     // ストローク運筆に伴う物理インク消費

@@ -198,6 +198,12 @@ struct UIState {
     // 硯の上の墨残量ゲージをつかんで、残量を直接動かしている最中
     bool isDraggingInkAmount = false;
 
+    // 硯の下の部分（磨り面）を押してから離すまでの間。そこで動かした長さと筆圧に応じて墨を落とす。
+    // マウスは筆圧が無く、動きも WM_MOUSEMOVE から拾うので区別しておく。
+    bool isWiping = false;
+    bool wipeByMouse = false;
+    POINT wipeLastPt{};
+
     // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
     // 硯が無いので、墨の補充は半紙の右のボタンから行う。
     bool paperOnly = false;
@@ -237,7 +243,8 @@ struct UIState {
     UIWidget rAnalysisImportBtn{};   // 運筆アーカイブを読み込む
     UIWidget rAnalysisBackBtn{};     // 読み込んだ記録を閉じて自分の記録に戻る（表示中だけ）
     UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
-    UIWidget rInkBadge{};          // 右パネル: 硯の上の墨残量ゲージ（左右に動かして残量を決める）
+    UIWidget rInkPool{}, rInkLand{}; // 硯の内側: 墨溜まり（上、墨を含ませる）と磨り面（下、墨を整える）
+    UIWidget rInkBadge{};         // 右パネル: 硯の上の墨残量ゲージ（左右に動かして残量を決める）
     UIWidget rPaperOnlyBtn{};      // 右パネル: 紙だけ表示に入る
     UIWidget rPaperOnlyExitBtn{};  // 紙だけ表示中: 通常表示に戻る（墨の補充は rInkRefillBtn を半紙の右へ置き直す）
     UIWidget rPaperOnlyClearBtn{}; // 紙だけ表示中: 筆跡を消す（確認なしで消去）
@@ -288,6 +295,11 @@ public:
 
     // 墨残量ゲージ上の横位置 x に合わせて墨の残量を決める（左端が空、右端が満タン）
     void SetInkAmountFromBadgeX(int x);
+
+    // 点が硯の下の部分（磨り面とそのまわりの縁）にあるか。硯の残りの上の部分は補充に使う
+    bool IsOnInkStoneLand(POINT pt) const;
+    // 磨り面でしごいている筆を pt まで動かし、その分の墨を落とす。残量が変わったら true。
+    bool WipeInkTo(POINT pt, double pressure);
 
     // シークバーのツマミ位置だけを再計算する
     void UpdateReplaySeekThumb();
