@@ -127,7 +127,7 @@ void AppState::Layout(int w, int h) {
 
         // 解析（グラフ・リプレイ）タブ
         // 先頭に運筆アーカイブの読み込み。読み込んだ記録を表示中は「自分の記録に戻る」を右に並べる
-        int importH = 40;
+        int importH = 56;
         int importRight = ui.rSub.right - 18;
         if (viewingImport) {
             int backW = 190;
@@ -193,15 +193,20 @@ void AppState::Layout(int w, int h) {
 
         // 配置: 左に升目のミニマップ（配置先の選択）、右に書体の切り替えと操作の説明を出す。
         // ミニマップ内の各マスの矩形は、升目のセルが確定してから 2-2 で算出する。
+        // ミニマップはメニューの高さに余裕があるだけ大きくする（押しやすく、番号も読みやすい）。
+        // 高さ 110 のとき、いちばん下の透過度スライダーがメニュー下端にちょうど収まる。
         int mapTop = ui.rOtehonToggleBtn.bottom + 12;
-        ui.rOtehonCellMapBox = { ui.rSub.left + 20, mapTop, ui.rSub.left + 20 + 240, mapTop + 110 };
+        int mapBoxH = Clamp(menuH - 520, 110, 200);
+        ui.rOtehonCellMapBox = { ui.rSub.left + 20, mapTop, ui.rSub.left + 20 + 200, mapTop + mapBoxH };
 
-        // 書体の切り替え。ミニマップ右の余白へ横並びで置き、下に操作の説明を続ける
+        // 書体の切り替え。ミニマップ右の余白へ横並びで置き、下に操作の説明を続ける。
+        // ボタンの高さはミニマップに合わせて伸ばす（文字の大きさは高さから決まる）。
         int fontBtnLeft = ui.rOtehonCellMapBox.right + 14;
         int fontBtnW = (ui.rSub.right - 20 - fontBtnLeft - 2 * 8) / OTEHON_FONT_COUNT;
+        int fontBtnH = Clamp(mapBoxH * 26 / 100, 34, 52);
         for (int i = 0; i < OTEHON_FONT_COUNT; ++i) {
             int x = fontBtnLeft + i * (fontBtnW + 8);
-            ui.rOtehonFontBtn[i] = { x, mapTop, x + fontBtnW, mapTop + 34 };
+            ui.rOtehonFontBtn[i] = { x, mapTop, x + fontBtnW, mapTop + fontBtnH };
         }
 
         // 書きたい文字の入力欄

@@ -141,7 +141,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         bool hovTog = (ui.hoverSub == 70);
         Box(dc, ui.rOtehonToggleBtn, state.otehon.isVisible ? RGB(40, 76, 120) : (hovTog ? RGB(46, 52, 64) : RGB(32, 36, 46)),
             state.otehon.isVisible ? RGB(80, 150, 245) : (hovTog ? RGB(72, 80, 96) : RGB(50, 56, 70)), 1, 8);
-        HFONT fTog = CreateCustomFont(22, FW_BOLD);
+        HFONT fTog = CreateCustomFont(30, FW_BOLD);
         Center(dc, ui.rOtehonToggleBtn, state.otehon.isVisible ? L"✓ お手本表示: ON" : L"お手本表示: OFF", fTog, state.otehon.isVisible ? RGB(255, 255, 255) : RGB(200, 205, 218));
         DeleteObject(fTog);
 
@@ -151,7 +151,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
             // マスは全て同じ大きさなので、文字サイズは先頭のマスから決める
             const RECT& r0 = ui.rOtehonCellBtn[0];
             int size = (std::min)(RW(r0), RH(r0)) * 7 / 10;
-            fCellNo = CreateCustomFont(Clamp(size, 10, 26), FW_BOLD);
+            fCellNo = CreateCustomFont(Clamp(size, 10, 44), FW_BOLD);
         }
         for (int i = 0; i < ui.gridCellCount; ++i) {
             const RECT& rc = ui.rOtehonCellBtn[i];
@@ -180,7 +180,8 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         // 書体の切り替え。この PC に入っていない書体は、選んでも GDI が別の書体へ
         // 置き換えてしまい見た目が変わらないため、文字色を沈めて区別する。
         static const wchar_t* const kFontLabels[OTEHON_FONT_COUNT] = { L"楷書", L"教科書体", L"行書" };
-        HFONT fFontBtn = CreateCustomFont(17, FW_BOLD);
+        // 文字はボタンの高さの半分（高さ 34 で 17、52 で 26）
+        HFONT fFontBtn = CreateCustomFont(RH(ui.rOtehonFontBtn[0]) / 2, FW_BOLD);
         for (int i = 0; i < OTEHON_FONT_COUNT; ++i) {
             const RECT& rf = ui.rOtehonFontBtn[i];
             OtehonFontStyle style = static_cast<OtehonFontStyle>(i);
@@ -196,9 +197,10 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         DeleteObject(fFontBtn);
 
         // 書体ボタンの下へ操作の説明を出す
-        HFONT fHint = CreateCustomFont(15);
         RECT rHint = { ui.rOtehonFontBtn[0].left, ui.rOtehonFontBtn[0].bottom + 8,
                        ui.rSub.right - 20, ui.rOtehonCellMapBox.bottom };
+        // 3行ぶんの高さが取れるときだけ大きい文字にする
+        HFONT fHint = CreateCustomFont(RH(rHint) >= 84 ? 19 : 15);
         DrawTextCustom(dc, rHint, L"下の文字を選び、左の升目を\n押すと配置します（複数可）。\n同じ字をもう一度押すと消去", fHint,
             RGB(140, 148, 162), DT_LEFT | DT_TOP | DT_WORDBREAK);
         DeleteObject(fHint);

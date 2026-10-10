@@ -33,7 +33,7 @@ void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
     bool hovImport = (ui.hoverReplayBtn == 9);
     Box(dc, ui.rAnalysisImportBtn, hovImport ? RGB(68, 58, 34) : RGB(48, 42, 26),
         hovImport ? RGB(200, 155, 55) : RGB(135, 105, 40), 1, 8);
-    HFONT fImport = CreateCustomFont(22, FW_BOLD);
+    HFONT fImport = CreateCustomFont(26, FW_BOLD);
     Center(dc, ui.rAnalysisImportBtn,
         state.viewingImport ? L"📂 別の運筆アーカイブを読み込む" : L"📂 運筆アーカイブを読み込んで解析 (JSON / CSV)",
         fImport, RGB(255, 246, 225));
@@ -43,7 +43,7 @@ void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
         bool hovBack = (ui.hoverReplayBtn == 10);
         Box(dc, ui.rAnalysisBackBtn, hovBack ? RGB(46, 52, 64) : RGB(34, 38, 46),
             hovBack ? RGB(100, 120, 160) : RGB(58, 66, 84), 1, 8);
-        HFONT fBack = CreateCustomFont(22, FW_BOLD);
+        HFONT fBack = CreateCustomFont(26, FW_BOLD);
         Center(dc, ui.rAnalysisBackBtn, L"↩ 自分の記録に戻る", fBack, RGB(220, 228, 242));
         DeleteObject(fBack);
     }
