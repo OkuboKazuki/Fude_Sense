@@ -164,12 +164,11 @@ void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
 
     if (newTab == LeftTab::Analysis) {
         SyncReplayTimeline(hWnd, state);
-        if (state.replay.currentTimeMs == 0) {
-            // 開いた直後は書き上がった状態を見せる
-            state.replay.currentTimeMs = state.replay.totalDurationMs;
-            state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
-                state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        }
+        // 解析タブ移動時は巻き戻された状態（0ms）で一時停止にする
+        state.replay.currentTimeMs = 0;
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
+            0, state.ui.rPaper, state.replay.currentSample);
+        state.UpdateReplaySeekThumb();
         state.replay.state = ReplayState::Paused;
     } else {
         if (state.replay.state == ReplayState::Playing) {
