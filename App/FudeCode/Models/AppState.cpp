@@ -251,7 +251,7 @@ void AppState::Layout(int w, int h) {
     const int baseBtnH = 46;
     const int baseViewBtnH = 44;
     const int baseSpacing = 12;
-    const int baseHeaderSpace = 32;
+    const int baseHeaderSpace = 42;
     const int baseViewGap = 20;
     const double INK_STONE_MAX_SCALE = 1.8;
     int baseTotalH = baseHeaderSpace + (int)(baseStoneW * 1.34) + 4 * (baseSpacing + baseBtnH)

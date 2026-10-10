@@ -76,15 +76,15 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     COLORREF badgeBorder = isLow ? RGB(240, 75, 75)    : RGB(46, 54, 70);
     COLORREF metaColor   = isLow ? RGB(255, 140, 140)  : RGB(225, 235, 250);
 
-    int badgeW = S(160);
-    int badgeH = S(26);
+    int badgeW = S(200);
+    int badgeH = S(34);
     int badgeX = (ui.rInkStoneLarge.left + ui.rInkStoneLarge.right - badgeW) / 2;
     int badgeY = ui.rInkStoneLarge.top - badgeH - S(8);
     RECT rBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
 
     Box(dc, rBadge, badgeBg, badgeBorder, 1, badgeH / 2);
 
-    HFONT fMeta = CreateCustomFont(S(15), FW_BOLD);
+    HFONT fMeta = CreateCustomFont(S(19), FW_BOLD);
     wchar_t buf[64];
     if (isLow) {
         wsprintfW(buf, L"⚠️ 墨残量: %d%%", inkPercent);
