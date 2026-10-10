@@ -76,13 +76,28 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     COLORREF badgeBorder = isLow ? RGB(240, 75, 75)    : RGB(46, 54, 70);
     COLORREF metaColor   = isLow ? RGB(255, 140, 140)  : RGB(225, 235, 250);
 
-    int badgeW = S(200);
-    int badgeH = S(34);
-    int badgeX = (ui.rInkStoneLarge.left + ui.rInkStoneLarge.right - badgeW) / 2;
-    int badgeY = ui.rInkStoneLarge.top - badgeH - S(8);
-    RECT rBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
+    // バッジは残量を手で動かすゲージを兼ねる。つかめることが分かるよう、乗せたときと動かしている間は縁を明るくする
+    const RECT& rBadge = ui.rInkBadge;
+    int badgeH = RH(rBadge);
+    bool badgeActive = (ui.hoverInkStone == 7) || ui.isDraggingInkAmount;
+    if (badgeActive) badgeBorder = isLow ? RGB(255, 140, 140) : RGB(85, 145, 235);
 
     Box(dc, rBadge, badgeBg, badgeBorder, 1, badgeH / 2);
+
+    // 残量の分だけ左から塗る。位置の取り方は AppState::SetInkAmountFromBadgeX と合わせる
+    double badgeFrac = Clamp(state.ink.amount / INK_MAX_VALUE, 0.0, 1.0);
+    if (badgeFrac > 0.0) {
+        int pad = badgeH / 2;
+        int levelX = rBadge.left + pad + (int)((RW(rBadge) - 2 * pad) * badgeFrac + 0.5);
+        int saved = SaveDC(dc);
+        IntersectClipRect(dc, rBadge.left, rBadge.top, levelX, rBadge.bottom);
+        Box(dc, rBadge, isLow ? RGB(104, 36, 40) : RGB(38, 64, 104), badgeBorder, 1, badgeH / 2);
+        RestoreDC(dc, saved);
+
+        // 今の残量の位置を示すつまみ
+        RECT rKnob = { levelX - S(2), rBadge.top + S(5), levelX + S(2), rBadge.bottom - S(5) };
+        Fill(dc, rKnob, badgeActive ? RGB(255, 255, 255) : (isLow ? RGB(255, 140, 140) : RGB(150, 190, 245)));
+    }
 
     HFONT fMeta = CreateCustomFont(S(19), FW_BOLD);
     wchar_t buf[64];

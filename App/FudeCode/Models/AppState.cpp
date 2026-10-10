@@ -295,8 +295,14 @@ void AppState::Layout(int w, int h) {
 
     ui.rRight = { rightSpaceLeft, 0, w, h };
     ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
+    // 墨残量ゲージ（硯の真上、中央寄せ）
+    int badgeW = S(200);
+    int badgeH = S(34);
+    int badgeX = stoneX + (stoneW - badgeW) / 2;
+    int badgeY = stoneY - badgeH - S(8);
+    ui.rInkBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
     ui.rInkRefillBtn  = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH };
-    ui.rUndoBtn       = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
+    ui.rUndoBtn      = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
     ui.rRedoBtn       = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + redoBtnH };
     ui.rClearAllBtn   = { stoneX, ui.rRedoBtn.bottom + spacing, stoneX + stoneW, ui.rRedoBtn.bottom + spacing + clearBtnH };
 
@@ -307,6 +313,16 @@ void AppState::Layout(int w, int h) {
 
     // 4. 全消し確認モーダルダイアログ
     LayoutClearModal(ui, w, h);
+}
+
+// ゲージの両端は丸く、端ぴったりは狙いにくいので、少し内側で 0% / 100% に届くようにする
+void AppState::SetInkAmountFromBadgeX(int x) {
+    using namespace RenderUtils;
+    int pad = RH(ui.rInkBadge) / 2;
+    double trackW = static_cast<double>(RW(ui.rInkBadge) - 2 * pad);
+    if (trackW <= 0.0) return;
+    double norm = static_cast<double>(x - ui.rInkBadge.left - pad) / trackW;
+    ink.amount = Clamp(norm, 0.0, 1.0) * INK_MAX_VALUE;
 }
 
 // 紙だけ表示。机や毛氈は描かず、横に倒した半紙を比率を保って画面いっぱいに広げ、
@@ -323,6 +339,8 @@ void AppState::LayoutPaperOnly(int w, int h) {
     ui.rSub = ui.rRight = kNone;
     ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
     ui.rInkStoneLarge = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = ui.rPaperOnlyBtn = kNone;
+    ui.rInkBadge = kNone;
+    ui.isDraggingInkAmount = false;
     // 全消し確認モーダル（Esc・筆跡を消すボタンで出す）は倒した向きで読めるよう、幅と高さを入れ替えて組む
     LayoutClearModal(ui, h, w);
     ui.rCanvasArea = { 0, 0, w, h };
