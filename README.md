@@ -40,7 +40,9 @@
   - 不透明度（薄墨の濃さ）スライダー調整。
 - **硯（すずり）と墨汁残量管理**:
   - 運筆に伴い墨と水分がリアルタイム消費。
-  - 硯をクリックまたはペンで押し込むことで、筆圧に応じた墨・水分の補給が可能。
+  - 硯の上の部分をクリックまたはペンで押し込むことで、筆圧に応じた墨・水分の補給が可能。
+  - 硯の下の部分（磨り面）をしごくと、動かした長さと筆圧に応じて墨を落とせる。
+  - 硯の上の墨残量ゲージを左右に動かして、残量を直接調整可能。
 - **「紙を大きくする（横向き）」モード（F9キー）**:
   - メニュー類を隠し、横向き大画面で半紙を最大化表示して揮毫に集中可能。
 - **一画戻す / 一画復元 (Undo / Redo)**:
@@ -82,7 +84,8 @@ App/FudeCode/
 │   ├── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合ファサード
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
-│   └── UIComponents.h               # UIコンポーネント構造体
+│   ├── UIComponents.h               # UIコンポーネント構造体
+│   └── MathUtils.h                  # 描画に依存しない計算関数 (Clamp, RW, RH, PtIn)
 │
 ├── InkEngine/                       # [Ink System] インク管理・物理にじみシミュレーション
 │   ├── GpuInk.h / .cpp              # Direct2D/D3D11 リアルタイム墨汁浸透・物理エンジン
@@ -114,6 +117,7 @@ App/FudeCode/
 ├── Services/                        # [Service] OS・外部デバイス連携
 │   ├── WintabManager.h / .cpp       # Wintabコンテキスト・デバイス管理
 │   ├── ImageExporter.h / .cpp       # 画像エクスポート (WIC PNG / BMP, クリップボード)
+│   ├── ArchiveDialogs.h / .cpp      # 運筆アーカイブのファイル選択ダイアログ
 │   └── WintabUtils.h / .cpp         # Wintab ユーティリティ
 │
 ├── Wacom_Feel_SDK/                  # Wacom Feel Multi-Touch SDK（同梱）

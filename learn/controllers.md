@@ -6,7 +6,7 @@
 
 ## 1. ファイル構成と関係性
 
-制御層は、運筆の筆跡・物理計算を司る [`StrokeController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h) と、UI操作・画面遷移全般（タイトル遷移、パネル操作、文字入力、Undo/Redo、紙だけ表示、アーカイブ外部読込など）を司る [`AppController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/AppController.h) の2つで構成されています。
+制御層は、運筆の筆跡・物理計算を司る [`StrokeController`](../App/FudeCode/Controllers/StrokeController.h) と、UI操作・画面遷移全般（タイトル遷移、パネル操作、文字入力、Undo/Redo、紙だけ表示、アーカイブ外部読込など）を司る [`AppController`](../App/FudeCode/Controllers/AppController.h) の2つで構成されています。
 
 ```mermaid
 graph TD
@@ -32,6 +32,11 @@ graph TD
         GPU["GpuInk (リアルタイム墨汁描画)"]
     end
 
+    subgraph ServiceLayer ["Services レイヤー"]
+        IE["ImageExporter (作品画像の書き出し)"]
+        AD["ArchiveDialogs (ファイル選択ダイアログ)"]
+    end
+
     subgraph OSLayer ["OS / Win32"]
         WinMsg["WM_PAINT / InvalidateRect"]
     end
@@ -40,14 +45,16 @@ graph TD
     SC -->|筆設定参照| BrushMod
     SC -->|墨・水分の消費 (1.02倍スケール)| InkMod
     SC -->|時系列データ追記| Traj
-    SC -->|画開始時のスナップショット| Undo
+    SC -->|画開始時の控え・硯のしごき| AC
     SC -->|セグメント描画命令| GPU
     SC -->|約120Hz 局所Dirty Rect更新| WinMsg
 
     AC -->|タイトル遷移・ホームボタン| Screen
     AC -->|UIクリック・IME文字入力| UI
-    AC -->|全消し・サイズ変更・用紙回転| GPU
-    AC -->|一画戻す/復元・90度回転指示| Undo
+    AC -->|全消し・サイズ変更・用紙回転・墨の控えと書き戻し| GPU
+    AC -->|控えの保管・一画戻す/復元・90度回転指示| Undo
+    AC -->|作品画像の書き出し| IE
+    AC -->|保存・読込ダイアログ| AD
     AC -->|外部アーカイブ読込・切替| Traj
     AC -->|画面全体の再描画| WinMsg
 ```
@@ -56,15 +63,19 @@ graph TD
 
 ## 2. 各プログラムファイルの詳細
 
-### 2.1 [StrokeController.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h) / [StrokeController.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.cpp)
+### 2.1 [StrokeController.h](../App/FudeCode/Controllers/StrokeController.h) / [StrokeController.cpp](../App/FudeCode/Controllers/StrokeController.cpp)
 
 - **責務 (Responsibility)**:
-  - デバイス非依存の [`PenInputEvent`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Inputs/PenInputEvent.h) を受け取り、書道特有の運筆力学計算を実行します。
+  - デバイス非依存の [`PenInputEvent`](../App/FudeCode/Inputs/PenInputEvent.h) を受け取り、書道特有の運筆力学計算を実行します。
   - **運筆可否判定 (`canDrawInk`)**:
-    - スタジオ画面（`AppScreen::Studio`）かつ遷移中・全消しモーダル中でなく、半紙領域内かつ開いたサブパネルに重なっていない場合にのみ描画を許可します。
+    - スタジオ画面（`AppScreen::Studio`）かつ親ウィンドウが有効で、遷移中・全消しモーダル中でなく、半紙領域内かつ開いたサブパネルに重なっていない場合にのみ描画を許可します。
     - 解析タブ表示中はリプレイ墨が半紙へ描画されるため、通常運筆の透過・記録ずれを防ぐため運筆を受け付けません（「紙を大きくする」表示中は解析パネルが無いため受け付けます）。
   - **誤運筆ロックの保護 (`suppressPenUntilLift`)**:
     - 全消しモーダルや全消しボタン等の操作直後、ペンが接地したままの場合にペンが一度離れるまで運筆を遮断します。
+    - 保存・読み込みダイアログの表示中（親ウィンドウが無効の間）は運筆を破棄し、閉じた後もペンが離れるまでロックします。
+  - **硯の補充としごき**:
+    - `isPenRefilling` の間は `InkModel::PressRefill` で筆圧に応じて墨を継ぎ足します。
+    - ペンで磨り面をしごいている間（`isWiping`）は [`AppController::WipeInkTo`](../App/FudeCode/Controllers/AppController.h) で墨を落とします。
   - **筆圧平滑化**:
     - 加圧時は `0.35`、抜圧時は `0.60` の係数でスムージングし、滑らかさと抜けの良さを両立。
   - **量子化ノイズと角度ジッターの平滑化**:
@@ -82,8 +93,8 @@ graph TD
     - かすれ（`dryness > 0`）時は消費を最大45%低減（`drynessFactor = 1.0 - dryness * 0.45`）し、かすれが続く距離を自然に伸長。
     - `consumeAmount = stepDist * widthRatio * (0.00020 / USABLE_INK_SCALE) * drynessFactor`
   - **描画ディスパッチとレート制御**:
-    - 画の開始時に [`UndoHistory::PushBeforeStroke`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Models/UndoHistory.h) を実行。
-    - [`GpuInk::DrawSegmentLinear`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuInk.h) へ線分を投入。
+    - 画の開始時に [`AppController::PushUndoBeforeStroke`](../App/FudeCode/Controllers/AppController.h) を実行。
+    - [`GpuInk::DrawSegmentLinear`](../App/FudeCode/InkEngine/GpuInk.h) へ線分を投入。
     - 再描画要求（`InvalidateRect`）の頻度を約120Hz（`kMinInvalidateIntervalMs = 8`ms間隔）にレート制御し、過剰な描画呼び出しを抑制。
     - 硯パネル（液面・残量テキスト）の再描画は約30Hz（33ms間隔）で同期。
 - **入力 (Input)**:
@@ -105,29 +116,41 @@ graph TD
 
 ---
 
-### 2.2 [AppController.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/AppController.h) / [AppController.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/AppController.cpp)
+### 2.2 [AppController.h](../App/FudeCode/Controllers/AppController.h) / [AppController.cpp](../App/FudeCode/Controllers/AppController.cpp)
 
 - **責務 (Responsibility)**:
-  - マウスクリック、ドラッグ、キー入力、ウィンドウサイズ変更など、UI全般のイベントをハンドリングします。
+  - マウスクリック、ドラッグ、キー入力、タイマ、カーソル形状、ウィンドウサイズ変更など、UI全般のイベントをハンドリングします。
   - **画面遷移制御**:
     - タイトル画面でのタップ/クリック検知によりスタジオ画面への遷移アニメーション（`isTransitioning = true`）を開始。
-    - 左上ホームボタン押下によるタイトル画面への復帰。
+    - 左上ホームボタン押下によるタイトル画面への復帰（読み込んだ記録を表示中なら閉じます）。
+    - `OnTimer`: 遷移アニメーションの進行、タイトルのブレスアニメーションの更新、運筆リプレイの時刻の進行。
   - **UIインタラクション**:
-    - 左側フローティングパネルの開閉・タブ切り替え（筆・紙・解析・保存・お手本）、筆の硬さスライダー調整、半紙選択、升目選択、カラーテーマ、保存ボタン群。
+    - 左側フローティングパネルの開閉、筆の硬さスライダー調整、半紙選択、升目選択、カラーテーマ、保存ボタン群。
+    - **タブ切り替え (`SelectTab`)**: 筆・紙・解析・保存・お手本を切り替えます。解析以外へ移るときは読み込んだ記録を閉じ、解析へ移るときは再生位置を先頭（0ms）にして一時停止にします。
+    - **ショートカットキー (`OnKeyDown`)**: `F9`、`Esc`、`Ctrl+Z`、`Ctrl+Shift+Z`、`Ctrl+Y` を処理します。文字入力中（`otehon.isTyping`）は `F9` 以外を止めます。
+    - **カーソル形状 (`OnSetCursor`)**: 半紙の上は十字、お手本の入力欄は I ビーム、それ以外は矢印にします。
+    - **保存結果の通知 (`ExportCanvasWithFeedback`)**: [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) が返した `ImageExportResult` に応じて、`SetSaveFeedback` でメッセージを設定します。
+    - 運筆アーカイブの保存と読み込みは [`ArchiveDialogs`](../App/FudeCode/Services/ArchiveDialogs.h) を呼び、取り消しでは何も表示せず、失敗のときだけ知らせます。
+    - 全消し確認モーダルの判定では、紙だけ表示の倒した向きへ点を移します（`ToClearModalSpace`）。
     - お手本文字の配置・消去（トグル動作）、書体変更。
     - **IME 変換ウィンドウ追従 (`SetOtehonImePosition`)**: お手本入力欄の位置へ IME 変換候補ウィンドウを配置（`ImmSetCompositionWindow`）。
-    - 硯パネルでの墨補充（`RefillByPress`: ペンの筆圧に応じた補充量、マウス時は満タン）。
+    - 硯パネルでの墨補充（`RefillByPress`: ペンの筆圧に応じた補充量、マウス時は満タン）。硯の下の部分は補充に使わず、`IsOnInkStoneLand` で判定します。
+    - **硯のしごき (`WipeInkTo`)**: 硯の下の部分を押してから離すまで、動かした長さと筆圧に応じて墨を落とします。長さは硯の幅を単位とし、下の部分を通っている間だけ数えます。マウスは筆圧が無いので `REFILL_FULL_PRESSURE * 0.5` の強さとして扱います。
+    - **墨残量ゲージ (`SetInkAmountFromBadgeX`)**: 硯の上のゲージを押した位置へ残量を合わせ、離すまで左右の動きに追従させます。
+    - **入力ロックの解除 (`ReleasePenLock`, `OnPenOutOfRange`, `OnLButtonUp`)**: `suppressPenUntilLift` などのフラグを、新しい押下、ペンの接地解除、ボタンの解放、ペンの圏外で解除します。呼び出す時機は [`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) が決めます。
   - **一画戻す (Undo) / 一画復元 (Redo)**:
-    - [`UndoHistory`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Models/UndoHistory.h) を操作し、墨テクスチャ・墨残量・運筆時系列データを過去の状態へ安全に巻き戻し/復元。
+    - [`UndoHistory`](../App/FudeCode/Models/UndoHistory.h) を操作し、墨テクスチャ・墨残量・運筆時系列データを過去の状態へ安全に巻き戻し/復元。
+    - 墨の控えの取得（`CaptureInkForUndo`）と書き戻し（`GpuInk::RestoreSnapshot`）は本クラスで行い、そのあと `CommitUndo` / `CommitRedo` で履歴を更新します。書き戻せないときとメモリが足りないときは履歴を消します。
+    - `PushUndoBeforeStroke`: 画の書き始めに今の墨を控えます。`StrokeController` から呼びます。
     - 運筆記録の変更に合わせて `SyncReplayTimeline` を呼び出し、リプレイタイムラインを同期。
   - **外部運筆アーカイブのインポート解析**:
     - `ImportArchive`: 他者の運筆アーカイブ（JSON / CSV）を読み込み、現在の半紙寸法に合わせてリプレイ解析の対象に設定（自分の墨・記録は保持）。
     - `CloseImportedArchive`: 読み込んだ記録を閉じ、自分の運筆記録の解析へ復帰。
   - **紙を大きくする（横向き）表示の切り替え (`SetPaperOnly`)**:
     - 半紙の縦横回転、書いた墨と運筆記録の90度回転引き継ぎ、升目ジオメトリの再配置。
-    - `UndoHistory::RotateQuarter` により、Undo 履歴の墨スナップショットおよび復元用ストロークも90度回転させて保持。
+    - `UndoHistory::RotateQuarter` へ `GpuInk::RotateSnapshot` を呼ぶ関数を渡し、Undo 履歴の墨スナップショットおよび復元用ストロークも90度回転させて保持。
   - **全消し (`ClearAllInk`)**:
-    - 墨・運筆アーカイブ・Undo履歴・リプレイをリセット。消去直後の誤運筆を防ぐため `suppressPenUntilLift` を設定。
+    - 墨・運筆アーカイブ・Undo履歴・リプレイをリセットし、読み込んだ記録も閉じて筆タブへ移動します。消去直後の誤運筆を防ぐため `suppressPenUntilLift` を設定。
 - **入力 (Input)**:
   - `HWND hWnd`: ウィンドウハンドル
   - `POINT pt`: マウスクリック・移動座標
@@ -144,5 +167,8 @@ graph TD
 - **使用されている定数の名前 (Constants used)**:
   - `LeftTab`: 各タブ識別列挙子。
   - `REPLAY_TIMER_ID`: 運筆リプレイ再生用の Win32 タイマ ID (`101`)。
+  - `TRANSITION_TIMER_ID`: タイトル→スタジオ画面遷移用の Win32 タイマ ID (`102`)。
+  - `TITLE_ANIM_TIMER_ID`: タイトル画面ブレスアニメーション用の Win32 タイマ ID (`103`)。
+  - `REFILL_FULL_PRESSURE`: マウスでしごくときの強さの基準 (`0.8`)。
   - `MAX_GRID_CELLS`: お手本配置マスの最大数 (`8`)。
   - `OTEHON_PALETTE_MAX`: お手本候補タイルの最大数 (`8`)。

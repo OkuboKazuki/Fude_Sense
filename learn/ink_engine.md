@@ -6,7 +6,7 @@
 
 ## 1. ファイル構成と関係性
 
-中心となる [`GpuInk`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuInk.h) は、CPU側の粒子描画・線分ラスタライズと、[`GpuSimulator`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuSimulator.h) による GPU コンピュートシェーダー浸透計算を統合し、DirectX Interop（`CreateBitmapFromDxgiSurface`）によって VRAM 内ゼロコピー描画を実現しています。また、運筆リプレイ専用の再現エンジンとして [`ReplayInk`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/ReplayInk.h) が提供されています。
+中心となる [`GpuInk`](../App/FudeCode/InkEngine/GpuInk.h) は、CPU側の粒子描画・線分ラスタライズと、[`GpuSimulator`](../App/FudeCode/InkEngine/GpuSimulator.h) による GPU コンピュートシェーダー浸透計算を統合し、DirectX Interop（`CreateBitmapFromDxgiSurface`）によって VRAM 内ゼロコピー描画を実現しています。また、運筆リプレイ専用の再現エンジンとして [`ReplayInk`](../App/FudeCode/InkEngine/ReplayInk.h) が提供されています。
 
 ```mermaid
 graph TD
@@ -46,7 +46,7 @@ graph TD
 
 ## 2. 各プログラムファイルの詳細
 
-### 2.1 [GpuInk.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuInk.h) / [GpuInk.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuInk.cpp)
+### 2.1 [GpuInk.h](../App/FudeCode/InkEngine/GpuInk.h) / [GpuInk.cpp](../App/FudeCode/InkEngine/GpuInk.cpp)
 
 - **責務 (Responsibility)**:
   - 墨汁描画システムの中核クラスです。
@@ -75,7 +75,7 @@ graph TD
 
 ---
 
-### 2.2 [GpuSimulator.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuSimulator.h) / [GpuSimulator.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuSimulator.cpp)
+### 2.2 [GpuSimulator.h](../App/FudeCode/InkEngine/GpuSimulator.h) / [GpuSimulator.cpp](../App/FudeCode/InkEngine/GpuSimulator.cpp)
 
 - **責務 (Responsibility)**:
   - Direct3D 11 のコンピュートシェーダー（Compute Shader CS 5.0）を用いて、GPU上で並列に墨汁の水分拡散・浸透シミュレーションを実行します。
@@ -98,17 +98,19 @@ graph TD
 
 ---
 
-### 2.3 [InkModel.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/InkModel.h)
+### 2.3 [InkModel.h](../App/FudeCode/InkEngine/InkModel.h)
 
 - **責務 (Responsibility)**:
   - 硯および筆の墨残量（`amount`）を単一の物理パラメータ ($0.0 \sim 1.0$) で一元管理します。
   - ペンで硯を押した際の筆圧に応じた補充（`BeginPressRefill`, `PressRefill`）を実装。軽く触れただけで最小量、筆圧を強めるほど多く継ぎ足されます。
+  - 硯の磨り面で筆をしごいて墨を落とす処理（`Wipe`）を実装。減る量はしごいた長さと筆圧だけで決まり、残量によりません。しごいても筆は空にならず、`WIPE_FLOOR_AMOUNT` より下へは減りません。
   - 残量がしきい値（`KASURE_START_LEVEL = 0.60`）を下回ると、非線形指数カーブ（指数 `1.65`）によって筆先の渇き度合い（`dryness`）を算出し、運筆に伴うかすれ（渇筆）をリアルタイムに駆動します。
 - **入力 (Input)**:
   - `Consume(double delta)`: 運筆に応じたインク消費量
   - `Refill()`: 硯での墨補充（満タン `INK_MAX_VALUE = 1.0`）
   - `BeginPressRefill()`: 押し始めの残量（`refillBaseAmount`）を基準に設定
   - `PressRefill(double pressure)`: ペンの筆圧に応じた継ぎ足し補充
+  - `Wipe(double length, double pressure)`: しごいた長さ（硯の幅を 1 とする）と筆圧に応じた墨の削減
 - **出力 (Output)**:
   - `amount`: 現在の墨残量 ($0.0 \sim 1.0$)
   - `GetDryness()`: 筆の乾き具合（渇筆度合い $0.0$: 潤沢 $\sim 1.0$: 完全かすれ）
@@ -116,12 +118,15 @@ graph TD
   - `REFILL_MIN_AMOUNT = 0.05`: 筆圧補充時の最小付与量。
   - `REFILL_MAX_AMOUNT = 0.60`: 筆圧補充時の最大付与量（1回では満タンにならず、何度か押して含ませる）。
   - `REFILL_FULL_PRESSURE = 0.8`: 最大補充となる筆圧基準（出しにくい最大筆圧の手前で最大化）。
+  - `WIPE_MIN_PER_LENGTH = 0.04`: 硯の幅 1 つ分を軽くしごいたときに減る量。
+  - `WIPE_MAX_PER_LENGTH = 0.16`: 硯の幅 1 つ分を `REFILL_FULL_PRESSURE` 以上の筆圧でしごいたときに減る量。
+  - `WIPE_FLOOR_AMOUNT = 0.20`: しごいて減らせる下限の残量。
   - `KASURE_START_LEVEL = 0.60`: dryness が 0 から立ち上がり始める残量のしきい値（実際に白い筋が見え始めるのは残量 25～30% 付近）。
   - `INK_MAX_VALUE = 1.0`: 墨の満タン値。
 
 ---
 
-### 2.4 [InkSnapshot.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/InkSnapshot.h)
+### 2.4 [InkSnapshot.h](../App/FudeCode/InkEngine/InkSnapshot.h)
 
 - **責務 (Responsibility)**:
   - 「一画戻す」や「リプレイのシーク」のために、ある瞬間の墨量バッファ（`m_ink`）と紙の水分バッファ（`m_wetField`）を保持する軽量スナップショット構造体です。
@@ -136,11 +141,11 @@ graph TD
 
 ---
 
-### 2.5 [ReplayInk.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/ReplayInk.h) / [ReplayInk.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/ReplayInk.cpp)
+### 2.5 [ReplayInk.h](../App/FudeCode/InkEngine/ReplayInk.h) / [ReplayInk.cpp](../App/FudeCode/InkEngine/ReplayInk.cpp)
 
 - **責務 (Responsibility)**:
   - 運筆解析タブにおいて、過去に書いた書道作品を時系列に沿ってリアルタイムに再生する専用の墨エンジンです。
-  - 本番描画と全く同じ [`GpuInk`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/GpuInk.h) インスタンスへ時系列アーカイブの記録パラメータ（線幅、硬さ補正値、乾き具合、運筆方向角）を流し込むため、にじみ・かすれの再現度が完全一致します。
+  - 本番描画と全く同じ [`GpuInk`](../App/FudeCode/InkEngine/GpuInk.h) インスタンスへ時系列アーカイブの記録パラメータ（線幅、硬さ補正値、乾き具合、運筆方向角）を流し込むため、にじみ・かすれの再現度が完全一致します。
   - 画の節目でチェックポイント（`Checkpoint`）を保持し、シークバーや波形ドラッグによる巻き戻し時も高速なシーク・再描画を実現しています。
 - **入力 (Input)**:
   - `const TrajectorySession& session`: 運筆時系列アーカイブ

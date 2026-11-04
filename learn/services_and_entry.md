@@ -6,7 +6,7 @@
 
 ## 1. ファイル構成と関係性
 
-アプリケーションのエントリポイントである [`WacomMT_Scribble.cpp`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/WacomMT_Scribble.cpp) がOSのメッセージループを駆動し、デバイス管理を [`WintabManager`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/WintabManager.h) に、画像エクスポートを [`ImageExporter`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/ImageExporter.h) に委譲します。
+アプリケーションのエントリポイントである [`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) がOSのメッセージループを駆動し、デバイス管理を [`WintabManager`](../App/FudeCode/Services/WintabManager.h) に委譲します。画像エクスポートの [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) と運筆アーカイブのファイル選択 [`ArchiveDialogs`](../App/FudeCode/Services/ArchiveDialogs.h) は、[`AppController`](../App/FudeCode/Controllers/AppController.h) から呼ばれます。
 
 ```mermaid
 graph TD
@@ -21,13 +21,14 @@ graph TD
     end
 
     subgraph EntryLayer ["アプリケーションエントリ"]
-        MainApp["WacomMT_Scribble.cpp<br>(WndProc / メインウィンドウ / ショートカット)"]
+        MainApp["WacomMT_Scribble.cpp<br>(WndProc / メインウィンドウ / 全画面切替)"]
     end
 
     subgraph ServiceLayer ["Services レイヤー"]
         WM["WintabManager<br>(WintabManager.h / .cpp)"]
         WU["WintabUtils<br>(WintabUtils.h / .cpp)"]
         IE["ImageExporter<br>(ImageExporter.h / .cpp)"]
+        AD["ArchiveDialogs<br>(ArchiveDialogs.h / .cpp)"]
     end
 
     subgraph OtherLayers ["他レイヤーへのディスパッチ"]
@@ -46,11 +47,12 @@ graph TD
 
     MainApp -->|タブレット初期化・解放| WM
     WM -->|DLL関数呼び出し| WU
-    MainApp -->|画像保存・クリップボード発行| IE
 
     MainApp -->|入力パケット| Adapters
     Adapters --> Controllers
-    MainApp -->|ショートカットキー・UI操作| Controllers
+    MainApp -->|タイマ・ショートカットキー・UI操作| Controllers
+    Controllers -->|画像保存・クリップボード発行| IE
+    Controllers -->|保存・読込ダイアログ| AD
     MainApp -->|描画トリガー| Views
 ```
 
@@ -58,31 +60,33 @@ graph TD
 
 ## 2. 各プログラムファイルの詳細
 
-### 2.1 [WacomMT_Scribble.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/WacomMT_Scribble.cpp) / [WacomMT_Scribble.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/WacomMT_Scribble.h)
+### 2.1 [WacomMT_Scribble.cpp](../App/FudeCode/WacomMT_Scribble.cpp) / [WacomMT_Scribble.h](../App/FudeCode/WacomMT_Scribble.h)
 
 - **責務 (Responsibility)**:
   - アプリケーションのエントリポイント（`_tWinMain` / `WinMain`）とメインウィンドウプロシージャ（`WndProc`）を含みます。
   - **メッセージディスパッチ**:
-    - `WT_PACKET`: Wintab アダプタ経由で [`StrokeController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h) へ転送。
-    - `WM_POINTERDOWN` / `WM_POINTERUPDATE` / `WM_POINTERUP`: Windows Pointer アダプタ経由で [`StrokeController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h) へ転送。
-    - `WM_LBUTTONDOWN` / `WM_MOUSEMOVE` / `WM_LBUTTONUP`: [`AppController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/AppController.h) またはマウスアダプタへ転送。
+    - `WT_PACKET`: Wintab アダプタ経由で [`StrokeController`](../App/FudeCode/Controllers/StrokeController.h) へ転送。
+    - `WM_POINTERDOWN` / `WM_POINTERUPDATE` / `WM_POINTERUP`: Windows Pointer アダプタ経由で [`StrokeController`](../App/FudeCode/Controllers/StrokeController.h) へ転送。
+    - `WM_LBUTTONDOWN` / `WM_MOUSEMOVE` / `WM_LBUTTONUP`: [`AppController`](../App/FudeCode/Controllers/AppController.h) またはマウスアダプタへ転送。
     - `WM_CHAR`: お手本文字の入力ハンドリング（IME確定文字）。
-    - `WM_PAINT`: [`MainView::Render`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Views/MainView.h) の実行。
+    - `WM_PAINT`: [`MainView::Render`](../App/FudeCode/Views/MainView.h) の実行。
     - `WM_SIZE`: レイアウト再計算と描画エンジンのリサイズ。
-    - `WM_TIMER`:
+    - `WM_SETCURSOR`: `AppController::OnSetCursor` へ転送。
+    - `WT_PROXIMITY`: ペンが圏外へ出たらストロークを終え、`AppController::OnPenOutOfRange` で入力ロックなどを解除。
+    - `WM_TIMER`: `AppController::OnTimer` へ転送。
       - `REPLAY_TIMER_ID` (`101`): 運筆リプレイ再生時刻の進行。
       - `TRANSITION_TIMER_ID` (`102`): タイトル画面からスタジオ画面へのアルファブレンド遷移演出の進行。
       - `TITLE_ANIM_TIMER_ID` (`103`): タイトル画面でのロゴ・テキストのブレスアニメーション更新。
-  - **キーボードショートカット制御**:
+  - **キーボードショートカット制御**（`F11` と `Alt + /` 以外は `AppController::OnKeyDown` で処理）:
     - `F11`: `ToggleFullscreen` によるボーダーレス全画面表示切替（マルチモニタ対応、元のウィンドウスタイルと配置を完全退避・復元。お手本入力中も常時有効）。
     - `F9`: 紙を大きくする（横向き）表示の切り替え（`AppController::SetPaperOnly`）。
     - `Esc`: 全消し確認モーダルの呼び出し / モーダル表示中のキャンセル。
     - `Ctrl + Z`: 一画戻す（`AppController::UndoStroke`）。
     - `Ctrl + Shift + Z` / `Ctrl + Y`: 一画復元（`AppController::RedoStroke`）。
     - `Alt + /` / `Alt + ?`: バージョン情報ダイアログ（About）。
-  - **入力保護 ([`IsStudioAcceptingKeys`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/WacomMT_Scribble.cpp#L81))**:
+  - **入力保護 ([`IsStudioAcceptingKeys`](../App/FudeCode/WacomMT_Scribble.cpp#L79))**:
     - タイトル画面および画面遷移中は、F11 以外のすべてのショートカットを遮断し、裏でスタジオ状態が変わることを防止。
-    - お手本文字の入力中（`g_appState.otehon.isTyping`）は、文字入力以外のショートカットを一時遮断。
+    - お手本文字の入力中（`otehon.isTyping`）は、`F11` と `F9` 以外のショートカットを `AppController::OnKeyDown` で一時遮断。
 - **入力 (Input)**:
   - Windows メッセージ（`HWND`, `UINT message`, `WPARAM wParam`, `LPARAM lParam`）
 - **出力 (Output)**:
@@ -90,13 +94,12 @@ graph TD
 - **使用されている定数の名前 (Constants used)**:
   - ウィンドウタイトル: `szTitle = L"Fude Sense"`
   - ウィンドウクラス名: `szWindowClass = L"FUDESENSE"`
-  - `REPLAY_TIMER_ID`: リプレイ進行用タイマ識別子 (`101`)。
-  - `TRANSITION_TIMER_ID`: 画面遷移用タイマ識別子 (`102`)。
-  - `TITLE_ANIM_TIMER_ID`: タイトルブレス用タイマ識別子 (`103`)。
+  - `REPLAY_TIMER_ID`: リプレイ進行用タイマ識別子 (`101`)。終了時に止めます。
+  - `TITLE_ANIM_TIMER_ID`: タイトルブレス用タイマ識別子 (`103`)。起動時に開始します。
 
 ---
 
-### 2.2 [WintabManager.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/WintabManager.h) / [WintabManager.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/WintabManager.cpp)
+### 2.2 [WintabManager.h](../App/FudeCode/Services/WintabManager.h) / [WintabManager.cpp](../App/FudeCode/Services/WintabManager.cpp)
 
 - **責務 (Responsibility)**:
   - `wintab32.dll` との接続を確立し、ペンタブレットの論理コンテキスト（`HCTX`）のオープン・クローズおよびデバイス特性情報の取得を管理します。
@@ -112,7 +115,7 @@ graph TD
 
 ---
 
-### 2.3 [WintabUtils.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/WintabUtils.h) / [WintabUtils.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/WintabUtils.cpp)
+### 2.3 [WintabUtils.h](../App/FudeCode/Services/WintabUtils.h) / [WintabUtils.cpp](../App/FudeCode/Services/WintabUtils.cpp)
 
 - **責務 (Responsibility)**:
   - `wintab32.dll` を動的ロード（`LoadLibraryA`）し、Wintab API の関数ポインタ（`WTInfoA`, `WTOpenA`, `WTPacket`, `WTClose` など）を解決・エクスポートする低レベルユーティリティモジュールです。
@@ -126,7 +129,7 @@ graph TD
 
 ---
 
-### 2.4 [ImageExporter.h](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/ImageExporter.h) / [ImageExporter.cpp](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Services/ImageExporter.cpp)
+### 2.4 [ImageExporter.h](../App/FudeCode/Services/ImageExporter.h) / [ImageExporter.cpp](../App/FudeCode/Services/ImageExporter.cpp)
 
 - **責務 (Responsibility)**:
   - 半紙上に描かれた墨汁作品を、デスクトップへの高画質画像ファイル保存（WIC PNG / BMP 形式）またはクリップボードへの転送（`CF_BITMAP` 形式）を行う画像エクスポートサービスです。
@@ -136,18 +139,36 @@ graph TD
     - デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png`（WIC失敗時は `.bmp`）として保存。
   - **破損ファイルのクリーンアップ**:
     - 保存途中で容量不足や書き込み失敗が発生した場合、壊れたファイルを残さないよう直ちに削除（`DeleteFileW`）を実行。
-  - **フィードバック通知**:
-    - `AppState::SetSaveFeedback` を介して、成功時は緑（`✓ デスクトップにPNG保存しました` など）、失敗時は赤のエラーメッセージをポップアップ表示します。
+  - **結果の通知**:
+    - 結果を `ImageExportResult` で返すだけで、画面の状態には書き込みません。メッセージは [`AppController`](../App/FudeCode/Controllers/AppController.h) が設定します。
 - **入力 (Input)**:
   - `HWND hWnd`: 親ウィンドウ
   - `GpuInk& gpuInk`: 墨テクスチャ
-  - `AppState& state`: 半紙の寸法・UI状態
+  - `const AppState& state`: 半紙の寸法
   - `bool toClipboard`: クリップボードにコピーするか、ファイル保存するか
 - **出力 (Output)**:
   - ファイル出力（デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png` または `.bmp`）
   - クリップボードへのビットマップデータ格納 (`CF_BITMAP`)
-  - 戻り値 `bool`: エクスポート成否
+  - 戻り値 `ImageExportResult`: `NothingToExport`（半紙の大きさが 0）、`Failed`、`CopiedToClipboard`、`SavedPng`、`SavedBmp`
 - **使用されている定数の名前 (Constants used)**:
   - `CF_BITMAP`: Win32 クリップボード形式。
   - `GUID_ContainerFormatPng`: WIC (Windows Imaging Component) の PNG エンコーダー GUID。
   - `GUID_WICPixelFormat24bppBGR`: WIC 24bpp BGR ピクセルフォーマット。
+
+---
+
+### 2.5 [ArchiveDialogs.h](../App/FudeCode/Services/ArchiveDialogs.h) / [ArchiveDialogs.cpp](../App/FudeCode/Services/ArchiveDialogs.cpp)
+
+- **責務 (Responsibility)**:
+  - 運筆アーカイブのファイル選択ダイアログを開き、選ばれたファイルを [`TrajectorySession`](../App/FudeCode/Models/TrajectoryModel.h) の読み書き処理へ渡します。
+  - 結果を `Result` で返し、ユーザーの取り消しと障害を区別します。取り消しでは呼び出し側が何も表示せず、障害のときだけ知らせられます。
+- **入力 (Input)**:
+  - `HWND hWnd`: 親ウィンドウ
+  - `const TrajectorySession& session`: 保存する運筆記録
+  - `PaperType paperType`, `Brush brushType`, `double hardness`: JSON に含める設定
+  - `TrajectorySession& session`, `const RECT& rPaper`: 読み込み先の記録と半紙の矩形
+- **出力 (Output)**:
+  - 戻り値 `Result`: `Saved`、`Canceled`、`Failed`
+  - `outFileName`, `outError`: 読み込んだファイル名とエラー内容
+- **使用されている定数の名前 (Constants used)**:
+  - `Result`: ダイアログの結果の列挙値。

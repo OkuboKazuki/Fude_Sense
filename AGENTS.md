@@ -16,7 +16,7 @@
   - 筆（小筆・中筆・大筆、硬さ・感度調整、止め・払い・傾き連動）
   - 用紙（半紙）および各種下敷き格子ガイド（十字、2段、田の字、2x3、2x4）
   - お手本表示（入力した文字を升目ミニマップで配置、楷書・教科書体・行書）
-  - 硯（すずり）での墨補充（ペンの筆圧に応じた量）および墨残量管理
+  - 硯（すずり）での墨補充（ペンの筆圧に応じた量）、磨り面をしごいて墨を落とす操作、および墨残量管理（ゲージで残量を直接調整）
   - 一画戻す / 一画復元
   - 紙を大きくする表示（F9、半紙を横向きにして画面いっぱいに表示）
   - 運筆の記録・リプレイ・解析（JSON / CSV 書き出し）
@@ -45,6 +45,7 @@ App/FudeCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
 │   ├── UIComponents.h               # UI ウィジェット（RECT 互換）
+│   ├── MathUtils.h                  # 描画に依存しない計算関数 (Clamp, RW, RH, PtIn)
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
 │   └── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合ファサード
@@ -79,6 +80,7 @@ App/FudeCode/
 ├── Services/                        # [Service] OS・外部デバイス連携
 │   ├── WintabManager.h / .cpp       # Wintabコンテキスト・デバイス管理
 │   ├── ImageExporter.h / .cpp       # 画像エクスポート (WIC PNG / BMP, クリップボード)
+│   ├── ArchiveDialogs.h / .cpp      # 運筆アーカイブのファイル選択ダイアログ
 │   └── WintabUtils.h / .cpp         # Wintab ユーティリティ
 │
 ├── Wintab_SDK/                      # Wintab SDK ヘッダー（Wacom 配布物）
