@@ -26,7 +26,6 @@ classDiagram
         +UndoHistory undo
         +UIState ui
         +AnalysisSession() TrajectorySession&
-        +Layout(int width, int height)
         +SetSaveFeedback(wstring message, bool isError)
     }
 
@@ -150,21 +149,19 @@ classDiagram
 
 ---
 
-### 2.2 [AppState.h](../App/FudeCode/Models/AppState.h) / [AppState.cpp](../App/FudeCode/Models/AppState.cpp)
+### 2.2 [AppState.h](../App/FudeCode/Models/AppState.h)
 
 - **責務 (Responsibility)**:
   - システム全体の中心となる状態ファサードクラス `AppState`、および筆・紙・お手本・UIのサブモデルを定義・管理します。
   - **画面状態とアニメーション遷移**: 起動時のタイトル画面（`AppScreen::Title`）から制作画面（`AppScreen::Studio`）への滑らかなアルファブレンド遷移（`transitionProgress`, `transitionDurationMs = 400`）の状態を保持します。
-  - **動的レイアウト計算**: `Layout(int clientWidth, int clientHeight)` により、ウィンドウサイズや「紙を大きくする（横向き）」モード（`paperOnly`）に応じて、半紙領域（`rPaper`）、左メニュー、右側硯パネル（墨溜まり `rInkPool`、磨り面 `rInkLand`、墨残量ゲージ `rInkBadge` を含む）、波形グラフの描画領域（`rAnalysisGraphPlot`）、下敷き升目セル（`rGridCell`）のジオメトリを一元的に整合性を保って算出します。
-  - **下敷きと手本の一元配置ジオメトリ**: `rGridBorder` および `rGridCell[MAX_GRID_CELLS]` を `LayoutGridGeometry()` で一括計算し、罫線描画（`CanvasView::DrawGrid`）とお手本配置・ミニマップが1pxの狂いもなく正確に一致する設計としています。
+  - **画面配置の保持**: 半紙領域（`rPaper`）、左メニュー、右側硯パネル（墨溜まり `rInkPool`、磨り面 `rInkLand`、墨残量ゲージ `rInkBadge` を含む）、波形グラフの描画領域（`rAnalysisGraphPlot`）、下敷き升目セル（`rGridBorder`, `rGridCell[MAX_GRID_CELLS]`）の矩形を `UIState` に保持します。計算は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が行います。
   - **お手本パレット管理**: IME入力された文字列からサロゲートペアを考慮して1文字単位の候補タイル（`palette`）を再構築し、升目ミニマップからの配置（`PlaceAtCell`）を管理します（同じ字が置かれているマスを再指定すると消去するトグル動作）。
   - **他者アーカイブの解析サポート**: `importedTrajectory`, `viewingImport`, `importedName` を保持し、`AnalysisSession()` ゲッターにより自分の運筆と読み込んだアーカイブを透過的に切り替えます。
   - **保存通知とエラーハンドリング**: `SetSaveFeedback(message, isError)` により、保存成否に応じたフィードバック文言と表示時間、エラー表示フラグ（`saveFeedbackIsError`）を管理します。
 - **入力 (Input)**:
-  - `clientWidth`, `clientHeight`: ウィンドウ描画領域の幅と高さ
   - ユーザー操作による各種パラメータ更新指令
 - **出力 (Output)**:
-  - 各UIコンポーネントの位置矩形（`UIWidget` / `RECT`）
+  - 各UIコンポーネントの位置矩形（`UIWidget` / `RECT`）の保持値
   - 各種モデルの現在値
 - **使用されている定数の名前 (Constants used)**:
   - `TILT_WIDTH_COMPENSATION`: ペン仰角の違いによる線幅変化を旧環境の手応えに合わせる補正係数 (`1.20`)。

@@ -48,7 +48,7 @@ App/FudeCode/
 │   ├── MathUtils.h                  # 描画に依存しない計算関数 (Clamp, RW, RH, PtIn)
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
-│   └── AppState.h / .cpp            # 筆・紙・お手本・UI状態統合ファサード
+│   └── AppState.h                   # 筆・紙・お手本・UI状態統合ファサード
 │
 ├── InkEngine/                       # ★ [Ink System] インク管理・物理にじみシミュレーション ★
 │   ├── GpuInk.h / .cpp              # Direct2D/D3D11 リアルタイム墨汁浸透・物理エンジン
@@ -65,6 +65,7 @@ App/FudeCode/
 │   ├── InkStoneView.h / .cpp        # 右側 硯・墨残量・墨補充・全消し描画
 │   ├── AnalysisView.h / .cpp        # リアルタイム運筆解析・3D筆姿勢モニタ描画
 │   ├── ModalView.h / .cpp           # 全消し確認モーダル描画
+│   ├── ScreenLayout.h / .cpp        # 全UI要素のレイアウト計算
 │   └── MainView.h / .cpp            # ダブルバッファリングと描画統括
 │
 ├── Controllers/                     # [Controller] 運筆・UI制御ロジック

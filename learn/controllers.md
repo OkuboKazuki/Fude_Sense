@@ -37,6 +37,10 @@ graph TD
         AD["ArchiveDialogs (ファイル選択ダイアログ)"]
     end
 
+    subgraph ViewLayer ["Views レイヤー"]
+        SL["ScreenLayout (レイアウト計算)"]
+    end
+
     subgraph OSLayer ["OS / Win32"]
         WinMsg["WM_PAINT / InvalidateRect"]
     end
@@ -56,6 +60,7 @@ graph TD
     AC -->|作品画像の書き出し| IE
     AC -->|保存・読込ダイアログ| AD
     AC -->|外部アーカイブ読込・切替| Traj
+    AC -->|サイズ変更・タブ切替・再生位置の変更など| SL
     AC -->|画面全体の再描画| WinMsg
 ```
 
@@ -120,6 +125,7 @@ graph TD
 
 - **責務 (Responsibility)**:
   - マウスクリック、ドラッグ、キー入力、タイマ、カーソル形状、ウィンドウサイズ変更など、UI全般のイベントをハンドリングします。
+  - **レイアウトの再計算**: ウィンドウサイズの変更やタブの切り替えなどで [`ScreenLayout::Layout`](../App/FudeCode/Views/ScreenLayout.h) を、再生位置の変更で `ScreenLayout::UpdateReplaySeekThumb` を呼びます。
   - **画面遷移制御**:
     - タイトル画面でのタップ/クリック検知によりスタジオ画面への遷移アニメーション（`isTransitioning = true`）を開始。
     - 左上ホームボタン押下によるタイトル画面への復帰（読み込んだ記録を表示中なら閉じます）。

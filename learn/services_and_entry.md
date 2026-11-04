@@ -70,7 +70,8 @@ graph TD
     - `WM_LBUTTONDOWN` / `WM_MOUSEMOVE` / `WM_LBUTTONUP`: [`AppController`](../App/FudeCode/Controllers/AppController.h) またはマウスアダプタへ転送。
     - `WM_CHAR`: お手本文字の入力ハンドリング（IME確定文字）。
     - `WM_PAINT`: [`MainView::Render`](../App/FudeCode/Views/MainView.h) の実行。
-    - `WM_SIZE`: レイアウト再計算と描画エンジンのリサイズ。
+    - `WM_CREATE`: [`ScreenLayout::Layout`](../App/FudeCode/Views/ScreenLayout.h) による最初のレイアウト計算、描画エンジンとタブレットの初期化。
+    - `WM_SIZE`: `AppController::OnSize` へ転送（レイアウト再計算と描画エンジンのリサイズ）。
     - `WM_SETCURSOR`: `AppController::OnSetCursor` へ転送。
     - `WT_PROXIMITY`: ペンが圏外へ出たらストロークを終え、`AppController::OnPenOutOfRange` で入力ロックなどを解除。
     - `WM_TIMER`: `AppController::OnTimer` へ転送。
@@ -84,7 +85,7 @@ graph TD
     - `Ctrl + Z`: 一画戻す（`AppController::UndoStroke`）。
     - `Ctrl + Shift + Z` / `Ctrl + Y`: 一画復元（`AppController::RedoStroke`）。
     - `Alt + /` / `Alt + ?`: バージョン情報ダイアログ（About）。
-  - **入力保護 ([`IsStudioAcceptingKeys`](../App/FudeCode/WacomMT_Scribble.cpp#L79))**:
+  - **入力保護 ([`IsStudioAcceptingKeys`](../App/FudeCode/WacomMT_Scribble.cpp#L80))**:
     - タイトル画面および画面遷移中は、F11 以外のすべてのショートカットを遮断し、裏でスタジオ状態が変わることを防止。
     - お手本文字の入力中（`otehon.isTyping`）は、`F11` と `F9` 以外のショートカットを `AppController::OnKeyDown` で一時遮断。
 - **入力 (Input)**:

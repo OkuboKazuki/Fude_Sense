@@ -6,7 +6,7 @@
 
 ## 1. ファイル構成と関係性
 
-中心となる [`MainView`](../App/FudeCode/Views/MainView.h) が裏画面（ダブルバッファ）を用意し、各専門ビューを決められた描画順序で呼び出します。共通の描画部品（フォント、角丸矩形、影、テキスト）は [`RenderUtils`](../App/FudeCode/Views/RenderUtils.h) に集約されています。
+中心となる [`MainView`](../App/FudeCode/Views/MainView.h) が裏画面（ダブルバッファ）を用意し、各専門ビューを決められた描画順序で呼び出します。共通の描画部品（フォント、角丸矩形、影、テキスト）は [`RenderUtils`](../App/FudeCode/Views/RenderUtils.h) に集約されています。各要素の座標は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が計算し、描画とクリック判定の両方が同じ値を使います。
 
 ```mermaid
 graph TD
@@ -27,6 +27,13 @@ graph TD
         RU["RenderUtils<br>(RenderUtils.h / .cpp)"]
     end
 
+    subgraph LayoutCalc ["レイアウト計算"]
+        SL["ScreenLayout<br>(ScreenLayout.h / .cpp)"]
+    end
+
+    Caller["AppController / WacomMT_Scribble.cpp"]
+    UIStateNode["UIState (各要素の矩形)"]
+
     MV -->|タイトル画面時| TV
     MV -->|1. 机背景描画| RU
     MV -->|2. 半紙・下敷き・墨・手本・芯線| CV
@@ -41,6 +48,10 @@ graph TD
     IV -.->|共通図形・フォント| RU
     AV -.->|共通図形・フォント| RU
     MODV -.->|共通図形・フォント| RU
+
+    Caller -->|サイズ変更・タブ切替・再生位置の変更など| SL
+    SL -->|矩形を書き込み| UIStateNode
+    UIStateNode -.->|配置を参照| MV
 ```
 
 ---
@@ -159,7 +170,7 @@ graph TD
   - **リプレイコントローラ ([`DrawReplayControls`](../App/FudeCode/Views/AnalysisView.cpp#L52))**: 再生/一時停止、前画/次画スキップ、再生速度（0.5x, 1.0x, 2.0x）、シークバー（プログレスバーおよび各画開始目盛り付き）。
   - **メトリクスカード ([`DrawMetricsCard`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆圧、高度角、速度、墨残量、総画数を表示。
   - **筆姿勢コンパス ([`DrawTiltCompass`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆先の仰角・方位角をコンパス状にグラフィカル表示。
-  - **リアルタイム波形グラフ ([`DrawWaveformGraph`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆圧、運筆速度、墨残量の推移をオシロスコープ状に描画（クリック/ドラッグでのシーク操作に対応）。描画領域は `AppState::Layout` が求めた `ui.rAnalysisGraphPlot` を使い、シーク判定と揃えています。
+  - **リアルタイム波形グラフ ([`DrawWaveformGraph`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆圧、運筆速度、墨残量の推移をオシロスコープ状に描画（クリック/ドラッグでのシーク操作に対応）。描画領域は `ScreenLayout::Layout` が求めた `ui.rAnalysisGraphPlot` を使い、シーク判定と揃えています。
 - **入力 (Input)**:
   - `HDC dc`, `const RECT& rBox`, `const AppState& state`
 - **出力 (Output)**:
@@ -197,3 +208,27 @@ graph TD
 - **使用されている定数の名前 (Constants used)**:
   - デフォルトフォント名: `L"Yu Gothic UI"`。
   - `FW_NORMAL`, `FW_BOLD`: GDI フォントウェイト定数。
+
+---
+
+### 2.9 [ScreenLayout.h](../App/FudeCode/Views/ScreenLayout.h) / [ScreenLayout.cpp](../App/FudeCode/Views/ScreenLayout.cpp)
+
+- **責務 (Responsibility)**:
+  - ウィンドウサイズと表示モードに応じて全UI要素の位置矩形を計算し、`UIState` へ書き込みます。書き換えるのは `UIState` だけで、ほかのモデルは読むだけです。
+  - **通常表示 (`Layout`)**: 左メニュー、各タブの操作部品、画面中央の半紙（`rPaper`）、右側硯パネル、全消し確認モーダルを配置します。硯パネルは空き領域に合わせて拡大率（`inkStoneScale`）を決めます。
+  - **紙だけ表示 (`LayoutPaperOnly`)**: 横に倒した半紙を画面いっぱいに広げ、右端の帯へボタンを配置します。左メニューと硯パネルは矩形ごと畳み、当たり判定が運筆を横取りしないようにします。硯まわりのドラッグとしごきの状態も解除します。モーダルは倒した向きで組みます。
+  - **下敷きと手本の一元配置 (`LayoutGridGeometry`)**: `rGridBorder` と `rGridCell[MAX_GRID_CELLS]`、お手本のミニマップ（`rOtehonCellBtn`）を一括で計算し、罫線描画（`CanvasView::DrawGrid`）とお手本配置を一致させます。
+  - **シークバーのツマミ (`UpdateReplaySeekThumb`)**: 再生時刻からツマミの位置だけを計算します。再生中は毎フレーム呼ばれます。
+- **入力 (Input)**:
+  - `UIState& ui`: 書き込み先
+  - `const PaperModel& paper`: 半紙の縦横比と下敷きパターン
+  - `bool viewingImport`: 読み込んだ記録を表示中か（「自分の記録に戻る」ボタンの有無）
+  - `const ReplayModel& replay`: 再生時刻（ツマミの位置）
+  - `int clientWidth, int clientHeight`: クライアント領域の幅と高さ
+- **出力 (Output)**:
+  - `ui` の各要素の矩形、`inkStoneScale`、`gridCols`、`gridRows`、`gridCellCount`
+- **使用されている定数の名前 (Constants used)**:
+  - `INK_STONE_MAX_SCALE`: 硯パネルの最大拡大率 (`1.8`)。
+  - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
+  - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
+  - `MAX_GRID_CELLS`: 升目セル配列の上限 (`8`)。
