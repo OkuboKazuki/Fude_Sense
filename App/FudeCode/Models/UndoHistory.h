@@ -3,11 +3,10 @@
 #include <deque>
 #include <vector>
 #include <cstddef>
+#include <functional>
 #include "InkSnapshot.h"
 #include "InkModel.h"
 #include "TrajectoryModel.h"
-
-class GpuInk;
 
 // 「一画戻す」で遡れる画数。「一画復元」も同じ数だけ持てる。
 constexpr int UNDO_MAX_STROKES = 30;
@@ -36,25 +35,36 @@ struct UndoEntry {
 // 戻す・復元はどちらも「今の状態を控えて、控えてあった状態を書き戻し、
 // 控えを反対側の山へ移す」という同じ操作なので、戻したあとに復元し直す、
 // といった往復も同じ仕組みで扱える。
+//
+// 墨エンジンには触れない。墨の控えを取るのと書き戻すのは呼び出し側で行い、
+// ここでは InkSnapshot の保管と、墨残量・運筆アーカイブをまとめた更新だけを行う。
 class UndoHistory {
 public:
     // 画の書き始めに、墨を置く前の状態を控える。
     // 新しい画を書いた時点で復元の枝は捨てる（戻す→書く→復元 は成立しない）
-    bool PushBeforeStroke(GpuInk& gpuInk, const InkModel& ink, size_t strokeCount);
+    bool PushBeforeStroke(InkSnapshot&& inkSnapshot, const InkModel& ink, size_t strokeCount);
 
-    // 直前の1画を取り消す。墨・墨残量・運筆アーカイブをまとめて戻す
-    bool Undo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& trajectory);
+    // 直前の1画の取り消しで書き戻す墨の控え。CanUndo() のときだけ呼ぶ
+    const InkSnapshot& UndoTargetInk() const { return m_undo.back().ink; }
 
-    // 戻しすぎた1画を復元する
-    bool Redo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& trajectory);
+    // 墨を書き戻したあとに呼び、墨残量・運筆アーカイブを戻して履歴を進める。
+    // currentInk は書き戻す前の墨で、復元用に控える。
+    void CommitUndo(InkSnapshot&& currentInk, InkModel& ink, TrajectorySession& trajectory);
+
+    // 戻しすぎた1画の復元で書き戻す墨の控え。CanRedo() のときだけ呼ぶ
+    const InkSnapshot& RedoTargetInk() const { return m_redo.back().ink; }
+
+    // 墨を書き戻したあとに呼び、墨残量・運筆アーカイブを進めて履歴を更新する。
+    // currentInk は書き戻す前の墨で、また戻せるように控える。
+    void CommitRedo(InkSnapshot&& currentInk, InkModel& ink, TrajectorySession& trajectory);
 
     void Clear();
 
     // 紙だけ表示の出入りで半紙が90度倒れたとき、控えも同じ向きへ残す。
-    // 墨の控えは新しい半紙の寸法 canvasW x canvasH へ、復元用の1画は
+    // 墨の控えは rotateInk で新しい半紙の向きと寸法へ、復元用の1画は
     // TrajectorySession::RotateQuarter と同じように回す。
     // 回せなかった場合は、書き戻せない控えを残さないよう履歴を全部捨てて false を返す。
-    bool RotateQuarter(bool counterClockwise, int canvasW, int canvasH, const RECT& oldPaper, const RECT& newPaper);
+    bool RotateQuarter(const std::function<bool(InkSnapshot&)>& rotateInk, bool counterClockwise, const RECT& oldPaper, const RECT& newPaper);
 
     bool CanUndo() const { return !m_undo.empty(); }
     bool CanRedo() const { return !m_redo.empty(); }
@@ -63,8 +73,8 @@ public:
     size_t TotalBytes() const { return m_bytes; }
 
 private:
-    // 今の状態を控えへ取る（戻す・復元の直前に使う）
-    bool CaptureCurrent(GpuInk& gpuInk, const InkModel& ink, UndoEntry& out);
+    // 墨の控えと今の墨残量を、ひと組の控えにまとめる
+    static UndoEntry MakeEntry(InkSnapshot&& inkSnapshot, const InkModel& ink);
     void Trim();
     void DropOldest(std::deque<UndoEntry>& stack);
     void ClearRedo();

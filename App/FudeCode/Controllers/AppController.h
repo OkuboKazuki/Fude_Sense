@@ -35,6 +35,8 @@ public:
     static bool WipeInkTo(POINT pt, double pressure, AppState& state);
     // 左メニューのタブ切り替え（解析から他タブへ移動時はインポート状態を自動解除）
     static void SelectTab(HWND hWnd, AppState& state, LeftTab newTab);
+    // 画の書き始めに、墨を置く前の状態を「一画戻す」用に控える
+    static bool PushUndoBeforeStroke(GpuInk& gpuInk, AppState& state);
     // 直前の1画を取り消す（墨・墨残量・運筆アーカイブをまとめて戻す）
     static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
     // 戻しすぎた1画を復元する

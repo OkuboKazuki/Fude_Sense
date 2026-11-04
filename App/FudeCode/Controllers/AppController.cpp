@@ -5,6 +5,8 @@
 #include "ArchiveDialogs.h"
 #include <imm.h>
 #include <cmath>
+#include <new>
+#include <utility>
 
 #pragma comment(lib, "imm32.lib")
 
@@ -250,13 +252,43 @@ void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
+// 「一画戻す」「一画復元」用に、今の墨を控える。
+static bool CaptureInkForUndo(GpuInk& gpuInk, UndoHistory& undo, InkSnapshot& out) {
+    try {
+        return gpuInk.CaptureSnapshot(out);
+    }
+    catch (const std::bad_alloc&) {
+        // 32 ビットの空きが尽きた。控えを全部手放して次の画に備える。
+        // 履歴が無いだけで運筆自体は続けられる。
+        undo.Clear();
+        return false;
+    }
+}
+
+bool AppController::PushUndoBeforeStroke(GpuInk& gpuInk, AppState& state) {
+    InkSnapshot current;
+    if (!CaptureInkForUndo(gpuInk, state.undo, current)) return false;
+    return state.undo.PushBeforeStroke(std::move(current), state.ink, state.trajectory.GetTotalStrokeCount());
+}
+
 // 直前の1画を取り消す。
 // 墨は画素バッファへ破壊的に積み上がり、にじみも時間で進むため、運筆データから
 // 描き直しても同じ絵にはならない。画を書き始める直前に控えておいた状態
 // （UndoHistory）を書き戻す。
 bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     // 墨・墨残量・運筆アーカイブ（解析グラフ・JSON/CSV）をまとめて1画戻す
-    if (!state.undo.Undo(gpuInk, state.ink, state.trajectory)) return false;
+    if (!state.undo.CanUndo()) return false;
+
+    // 戻す前の墨を、復元用に控えておく
+    InkSnapshot current;
+    if (!CaptureInkForUndo(gpuInk, state.undo, current)) return false;
+
+    if (!gpuInk.RestoreSnapshot(state.undo.UndoTargetInk())) {
+        // 半紙の寸法が変わっているなど、もう書き戻せない控えなので捨てる
+        state.undo.Clear();
+        return false;
+    }
+    state.undo.CommitUndo(std::move(current), state.ink, state.trajectory);
 
     SyncReplayTimeline(hWnd, state);
 
@@ -270,7 +302,17 @@ bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 // 戻しすぎた1画を復元する。戻したときに控えておいた状態を書き戻すだけなので、
 // 取り消しと同じ経路を逆向きに辿る。
 bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
-    if (!state.undo.Redo(gpuInk, state.ink, state.trajectory)) return false;
+    if (!state.undo.CanRedo()) return false;
+
+    // 復元する前の墨を、また戻せるように控えておく
+    InkSnapshot current;
+    if (!CaptureInkForUndo(gpuInk, state.undo, current)) return false;
+
+    if (!gpuInk.RestoreSnapshot(state.undo.RedoTargetInk())) {
+        state.undo.Clear();
+        return false;
+    }
+    state.undo.CommitRedo(std::move(current), state.ink, state.trajectory);
 
     SyncReplayTimeline(hWnd, state);
 
@@ -352,7 +394,11 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     // 「一画戻す」「一画復元」の控えも同じ向きへ回して残す。
     // 墨を書き戻せなかった（白紙になった）ときは、控えと画面が噛み合わないので捨てる。
     if (restored) {
-        state.undo.RotateQuarter(on, gpuInk.GetWidth(), gpuInk.GetHeight(), oldPaper, state.ui.rPaper);
+        const int canvasW = gpuInk.GetWidth();
+        const int canvasH = gpuInk.GetHeight();
+        state.undo.RotateQuarter(
+            [on, canvasW, canvasH](InkSnapshot& snap) { return GpuInk::RotateSnapshot(snap, on, canvasW, canvasH); },
+            on, oldPaper, state.ui.rPaper);
     } else {
         state.undo.Clear();
     }

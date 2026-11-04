@@ -1,28 +1,20 @@
 #include "stdafx.h"
 #include "UndoHistory.h"
-#include "GpuInk.h"
 #include <new>
+#include <utility>
 
-bool UndoHistory::CaptureCurrent(GpuInk& gpuInk, const InkModel& ink, UndoEntry& out) {
-    try {
-        if (!gpuInk.CaptureSnapshot(out.ink)) return false;
-    }
-    catch (const std::bad_alloc&) {
-        // 32 ビットの空きが尽きた。控えを全部手放して次の画に備える。
-        // 履歴が無いだけで運筆自体は続けられる。
-        Clear();
-        return false;
-    }
-    out.inkModel = ink;
-    out.bytes = out.ink.ByteSize();
-    return true;
+UndoEntry UndoHistory::MakeEntry(InkSnapshot&& inkSnapshot, const InkModel& ink) {
+    UndoEntry entry;
+    entry.ink = std::move(inkSnapshot);
+    entry.inkModel = ink;
+    entry.bytes = entry.ink.ByteSize();
+    return entry;
 }
 
-bool UndoHistory::PushBeforeStroke(GpuInk& gpuInk, const InkModel& ink, size_t strokeCount) {
+bool UndoHistory::PushBeforeStroke(InkSnapshot&& inkSnapshot, const InkModel& ink, size_t strokeCount) {
     (void)strokeCount;
 
-    UndoEntry entry;
-    if (!CaptureCurrent(gpuInk, ink, entry)) return false;
+    UndoEntry entry = MakeEntry(std::move(inkSnapshot), ink);
 
     try {
         m_undo.push_back(std::move(entry));
@@ -39,19 +31,11 @@ bool UndoHistory::PushBeforeStroke(GpuInk& gpuInk, const InkModel& ink, size_t s
     return true;
 }
 
-bool UndoHistory::Undo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& trajectory) {
-    if (m_undo.empty()) return false;
-
+void UndoHistory::CommitUndo(InkSnapshot&& currentInk, InkModel& ink, TrajectorySession& trajectory) {
     // 戻す前の状態を、復元用に控えておく
-    UndoEntry redoEntry;
-    if (!CaptureCurrent(gpuInk, ink, redoEntry)) return false;
+    UndoEntry redoEntry = MakeEntry(std::move(currentInk), ink);
 
     UndoEntry& top = m_undo.back();
-    if (!gpuInk.RestoreSnapshot(top.ink)) {
-        // 半紙の寸法が変わっているなど、もう書き戻せない控えなので捨てる
-        Clear();
-        return false;
-    }
     ink = top.inkModel;
 
     m_bytes = (m_bytes >= top.bytes) ? (m_bytes - top.bytes) : 0;
@@ -71,21 +55,13 @@ bool UndoHistory::Undo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& traject
     }
 
     Trim();
-    return true;
 }
 
-bool UndoHistory::Redo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& trajectory) {
-    if (m_redo.empty()) return false;
-
+void UndoHistory::CommitRedo(InkSnapshot&& currentInk, InkModel& ink, TrajectorySession& trajectory) {
     // 復元する前の状態を、また戻せるように控えておく
-    UndoEntry undoEntry;
-    if (!CaptureCurrent(gpuInk, ink, undoEntry)) return false;
+    UndoEntry undoEntry = MakeEntry(std::move(currentInk), ink);
 
     UndoEntry& top = m_redo.back();
-    if (!gpuInk.RestoreSnapshot(top.ink)) {
-        Clear();
-        return false;
-    }
     ink = top.inkModel;
 
     // 復元した画を運筆アーカイブへ積み直す。
@@ -110,15 +86,14 @@ bool UndoHistory::Redo(GpuInk& gpuInk, InkModel& ink, TrajectorySession& traject
     }
 
     Trim();
-    return true;
 }
 
-bool UndoHistory::RotateQuarter(bool counterClockwise, int canvasW, int canvasH, const RECT& oldPaper, const RECT& newPaper) {
+bool UndoHistory::RotateQuarter(const std::function<bool(InkSnapshot&)>& rotateInk, bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
     try {
         size_t bytes = 0;
         for (std::deque<UndoEntry>* stack : { &m_undo, &m_redo }) {
             for (UndoEntry& e : *stack) {
-                if (!GpuInk::RotateSnapshot(e.ink, counterClockwise, canvasW, canvasH)) {
+                if (!rotateInk(e.ink)) {
                     Clear();
                     return false;
                 }
