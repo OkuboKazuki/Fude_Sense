@@ -154,19 +154,10 @@ public:
     bool ExportToJson(const std::wstring& filePath, PaperType paperType, Brush brushType, double hardness) const;
     bool ExportToCsv(const std::wstring& filePath) const;
 
-    // ファイル保存ダイアログ呼び出し。取り消しと失敗を分けて返す
-    // （取り消しでは何も表示せず、失敗したときだけ知らせるため）。
-    enum class SaveResult { Saved, Canceled, Failed };
-    static SaveResult PromptSaveArchiveJson(HWND hWnd, const TrajectorySession& session, PaperType paperType, Brush brushType, double hardness);
-    static SaveResult PromptSaveArchiveCsv(HWND hWnd, const TrajectorySession& session);
-
     // 書き出した運筆アーカイブ（JSON / CSV）を読み込む。
     // 線幅・速度は、いまの画面上の半紙（rPaper）の大きさへ直して取り込む。
     // 失敗したときは outError に理由を入れ、この記録には手を付けない。
     bool ImportFromFile(const std::wstring& filePath, const RECT& rPaper, std::wstring& outError);
-    // ファイル選択ダイアログから読み込む。outFileName には拡張子付きのファイル名を返す
-    static SaveResult PromptLoadArchive(HWND hWnd, TrajectorySession& session, const RECT& rPaper,
-                                        std::wstring& outFileName, std::wstring& outError);
 
 private:
     // 記録が変わったことを知らせる。番号はすべての記録で通しなので、

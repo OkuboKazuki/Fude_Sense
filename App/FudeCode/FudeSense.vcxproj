@@ -115,6 +115,7 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClInclude Include="Models\UIComponents.h" />
     <ClInclude Include="Models\UndoHistory.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="Services\ArchiveDialogs.h" />
     <ClInclude Include="Services\ImageExporter.h" />
     <ClInclude Include="Services\WintabManager.h" />
     <ClInclude Include="Services\WintabUtils.h" />
@@ -142,6 +143,7 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClCompile Include="Models\AppState.cpp" />
     <ClCompile Include="Models\TrajectoryModel.cpp" />
     <ClCompile Include="Models\UndoHistory.cpp" />
+    <ClCompile Include="Services\ArchiveDialogs.cpp" />
     <ClCompile Include="Services\ImageExporter.cpp" />
     <ClCompile Include="Services\WintabManager.cpp" />
     <ClCompile Include="Services\WintabUtils.cpp" />

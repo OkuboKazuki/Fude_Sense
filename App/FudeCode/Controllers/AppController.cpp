@@ -2,6 +2,7 @@
 #include "AppController.h"
 #include "RenderUtils.h"
 #include "ImageExporter.h"
+#include "ArchiveDialogs.h"
 #include <imm.h>
 
 #pragma comment(lib, "imm32.lib")
@@ -120,19 +121,19 @@ void AppController::ImportArchive(HWND hWnd, AppState& state) {
 
     // 読み込みに失敗したときは、表示中の記録（前に読み込んだものを含む）に手を付けない
     std::wstring fileName, error;
-    switch (TrajectorySession::PromptLoadArchive(hWnd, state.importedTrajectory, state.ui.rPaper, fileName, error)) {
-    case TrajectorySession::SaveResult::Saved:
+    switch (ArchiveDialogs::PromptLoad(hWnd, state.importedTrajectory, state.ui.rPaper, fileName, error)) {
+    case ArchiveDialogs::Result::Saved:
         state.viewingImport = true;
         state.importedName = fileName;
         ShowAnalysisSessionFromEnd(hWnd, state);
         break;
-    case TrajectorySession::SaveResult::Failed: {
+    case ArchiveDialogs::Result::Failed: {
         std::wstring msg = L"運筆アーカイブを読み込めませんでした。";
         if (!error.empty()) msg += L"\n\n" + error;
         MessageBoxW(hWnd, msg.c_str(), L"運筆アーカイブの読み込み", MB_OK | MB_ICONWARNING);
         break;
     }
-    case TrajectorySession::SaveResult::Canceled:
+    case ArchiveDialogs::Result::Canceled:
         break;
     }
     // ダイアログを閉じたペンが接地したままでも、半紙に墨を落とさない
@@ -610,14 +611,14 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 } else if (PtIn(ui.rSaveBtnJson, pt)) {
                     // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
                     state.ui.suppressPenUntilLift = true;
-                    switch (TrajectorySession::PromptSaveArchiveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
-                    case TrajectorySession::SaveResult::Saved:
+                    switch (ArchiveDialogs::PromptSaveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
+                    case ArchiveDialogs::Result::Saved:
                         state.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
                         break;
-                    case TrajectorySession::SaveResult::Failed:
+                    case ArchiveDialogs::Result::Failed:
                         state.SetSaveFeedback(L"× JSON を保存できませんでした", true);
                         break;
-                    case TrajectorySession::SaveResult::Canceled:
+                    case ArchiveDialogs::Result::Canceled:
                         break;
                     }
                     // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
@@ -627,14 +628,14 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 } else if (PtIn(ui.rSaveBtnCsv, pt)) {
                     // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
                     state.ui.suppressPenUntilLift = true;
-                    switch (TrajectorySession::PromptSaveArchiveCsv(hWnd, state.trajectory)) {
-                    case TrajectorySession::SaveResult::Saved:
+                    switch (ArchiveDialogs::PromptSaveCsv(hWnd, state.trajectory)) {
+                    case ArchiveDialogs::Result::Saved:
                         state.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
                         break;
-                    case TrajectorySession::SaveResult::Failed:
+                    case ArchiveDialogs::Result::Failed:
                         state.SetSaveFeedback(L"× CSV を出力できませんでした", true);
                         break;
-                    case TrajectorySession::SaveResult::Canceled:
+                    case ArchiveDialogs::Result::Canceled:
                         break;
                     }
                     // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
