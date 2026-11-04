@@ -21,7 +21,7 @@ void StrokeController::ResetStroke(GpuInk& gpuInk, AppState* pState) {
     }
 }
 
-void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, AppState& state, GpuInk& gpuInk) {
+void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, AppState& state, UIState& ui, GpuInk& gpuInk) {
     // ペンのZ高度・傾き・方位角情報をGPU墨汁エンジンへ通知
     gpuInk.UpdatePen(event.z, event.altitudeDegrees, event.azimuthRad, event.pressure <= 0.0);
     m_lastRawPressure = event.pressure;
@@ -30,46 +30,46 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // ダイアログを閉じた後もペンが離れるまで描画をロックする
     if (hWnd && !IsWindowEnabled(hWnd)) {
         ResetStroke(gpuInk, &state);
-        state.ui.suppressPenUntilLift = true;
+        ui.suppressPenUntilLift = true;
         return;
     }
 
     // 硯・「墨を補充」をペンで押している間は、強く押し込むほど墨を継ぎ足す
-    if (state.ui.isPenRefilling) {
+    if (ui.isPenRefilling) {
         if (event.pressure > 0.0) {
             double before = state.ink.amount;
             state.ink.PressRefill(event.pressure);
             if (state.ink.amount != before) {
-                InvalidateRect(hWnd, state.ui.paperOnly ? &state.ui.rInkRefillBtn : &state.ui.rRight, FALSE);
+                InvalidateRect(hWnd, ui.paperOnly ? &ui.rInkRefillBtn : &ui.rRight, FALSE);
             }
         } else {
-            state.ui.isPenRefilling = false;
+            ui.isPenRefilling = false;
         }
     }
 
     // 硯の磨り面をペンでしごいている間は、動かした長さと筆圧に応じて墨を落とす
-    if (state.ui.isWiping && !state.ui.wipeByMouse) {
+    if (ui.isWiping && !ui.wipeByMouse) {
         if (event.pressure > 0.0) {
             POINT wipePt = { event.x, event.y };
-            if (AppController::WipeInkTo(wipePt, event.pressure, state)) {
-                InvalidateRect(hWnd, &state.ui.rRight, FALSE);
+            if (AppController::WipeInkTo(wipePt, event.pressure, state, ui)) {
+                InvalidateRect(hWnd, &ui.rRight, FALSE);
             }
         } else {
-            state.ui.isWiping = false;
-            InvalidateRect(hWnd, &state.ui.rRight, FALSE);
+            ui.isWiping = false;
+            InvalidateRect(hWnd, &ui.rRight, FALSE);
         }
     }
 
     // UI操作（半紙に重なる全消しモーダル等）の直後は、ペンが紙から一度離れるまで
     // 運筆を受け付けない。接地したままのペンのパケットで墨が落ちるのを防ぐ。
-    if (state.ui.suppressPenUntilLift) {
+    if (ui.suppressPenUntilLift) {
         if (event.pressure > 0.0) {
             ResetStroke(gpuInk, &state);
             m_ptOld = { event.x, event.y };
             InvalidateRect(hWnd, NULL, FALSE);
             return;
         }
-        state.ui.suppressPenUntilLift = false;
+        ui.suppressPenUntilLift = false;
     }
 
     // 筆圧のスムージング（急激な変化を抑制して滑らかな筆運びにする）
@@ -86,8 +86,8 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     }
 
     POINT clientPt = { event.x, event.y };
-    const RECT& rPaper = state.ui.rPaper;
-    const RECT& rSub = state.ui.rSub;
+    const RECT& rPaper = ui.rPaper;
+    const RECT& rSub = ui.rSub;
 
     // 半紙領域内かつモーダルやサブパネルに遮られていないか判定
     // 解析タブはリプレイ（過去の運筆の再生）を半紙へ描く。そのままだと新しい運筆が
@@ -97,10 +97,10 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     bool canDrawInk = (state.currentScreen == AppScreen::Studio)
         && (!hWnd || IsWindowEnabled(hWnd))
         && !state.isTransitioning
-        && !state.ui.showClearConfirm
-        && (state.ui.paperOnly || state.ui.leftTab != LeftTab::Analysis)
+        && !ui.showClearConfirm
+        && (ui.paperOnly || ui.leftTab != LeftTab::Analysis)
         && PtInRect(&rPaper, clientPt)
-        && !(state.ui.isSubPanelOpen && PtInRect(&rSub, clientPt));
+        && !(ui.isSubPanelOpen && PtInRect(&rSub, clientPt));
 
     if (m_smoothedPressure > 0.0 && canDrawInk) {
         POINT paperPt = { clientPt.x - rPaper.left, clientPt.y - rPaper.top };
@@ -277,21 +277,21 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         }
 
         // 墨消費に伴う硯パネル（液面＋墨残量テキスト）をリアルタイムに滑らかに更新（約30Hz / 33ms間隔）
-        if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
+        if (ui.rInkStoneLarge.right > ui.rInkStoneLarge.left) {
             if (now - m_lastInkStoneInvalidateTick >= 33) {
                 RECT rcStoneArea = {
-                    state.ui.rInkStoneLarge.left,
-                    state.ui.rInkStoneLarge.top - (int)(44 * state.ui.inkStoneScale + 0.5),
-                    state.ui.rInkStoneLarge.right,
-                    state.ui.rInkStoneLarge.bottom
+                    ui.rInkStoneLarge.left,
+                    ui.rInkStoneLarge.top - (int)(44 * ui.inkStoneScale + 0.5),
+                    ui.rInkStoneLarge.right,
+                    ui.rInkStoneLarge.bottom
                 };
                 InvalidateRect(hWnd, &rcStoneArea, FALSE);
                 m_lastInkStoneInvalidateTick = now;
             }
         }
         // 紙だけ表示では残量を「墨を補充」ボタンに出している（硯パネルと同じく約30Hz）
-        if (state.ui.paperOnly && now - m_lastInkStoneInvalidateTick >= 33) {
-            InvalidateRect(hWnd, &state.ui.rInkRefillBtn, FALSE);
+        if (ui.paperOnly && now - m_lastInkStoneInvalidateTick >= 33) {
+            InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
             m_lastInkStoneInvalidateTick = now;
         }
     } else {
@@ -305,12 +305,12 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         if (wasActive) {
             // ストローク終了時のみ、半紙全体を更新してにじみ・終筆を反映
             InvalidateRect(hWnd, &rPaper, FALSE);
-            if (state.ui.rInkStoneLarge.right > state.ui.rInkStoneLarge.left) {
+            if (ui.rInkStoneLarge.right > ui.rInkStoneLarge.left) {
                 RECT rcStoneArea = {
-                    state.ui.rInkStoneLarge.left,
-                    state.ui.rInkStoneLarge.top - (int)(44 * state.ui.inkStoneScale + 0.5),
-                    state.ui.rInkStoneLarge.right,
-                    state.ui.rInkStoneLarge.bottom
+                    ui.rInkStoneLarge.left,
+                    ui.rInkStoneLarge.top - (int)(44 * ui.inkStoneScale + 0.5),
+                    ui.rInkStoneLarge.right,
+                    ui.rInkStoneLarge.bottom
                 };
                 InvalidateRect(hWnd, &rcStoneArea, FALSE);
             }

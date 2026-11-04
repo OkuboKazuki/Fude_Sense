@@ -108,4 +108,6 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 |---|---|---|---|
 | `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Models/AppState.h`（`UIState`） | `a6d4b27` |
 
-第 3 段階（`未コミット`）: 関数や処理の移動なし。View の関数の引数に `const UIState& ui` を足しました。`AppState` を使わなくなった `CanvasView::DrawBackground`、`CanvasView::RenderInk`、`CanvasView::Draw3DBrushPose`、`ModalView::DrawClearConfirm`、`ModalView::DrawClearConfirmBody` は、引数の `const AppState&` を `const UIState&` に置き換えました。
+第 3 段階（`173c78a`）: 関数や処理の移動なし。View の関数の引数に `const UIState& ui` を足しました。`AppState` を使わなくなった `CanvasView::DrawBackground`、`CanvasView::RenderInk`、`CanvasView::Draw3DBrushPose`、`ModalView::DrawClearConfirm`、`ModalView::DrawClearConfirmBody` は、引数の `const AppState&` を `const UIState&` に置き換えました。
+
+第 4 段階（`未コミット`）: 関数や処理の移動なし。`AppController` と `StrokeController` の関数の引数に `UIState& ui` を足しました。`AppState` を使わなくなった `AppController::ReleasePenLock`、`AppController::OnPenOutOfRange`、`ExportCanvasWithFeedback` は、引数の `AppState&` を `UIState&` に置き換えました。

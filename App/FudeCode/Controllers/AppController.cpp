@@ -29,35 +29,35 @@ static void SetOtehonImePosition(HWND hWnd, const RECT& inputBox) {
 // 硯・「墨を補充」を押したときの補充。
 // マウスは筆圧が無いので満タンにする。ペンは押した筆圧に応じた量だけ含ませ、
 // 離すまでの間に強く押し込めば StrokeController 側で継ぎ足す。
-static void RefillByPress(AppState& state, double penPressure) {
+static void RefillByPress(AppState& state, UIState& ui, double penPressure) {
     if (penPressure < 0.0) {
         state.ink.Refill();
         return;
     }
     state.ink.BeginPressRefill();
     state.ink.PressRefill(penPressure);
-    state.ui.isPenRefilling = true;
+    ui.isPenRefilling = true;
     // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
-    state.ui.suppressPenUntilLift = true;
+    ui.suppressPenUntilLift = true;
 }
 
 // 作品を書き出し、結果を保存タブのメッセージとして出す
-static void ExportCanvasWithFeedback(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
-    switch (ImageExporter::ExportCanvas(hWnd, gpuInk, state.ui.rPaper, toClipboard)) {
+static void ExportCanvasWithFeedback(HWND hWnd, GpuInk& gpuInk, UIState& ui, bool toClipboard) {
+    switch (ImageExporter::ExportCanvas(hWnd, gpuInk, ui.rPaper, toClipboard)) {
     case ImageExportResult::NothingToExport:
         break;
     case ImageExportResult::Failed:
-        state.ui.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
+        ui.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
                                              : L"× 画像を保存できませんでした", true);
         break;
     case ImageExportResult::CopiedToClipboard:
-        state.ui.SetSaveFeedback(L"✓ クリップボードにコピーしました");
+        ui.SetSaveFeedback(L"✓ クリップボードにコピーしました");
         break;
     case ImageExportResult::SavedPng:
-        state.ui.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
+        ui.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
         break;
     case ImageExportResult::SavedBmp:
-        state.ui.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
+        ui.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
         break;
     }
 }
@@ -72,8 +72,7 @@ static POINT ToClearModalSpace(const UIState& ui, POINT pt, int clientHeight) {
 
 // 墨残量ゲージ上の横位置 x に合わせて墨の残量を決める（左端が空、右端が満タン）。
 // ゲージの両端は丸く、端ぴったりは狙いにくいので、少し内側で 0% / 100% に届くようにする
-static void SetInkAmountFromBadgeX(AppState& state, int x) {
-    const UIState& ui = state.ui;
+static void SetInkAmountFromBadgeX(AppState& state, const UIState& ui, int x) {
     int pad = RH(ui.rInkBadge) / 2;
     double trackW = static_cast<double>(RW(ui.rInkBadge) - 2 * pad);
     if (trackW <= 0.0) return;
@@ -90,8 +89,7 @@ static bool IsOnInkStoneLand(const UIState& ui, POINT pt) {
 // しごく長さは硯の幅を単位にする。硯パネルの拡大率が変わっても、
 // 磨り面を端から端までしごいたときに落ちる量が同じになる。
 // 数えるのは下の部分を通っている間だけ。上の墨溜まりや硯の外へ出ている間は減らさない。
-bool AppController::WipeInkTo(POINT pt, double pressure, AppState& state) {
-    UIState& ui = state.ui;
+bool AppController::WipeInkTo(POINT pt, double pressure, AppState& state, UIState& ui) {
     double dx = static_cast<double>(pt.x - ui.wipeLastPt.x);
     double dy = static_cast<double>(pt.y - ui.wipeLastPt.y);
     ui.wipeLastPt = pt;
@@ -104,7 +102,7 @@ bool AppController::WipeInkTo(POINT pt, double pressure, AppState& state) {
     return state.ink.amount != before;
 }
 
-void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
+void AppController::ClearAllInk(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk) {
     gpuInk.Clear();
     state.trajectory.Clear();
     state.undo.Clear();
@@ -122,25 +120,25 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     }
 
     // 全消し確定時は「筆」タブへ移動
-    state.ui.leftTab = LeftTab::Brush;
+    ui.leftTab = LeftTab::Brush;
     state.replay.state = ReplayState::Stopped;
 
-    state.ui.showClearConfirm = false;
+    ui.showClearConfirm = false;
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
-    state.ui.suppressPenUntilLift = true;
+    ui.suppressPenUntilLift = true;
     // シークバーのツマミ位置は再生時刻から Layout で決まる。全消しで時刻を 0 へ戻した後に
     // 取り直さないと、ツマミだけ古い位置に残る。
     RECT rcClient = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rcClient);
     if (rcClient.right > 0 && rcClient.bottom > 0) {
-        ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
+        ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
     }
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
-void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk) {
-    ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, width, height);
+void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, UIState& ui, GpuInk& gpuInk) {
+    ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, width, height);
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -148,7 +146,7 @@ void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, Gp
 // 一画戻す／復元でも画数は変わるため、解析タブに入った時だけ作り直していると
 // 消したはずの画がリプレイに残る。再生中に記録が動くと、再生位置が消えた画の
 // 上を走ることになるので、先に再生を止める。
-void AppController::SyncReplayTimeline(HWND hWnd, AppState& state) {
+void AppController::SyncReplayTimeline(HWND hWnd, AppState& state, UIState& ui) {
     if (state.replay.state == ReplayState::Playing) {
         state.replay.state = ReplayState::Paused;
         KillTimer(hWnd, REPLAY_TIMER_ID);
@@ -160,27 +158,27 @@ void AppController::SyncReplayTimeline(HWND hWnd, AppState& state) {
         state.replay.currentTimeMs = state.replay.totalDurationMs;
     }
     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
-        state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+        state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
 }
 
 // 解析の対象を切り替えた直後の表示。書き上がった状態（末尾）で一時停止にする
-static void ShowAnalysisSessionFromEnd(HWND hWnd, AppState& state) {
+static void ShowAnalysisSessionFromEnd(HWND hWnd, AppState& state, UIState& ui) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
     // 「自分の記録に戻る」ボタンの有無で解析タブの並びが変わる
-    ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, rc.right - rc.left, rc.bottom - rc.top);
+    ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, rc.right - rc.left, rc.bottom - rc.top);
 
-    AppController::SyncReplayTimeline(hWnd, state);
+    AppController::SyncReplayTimeline(hWnd, state, ui);
     state.replay.state = ReplayState::Paused;
     state.replay.currentTimeMs = state.replay.totalDurationMs;
     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
-        state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+        state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
-void AppController::ImportArchive(HWND hWnd, AppState& state) {
+void AppController::ImportArchive(HWND hWnd, AppState& state, UIState& ui) {
     if (state.replay.state == ReplayState::Playing) {
         state.replay.state = ReplayState::Paused;
         KillTimer(hWnd, REPLAY_TIMER_ID);
@@ -188,11 +186,11 @@ void AppController::ImportArchive(HWND hWnd, AppState& state) {
 
     // 読み込みに失敗したときは、表示中の記録（前に読み込んだものを含む）に手を付けない
     std::wstring fileName, error;
-    switch (ArchiveDialogs::PromptLoad(hWnd, state.importedTrajectory, state.ui.rPaper, fileName, error)) {
+    switch (ArchiveDialogs::PromptLoad(hWnd, state.importedTrajectory, ui.rPaper, fileName, error)) {
     case ArchiveDialogs::Result::Saved:
         state.viewingImport = true;
         state.importedName = fileName;
-        ShowAnalysisSessionFromEnd(hWnd, state);
+        ShowAnalysisSessionFromEnd(hWnd, state, ui);
         break;
     case ArchiveDialogs::Result::Failed: {
         std::wstring msg = L"運筆アーカイブを読み込めませんでした。";
@@ -204,10 +202,10 @@ void AppController::ImportArchive(HWND hWnd, AppState& state) {
         break;
     }
     // ダイアログを閉じたペンが接地したままでも、半紙に墨を落とさない
-    state.ui.suppressPenUntilLift = true;
+    ui.suppressPenUntilLift = true;
 }
 
-void AppController::CloseImportedArchive(HWND hWnd, AppState& state) {
+void AppController::CloseImportedArchive(HWND hWnd, AppState& state, UIState& ui) {
     if (state.replay.state == ReplayState::Playing) {
         state.replay.state = ReplayState::Paused;
         KillTimer(hWnd, REPLAY_TIMER_ID);
@@ -215,28 +213,28 @@ void AppController::CloseImportedArchive(HWND hWnd, AppState& state) {
     state.viewingImport = false;
     state.importedName.clear();
     state.importedTrajectory = TrajectorySession();  // 読み込んだ記録のメモリを手放す
-    ShowAnalysisSessionFromEnd(hWnd, state);
+    ShowAnalysisSessionFromEnd(hWnd, state, ui);
 }
 
-void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
-    if (state.ui.leftTab == newTab) {
+void AppController::SelectTab(HWND hWnd, AppState& state, UIState& ui, LeftTab newTab) {
+    if (ui.leftTab == newTab) {
         return;
     }
 
     // 解析メニューでインポートした後、別のタブに移動したときにインポート状態を解除
     if (state.viewingImport && newTab != LeftTab::Analysis) {
-        CloseImportedArchive(hWnd, state);
+        CloseImportedArchive(hWnd, state, ui);
     }
 
-    state.ui.leftTab = newTab;
+    ui.leftTab = newTab;
 
     if (newTab == LeftTab::Analysis) {
-        SyncReplayTimeline(hWnd, state);
+        SyncReplayTimeline(hWnd, state, ui);
         // 解析タブ移動時は巻き戻された状態（0ms）で一時停止にする
         state.replay.currentTimeMs = 0;
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
-            0, state.ui.rPaper, state.replay.currentSample);
-        ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+            0, ui.rPaper, state.replay.currentSample);
+        ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
         state.replay.state = ReplayState::Paused;
     } else {
         if (state.replay.state == ReplayState::Playing) {
@@ -248,7 +246,7 @@ void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
     if (rc.right > 0 && rc.bottom > 0) {
-        ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, rc.right - rc.left, rc.bottom - rc.top);
+        ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, rc.right - rc.left, rc.bottom - rc.top);
     }
     InvalidateRect(hWnd, NULL, FALSE);
 }
@@ -276,7 +274,7 @@ bool AppController::PushUndoBeforeStroke(GpuInk& gpuInk, AppState& state) {
 // 墨は画素バッファへ破壊的に積み上がり、にじみも時間で進むため、運筆データから
 // 描き直しても同じ絵にはならない。画を書き始める直前に控えておいた状態
 // （UndoHistory）を書き戻す。
-bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
+bool AppController::UndoStroke(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk) {
     // 墨・墨残量・運筆アーカイブ（解析グラフ・JSON/CSV）をまとめて1画戻す
     if (!state.undo.CanUndo()) return false;
 
@@ -291,18 +289,18 @@ bool AppController::UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     }
     state.undo.CommitUndo(std::move(current), state.ink, state.trajectory);
 
-    SyncReplayTimeline(hWnd, state);
+    SyncReplayTimeline(hWnd, state, ui);
 
     // 戻した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする（全消しと同じ扱い）。
-    state.ui.suppressPenUntilLift = true;
+    ui.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
     return true;
 }
 
 // 戻しすぎた1画を復元する。戻したときに控えておいた状態を書き戻すだけなので、
 // 取り消しと同じ経路を逆向きに辿る。
-bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
+bool AppController::RedoStroke(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk) {
     if (!state.undo.CanRedo()) return false;
 
     // 復元する前の墨を、また戻せるように控えておく
@@ -315,9 +313,9 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     }
     state.undo.CommitRedo(std::move(current), state.ink, state.trajectory);
 
-    SyncReplayTimeline(hWnd, state);
+    SyncReplayTimeline(hWnd, state, ui);
 
-    state.ui.suppressPenUntilLift = true;
+    ui.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
     return true;
 }
@@ -325,18 +323,18 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 // 半紙の縦横比が変わった際の後始末。
 // 新しい半紙の固定論理解像度で GpuInk を作り直す（白紙になる）。
 // 運筆記録は呼び出し側で扱うのでここでは消さない。
-static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
+static void RelayoutForPaper(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
-    ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, rc.right - rc.left, rc.bottom - rc.top);
+    ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, rc.right - rc.left, rc.bottom - rc.top);
 
     int canvasW = 0, canvasH = 0;
     state.paper.GetCanvasSize(canvasW, canvasH);
     // 紙だけ表示の半紙は画面に合わせた横長なので、縦長の固定解像度のままだと
     // 墨が横へ引き伸ばされる。長辺をそろえたまま、表示中の半紙と同じ縦横比にする。
-    int pw = RW(state.ui.rPaper);
-    int ph = RH(state.ui.rPaper);
-    if (state.ui.paperOnly && pw > 0 && ph > 0) {
+    int pw = RW(ui.rPaper);
+    int ph = RH(ui.rPaper);
+    if (ui.paperOnly && pw > 0 && ph > 0) {
         int longEdge = (std::max)(canvasW, canvasH);
         if (pw >= ph) {
             canvasW = longEdge;
@@ -351,9 +349,9 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     }
 
     // 「一画戻す」の控えは元の縦横の寸法で持っているので、呼び出し側で新しい半紙へ回す
-    state.ui.showClearConfirm = false;
+    ui.showClearConfirm = false;
     // ペンが接地したままでも、新しい半紙で運筆を始めないようロックする
-    state.ui.suppressPenUntilLift = true;
+    ui.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -363,8 +361,8 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 // 切り替える前の墨を控えておき、新しい半紙へ回して書き戻す。書いていた字はそのまま残る。
 // 運筆記録も同じ向きへ回して残す（解析タブのリプレイは記録から描くため、消すと字が消える）。
 // 「一画戻す」「一画復元」の控えも同じ向きへ回して残す（消すと横画面から戻った後に戻せなくなる）。
-void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk) {
-    if (state.ui.paperOnly == on) return;
+void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, UIState& ui, GpuInk& gpuInk) {
+    if (ui.paperOnly == on) return;
 
     // 紙だけ表示ではリプレイもモーダルも描かないので、止めて閉じておく
     if (state.replay.state == ReplayState::Playing) {
@@ -374,17 +372,17 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     state.otehon.isTyping = false;
     state.otehon.isDraggingOpacity = false;
     state.brush.isDraggingHardness = false;
-    state.ui.isDraggingInkAmount = false;
-    state.ui.hoverPaperOnly = 0;
+    ui.isDraggingInkAmount = false;
+    ui.hoverPaperOnly = 0;
 
     // 書いていた墨を控える（半紙を作り直すと消えるため）
     InkSnapshot keep;
     bool hasInk = gpuInk.CaptureSnapshot(keep);
-    const RECT oldPaper = state.ui.rPaper;
+    const RECT oldPaper = ui.rPaper;
 
-    state.ui.paperOnly = on;
+    ui.paperOnly = on;
 
-    RelayoutForPaper(hWnd, state, gpuInk);
+    RelayoutForPaper(hWnd, state, ui, gpuInk);
 
     // 紙だけ表示へ入るときは左回り、戻るときは右回りに回して書き戻す
     bool restored = hasInk && gpuInk.RestoreSnapshotRotated(keep, on);
@@ -399,7 +397,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
         const int canvasH = gpuInk.GetHeight();
         state.undo.RotateQuarter(
             [on, canvasW, canvasH](InkSnapshot& snap) { return GpuInk::RotateSnapshot(snap, on, canvasW, canvasH); },
-            on, oldPaper, state.ui.rPaper);
+            on, oldPaper, ui.rPaper);
     } else {
         state.undo.Clear();
     }
@@ -407,18 +405,17 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
     // 運筆記録も墨と同じ向きへ回し、リプレイのタイムラインと再生位置を取り直す。
     // 書き上がった状態（末尾）を見ていたなら、紙だけ表示で書き足した画も含めて末尾に合わせる。
     bool wasAtEnd = (state.replay.currentTimeMs >= state.replay.totalDurationMs);
-    state.trajectory.RotateQuarter(on, oldPaper, state.ui.rPaper);
-    SyncReplayTimeline(hWnd, state);
+    state.trajectory.RotateQuarter(on, oldPaper, ui.rPaper);
+    SyncReplayTimeline(hWnd, state, ui);
     if (wasAtEnd) {
         state.replay.currentTimeMs = state.replay.totalDurationMs;
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
-            state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+            state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+        ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
     }
 }
 
-bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure) {
-    UIState& ui = state.ui;
+bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState& ui, GpuInk& gpuInk, double penPressure) {
     RECT clientRect = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &clientRect);
     int w = clientRect.right - clientRect.left;
@@ -427,9 +424,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 0. タイトル画面でのクリック / タップ処理
     if (state.currentScreen == AppScreen::Title) {
         if (state.isTransitioning) return true;
-        if (state.ui.suppressPenUntilLift) return true;
+        if (ui.suppressPenUntilLift) return true;
 
-        state.ui.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
+        ui.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
 
         // 墨染めフェード遷移を開始
         state.isTransitioning = true;
@@ -448,7 +445,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         ui.suppressPenUntilLift = true;
         POINT mp = ToClearModalSpace(ui, pt, h);
         if (PtIn(ui.rModalClearBtn, mp)) {
-            ClearAllInk(hWnd, state, gpuInk);
+            ClearAllInk(hWnd, state, ui, gpuInk);
             return true;
         } else if (PtIn(ui.rModalCancelBtn, mp) || !PtIn(ui.rClearModalBox, mp)) {
             ui.showClearConfirm = false;
@@ -471,11 +468,11 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             return true;
         }
         if (PtIn(ui.rPaperOnlyExitBtn, pt)) {
-            SetPaperOnly(hWnd, false, state, gpuInk);
+            SetPaperOnly(hWnd, false, state, ui, gpuInk);
             return true;
         }
         if (PtIn(ui.rInkRefillBtn, pt)) {
-            RefillByPress(state, penPressure);
+            RefillByPress(state, ui, penPressure);
             ui.suppressPenUntilLift = true;
             InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
             return true;
@@ -492,13 +489,13 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 1.8 ホームボタン「🏠」（タイトル画面へ戻る）
     if (PtIn(ui.rTbHomeBtn, pt)) {
         if (state.viewingImport) {
-            CloseImportedArchive(hWnd, state);
+            CloseImportedArchive(hWnd, state, ui);
         }
         state.currentScreen = AppScreen::Title;
         state.isTransitioning = false;
         state.transitionProgress = 0.0f;
         state.replay.state = ReplayState::Stopped;
-        state.ui.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
+        ui.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
         KillTimer(hWnd, REPLAY_TIMER_ID);
         KillTimer(hWnd, TRANSITION_TIMER_ID);
         SetTimer(hWnd, TITLE_ANIM_TIMER_ID, 33, NULL);
@@ -509,7 +506,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 2. 左上トグルボタン「<<<」「>>>」
     if (PtIn(ui.rTbNavToggle, pt)) {
         ui.isSubPanelOpen = !ui.isSubPanelOpen;
-        ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, w, h);
+        ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, w, h);
         InvalidateRect(hWnd, NULL, FALSE);
         return true;
     }
@@ -517,19 +514,19 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 3. 開いているときのフローティングメニュータブ・詳細操作
     if (ui.isSubPanelOpen) {
         if (PtIn(ui.rTbBrush, pt)) {
-            SelectTab(hWnd, state, LeftTab::Brush);
+            SelectTab(hWnd, state, ui, LeftTab::Brush);
             return true;
         } else if (PtIn(ui.rTbPaper, pt)) {
-            SelectTab(hWnd, state, LeftTab::Paper);
+            SelectTab(hWnd, state, ui, LeftTab::Paper);
             return true;
         } else if (PtIn(ui.rTbAnalysis, pt)) {
-            SelectTab(hWnd, state, LeftTab::Analysis);
+            SelectTab(hWnd, state, ui, LeftTab::Analysis);
             return true;
         } else if (PtIn(ui.rTbSave, pt)) {
-            SelectTab(hWnd, state, LeftTab::Save);
+            SelectTab(hWnd, state, ui, LeftTab::Save);
             return true;
         } else if (PtIn(ui.rTbOtehon, pt)) {
-            SelectTab(hWnd, state, LeftTab::Otehon);
+            SelectTab(hWnd, state, ui, LeftTab::Otehon);
             return true;
         }
 
@@ -538,11 +535,11 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             if (ui.leftTab == LeftTab::Analysis) {
                 // 0. 運筆アーカイブの読み込み / 自分の記録に戻る
                 if (PtIn(ui.rAnalysisImportBtn, pt)) {
-                    ImportArchive(hWnd, state);
+                    ImportArchive(hWnd, state, ui);
                     return true;
                 }
                 if (state.viewingImport && PtIn(ui.rAnalysisBackBtn, pt)) {
-                    CloseImportedArchive(hWnd, state);
+                    CloseImportedArchive(hWnd, state, ui);
                     return true;
                 }
 
@@ -551,8 +548,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 // 1. 最初に戻る (↺)
                 if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) {
                     state.replay.currentTimeMs = 0;
-                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
-                    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(0, ui.rPaper, state.replay.currentSample);
+                    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -568,8 +565,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     } else {
                         state.replay.currentTimeMs = 0;
                     }
-                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+                    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -591,8 +588,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         // 再生中だけタイマを回す。適正間隔（20ms / 50fps）で描画詰まりを防止。
                         SetTimer(hWnd, REPLAY_TIMER_ID, 20, NULL);
                     }
-                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+                    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -605,8 +602,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     } else {
                         state.replay.currentTimeMs = state.replay.totalDurationMs;
                     }
-                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+                    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -635,8 +632,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+                    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -650,8 +647,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+                    state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+                    ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -693,7 +690,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         state.paper.gridPattern = static_cast<GridPattern>(i);
                         // 升目のセル分割は Layout で算出しているため、
                         // パターン変更時は再レイアウトが必要
-                        ScreenLayout::Layout(state.ui, state.paper, state.viewingImport, state.replay, w, h);
+                        ScreenLayout::Layout(ui, state.paper, state.viewingImport, state.replay, w, h);
                         state.otehon.ClearCellChars();
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
@@ -710,47 +707,47 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 }
             } else if (ui.leftTab == LeftTab::Save) {
                 if (PtIn(ui.rSaveBtnPng, pt)) {
-                    state.ui.suppressPenUntilLift = true;
-                    ExportCanvasWithFeedback(hWnd, gpuInk, state, false);
+                    ui.suppressPenUntilLift = true;
+                    ExportCanvasWithFeedback(hWnd, gpuInk, ui, false);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnClip, pt)) {
-                    state.ui.suppressPenUntilLift = true;
-                    ExportCanvasWithFeedback(hWnd, gpuInk, state, true);
+                    ui.suppressPenUntilLift = true;
+                    ExportCanvasWithFeedback(hWnd, gpuInk, ui, true);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnJson, pt)) {
                     // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
-                    state.ui.suppressPenUntilLift = true;
+                    ui.suppressPenUntilLift = true;
                     switch (ArchiveDialogs::PromptSaveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
                     case ArchiveDialogs::Result::Saved:
-                        state.ui.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
+                        ui.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
                         break;
                     case ArchiveDialogs::Result::Failed:
-                        state.ui.SetSaveFeedback(L"× JSON を保存できませんでした", true);
+                        ui.SetSaveFeedback(L"× JSON を保存できませんでした", true);
                         break;
                     case ArchiveDialogs::Result::Canceled:
                         break;
                     }
                     // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
-                    state.ui.suppressPenUntilLift = true;
+                    ui.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnCsv, pt)) {
                     // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
-                    state.ui.suppressPenUntilLift = true;
+                    ui.suppressPenUntilLift = true;
                     switch (ArchiveDialogs::PromptSaveCsv(hWnd, state.trajectory)) {
                     case ArchiveDialogs::Result::Saved:
-                        state.ui.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
+                        ui.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
                         break;
                     case ArchiveDialogs::Result::Failed:
-                        state.ui.SetSaveFeedback(L"× CSV を出力できませんでした", true);
+                        ui.SetSaveFeedback(L"× CSV を出力できませんでした", true);
                         break;
                     case ArchiveDialogs::Result::Canceled:
                         break;
                     }
                     // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
-                    state.ui.suppressPenUntilLift = true;
+                    ui.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
@@ -820,7 +817,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         // 墨残量ゲージ: 押した位置へ残量を合わせ、離すまで左右の動きに追従させる
         ui.isDraggingInkAmount = true;
         SetCapture(hWnd);
-        SetInkAmountFromBadgeX(state, pt.x);
+        SetInkAmountFromBadgeX(state, ui, pt.x);
         // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
         ui.suppressPenUntilLift = true;
         InvalidateRect(hWnd, &ui.rRight, FALSE);
@@ -835,28 +832,28 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     } else if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
-        RefillByPress(state, penPressure);
+        RefillByPress(state, ui, penPressure);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     } else if (PtIn(ui.rUndoBtn, pt)) {
-        UndoStroke(hWnd, state, gpuInk);
+        UndoStroke(hWnd, state, ui, gpuInk);
         return true;
     } else if (PtIn(ui.rRedoBtn, pt)) {
-        RedoStroke(hWnd, state, gpuInk);
+        RedoStroke(hWnd, state, ui, gpuInk);
         return true;
     } else if (PtIn(ui.rClearAllBtn, pt)) {
         ui.showClearConfirm = true;
         InvalidateRect(hWnd, NULL, FALSE);
         return true;
     } else if (PtIn(ui.rPaperOnlyBtn, pt)) {
-        SetPaperOnly(hWnd, true, state, gpuInk);
+        SetPaperOnly(hWnd, true, state, ui, gpuInk);
         return true;
     }
 
     return false;
 }
 
-bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
+bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state, UIState& ui) {
     bool handled = false;
     if (state.brush.isDraggingHardness) {
         state.brush.isDraggingHardness = false;
@@ -873,8 +870,8 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
         ReleaseCapture();
         handled = true;
     }
-    if (state.ui.isDraggingInkAmount) {
-        state.ui.isDraggingInkAmount = false;
+    if (ui.isDraggingInkAmount) {
+        ui.isDraggingInkAmount = false;
         ReleaseCapture();
         handled = true;
     }
@@ -887,26 +884,26 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
     // ボタンが離れた＝紙から離れたので運筆ロックを解除（マウス操作時の解除経路）。
     // これがないとホームボタンでタイトルへ戻った後、マウスのクリックが
     // ロックに阻まれてスタジオ画面へ入れなくなる。
-    state.ui.suppressPenUntilLift = false;
-    state.ui.isWiping = false;
+    ui.suppressPenUntilLift = false;
+    ui.isWiping = false;
     return handled;
 }
 
-void AppController::ReleasePenLock(AppState& state) {
-    state.ui.suppressPenUntilLift = false;
+void AppController::ReleasePenLock(UIState& ui) {
+    ui.suppressPenUntilLift = false;
 }
 
-void AppController::OnPenOutOfRange(AppState& state) {
+void AppController::OnPenOutOfRange(UIState& ui) {
     // ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
-    state.ui.suppressPenUntilLift = false;
-    state.ui.isPenRefilling = false;
-    state.ui.isWiping = false;
+    ui.suppressPenUntilLift = false;
+    ui.isPenRefilling = false;
+    ui.isWiping = false;
 }
 
 // 前回の再生タイマ刻。停止中は 0。
 static DWORD s_lastReplayTick = 0;
 
-void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state) {
+void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state, UIState& ui) {
     if (timerId == TRANSITION_TIMER_ID) {
         if (!state.isTransitioning) {
             KillTimer(hWnd, TRANSITION_TIMER_ID);
@@ -919,7 +916,7 @@ void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state) {
             state.isTransitioning = false;
             state.transitionProgress = 1.0f;
             state.currentScreen = AppScreen::Studio;
-            state.ui.leftTab = LeftTab::Brush;
+            ui.leftTab = LeftTab::Brush;
             KillTimer(hWnd, TRANSITION_TIMER_ID);
         } else {
             state.transitionProgress = static_cast<float>(elapsed) / static_cast<float>(state.transitionDurationMs);
@@ -939,7 +936,7 @@ void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state) {
 
     if (timerId == REPLAY_TIMER_ID) {
         // 再生中でなくなったらタイマを止める。再び張るのは再生ボタン側。
-        if (state.ui.leftTab != LeftTab::Analysis || state.replay.state != ReplayState::Playing) {
+        if (ui.leftTab != LeftTab::Analysis || state.replay.state != ReplayState::Playing) {
             KillTimer(hWnd, REPLAY_TIMER_ID);
             s_lastReplayTick = 0;
             return;
@@ -962,20 +959,20 @@ void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state) {
         }
 
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
-            state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+            state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
 
         // 動くのは半紙のリプレイと解析パネルだけ。Layout() 全体も全画面の
         // 無効化も要らない。
-        ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
-        InvalidateRect(hWnd, &state.ui.rPaper, FALSE);
-        InvalidateRect(hWnd, &state.ui.rSub, FALSE);
+        ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
+        InvalidateRect(hWnd, &ui.rPaper, FALSE);
+        InvalidateRect(hWnd, &ui.rSub, FALSE);
     }
 }
 
-void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gpuInk) {
+void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, UIState& ui, GpuInk& gpuInk) {
     // F9 は「紙だけ表示（横向き）」の切り替え。硯パネルのボタンと同じ働き。
     if (key == VK_F9) {
-        SetPaperOnly(hWnd, !state.ui.paperOnly, state, gpuInk);
+        SetPaperOnly(hWnd, !ui.paperOnly, state, ui, gpuInk);
         return;
     }
 
@@ -986,16 +983,16 @@ void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gp
     switch (key) {
     case VK_ESCAPE:
         // 確認モーダル表示中の Esc は「キャンセル」として閉じる
-        if (state.ui.showClearConfirm) {
-            state.ui.showClearConfirm = false;
+        if (ui.showClearConfirm) {
+            ui.showClearConfirm = false;
             InvalidateRect(hWnd, NULL, FALSE);
             break;
         }
 
         // 硯パネルの「全消し」ボタンと同じ確認モーダルを出す。
         // 紙だけ表示では倒した向きで読めるよう回して描く（ModalView::DrawClearConfirm）。
-        state.ui.hoverClearModal = 0;
-        state.ui.showClearConfirm = true;
+        ui.hoverClearModal = 0;
+        ui.showClearConfirm = true;
         InvalidateRect(hWnd, NULL, FALSE);
         break;
     case 'Z':
@@ -1003,9 +1000,9 @@ void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gp
         // Ctrl+Z で一画戻す、Ctrl+Shift+Z で一画復元
         if (GetKeyState(VK_CONTROL) < 0) {
             if (GetKeyState(VK_SHIFT) < 0) {
-                RedoStroke(hWnd, state, gpuInk);
+                RedoStroke(hWnd, state, ui, gpuInk);
             } else {
-                UndoStroke(hWnd, state, gpuInk);
+                UndoStroke(hWnd, state, ui, gpuInk);
             }
         }
         break;
@@ -1013,7 +1010,7 @@ void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gp
     case 'y':
         // Ctrl+Y でも一画復元
         if (GetKeyState(VK_CONTROL) < 0) {
-            RedoStroke(hWnd, state, gpuInk);
+            RedoStroke(hWnd, state, ui, gpuInk);
         }
         break;
     default:
@@ -1042,8 +1039,7 @@ bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {
     return true;
 }
 
-bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state) {
-    UIState& ui = state.ui;
+bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state, UIState& ui) {
     RECT clientRect = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &clientRect);
     int w = clientRect.right - clientRect.left;
@@ -1091,7 +1087,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     }
 
     if (ui.isDraggingInkAmount && (wParam & MK_LBUTTON)) {
-        SetInkAmountFromBadgeX(state, pt.x);
+        SetInkAmountFromBadgeX(state, ui, pt.x);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     }
@@ -1109,8 +1105,8 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+        ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
         InvalidateRect(hWnd, &ui.rPaper, FALSE);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;
@@ -1122,8 +1118,8 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
-        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        ScreenLayout::UpdateReplaySeekThumb(state.ui, state.replay);
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, ui.rPaper, state.replay.currentSample);
+        ScreenLayout::UpdateReplaySeekThumb(ui, state.replay);
         InvalidateRect(hWnd, &ui.rPaper, FALSE);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;
@@ -1132,7 +1128,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     // マウスで硯の磨り面をしごいている間。筆圧が無いので中くらいの強さとして扱う
     if (ui.isWiping && ui.wipeByMouse) {
         if (wParam & MK_LBUTTON) {
-            if (WipeInkTo(pt, REFILL_FULL_PRESSURE * 0.5, state)) {
+            if (WipeInkTo(pt, REFILL_FULL_PRESSURE * 0.5, state, ui)) {
                 InvalidateRect(hWnd, &ui.rRight, FALSE);
             }
         } else {
@@ -1225,7 +1221,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     return true;
 }
 
-bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state) {
+bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state, const UIState& ui) {
     // クライアント領域外（タイトルバーやウィンドウ枠など）はOS標準のサイズ変更カーソル等に委ねる
     if (LOWORD(lParam) != HTCLIENT) {
         return false;
@@ -1243,20 +1239,20 @@ bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state)
     }
 
     // 全消し確認モーダル表示中はモーダル操作のため矢印カーソル
-    if (state.ui.showClearConfirm) {
+    if (ui.showClearConfirm) {
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         return true;
     }
 
     // 紙だけ表示中の場合
-    if (state.ui.paperOnly) {
+    if (ui.paperOnly) {
         // 右端の操作帯（ボタン領域）上なら矢印カーソル
-        if (PtIn(state.ui.rPaperOnlyBar, pt)) {
+        if (PtIn(ui.rPaperOnlyBar, pt)) {
             SetCursor(LoadCursor(NULL, IDC_ARROW));
             return true;
         }
         // 半紙領域内なら十字カーソル
-        if (PtIn(state.ui.rPaper, pt)) {
+        if (PtIn(ui.rPaper, pt)) {
             static HCURSOR hCursorCross = LoadCursor(NULL, IDC_CROSS);
             SetCursor(hCursorCross);
             return true;
@@ -1267,13 +1263,13 @@ bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state)
 
     // 通常スタジオ画面
     // お手本テキスト入力ボックス上であれば I ビーム（テキストカーソル）
-    if (state.ui.leftTab == LeftTab::Otehon && PtIn(state.ui.rOtehonInputBox, pt)) {
+    if (ui.leftTab == LeftTab::Otehon && PtIn(ui.rOtehonInputBox, pt)) {
         SetCursor(LoadCursor(NULL, IDC_IBEAM));
         return true;
     }
 
     // 半紙（キャンバス）領域内であれば十字カーソル
-    if (PtIn(state.ui.rPaper, pt)) {
+    if (PtIn(ui.rPaper, pt)) {
         static HCURSOR hCursorCross = LoadCursor(NULL, IDC_CROSS);
         SetCursor(hCursorCross);
         return true;

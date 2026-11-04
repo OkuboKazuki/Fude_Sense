@@ -13,45 +13,45 @@ public:
     // UIイベントハンドリング
     // penPressure: ペンで押したときの筆圧 (0.0 ~ 1.0)。マウスなど筆圧の無い入力は負値。
     // 硯・「墨を補充」はこの筆圧で補充量を変える。
-    static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure = -1.0);
-    static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state);
-    static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state);
+    static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState& ui, GpuInk& gpuInk, double penPressure = -1.0);
+    static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state, UIState& ui);
+    static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state, UIState& ui);
     // タイマの処理（タイトルからの遷移、タイトルのアニメーション、運筆の再生）
-    static void OnTimer(HWND hWnd, WPARAM timerId, AppState& state);
+    static void OnTimer(HWND hWnd, WPARAM timerId, AppState& state, UIState& ui);
     // スタジオ画面のショートカットキー。受け付けてよいかは呼び出し側で確かめる。
-    static void OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gpuInk);
+    static void OnKeyDown(HWND hWnd, WPARAM key, AppState& state, UIState& ui, GpuInk& gpuInk);
     // 「ペンが離れるまで運筆を受け付けない」ロックを解除する
-    static void ReleasePenLock(AppState& state);
+    static void ReleasePenLock(UIState& ui);
     // ペンが圏外へ出たときに、接地中の操作の状態を解除する
-    static void OnPenOutOfRange(AppState& state);
+    static void OnPenOutOfRange(UIState& ui);
     // カーソル形状の制御（半紙上は十字カーソル、テキスト入力欄はIビーム、UIパネルや外側は標準カーソル）
-    static bool OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state);
+    static bool OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state, const UIState& ui);
     // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。
     // 入力中なら true を返し、呼び出し側は他のキー処理を行わない。
     static bool OnChar(HWND hWnd, wchar_t ch, AppState& state);
-    static void OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk);
-    static void ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk);
+    static void OnSize(HWND hWnd, int width, int height, AppState& state, UIState& ui, GpuInk& gpuInk);
+    static void ClearAllInk(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk);
     // 磨り面でしごいている筆を pt まで動かし、その分の墨を落とす。残量が変わったら true。
-    static bool WipeInkTo(POINT pt, double pressure, AppState& state);
+    static bool WipeInkTo(POINT pt, double pressure, AppState& state, UIState& ui);
     // 左メニューのタブ切り替え（解析から他タブへ移動時はインポート状態を自動解除）
-    static void SelectTab(HWND hWnd, AppState& state, LeftTab newTab);
+    static void SelectTab(HWND hWnd, AppState& state, UIState& ui, LeftTab newTab);
     // 画の書き始めに、墨を置く前の状態を「一画戻す」用に控える
     static bool PushUndoBeforeStroke(GpuInk& gpuInk, AppState& state);
     // 直前の1画を取り消す（墨・墨残量・運筆アーカイブをまとめて戻す）
-    static bool UndoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
+    static bool UndoStroke(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk);
     // 戻しすぎた1画を復元する
-    static bool RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk);
+    static bool RedoStroke(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk);
     // 記録が変わったときにリプレイのタイムラインを作り直す（解析タブが見ている記録に対して）
-    static void SyncReplayTimeline(HWND hWnd, AppState& state);
+    static void SyncReplayTimeline(HWND hWnd, AppState& state, UIState& ui);
 
     // 解析タブ: 他人の運筆アーカイブ（JSON / CSV）を読み込んで解析の対象にする。
     // 自分の記録と半紙の墨はそのまま残す。
-    static void ImportArchive(HWND hWnd, AppState& state);
+    static void ImportArchive(HWND hWnd, AppState& state, UIState& ui);
     // 読み込んだ記録を閉じ、解析の対象を自分の記録に戻す
-    static void CloseImportedArchive(HWND hWnd, AppState& state);
+    static void CloseImportedArchive(HWND hWnd, AppState& state, UIState& ui);
 
     // 紙だけ表示（横向きの半紙を画面いっぱいに出す）の出入り。
     // 半紙の縦横が入れ替わるので、書いた墨と運筆記録は90度回して引き継ぐ。
     // 「一画戻す」の控えだけは書き戻せないので消す。
-    static void SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gpuInk);
+    static void SetPaperOnly(HWND hWnd, bool on, AppState& state, UIState& ui, GpuInk& gpuInk);
 };
