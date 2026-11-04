@@ -6,7 +6,7 @@
 
 ## 1. ファイル構成と関係性
 
-中心となる [`MainView`](../App/FudeCode/Views/MainView.h) が裏画面（ダブルバッファ）を用意し、各専門ビューを決められた描画順序で呼び出します。共通の描画部品（フォント、角丸矩形、影、テキスト）は [`RenderUtils`](../App/FudeCode/Views/RenderUtils.h) に集約されています。各要素の座標は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が計算し、描画とクリック判定の両方が同じ値を使います。
+中心となる [`MainView`](../App/FudeCode/Views/MainView.h) が裏画面（ダブルバッファ）を用意し、各専門ビューを決められた描画順序で呼び出します。共通の描画部品（フォント、角丸矩形、影、テキスト）は [`RenderUtils`](../App/FudeCode/Views/RenderUtils.h) に集約されています。各要素の座標は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が計算し、描画とクリック判定の両方が同じ値を使います。座標やホバーなどの画面の状態は [`UIState`](../App/FudeCode/Views/UIState.h) に持ち、描画の関数は `const UIState&` を引数で受け取ります。
 
 ```mermaid
 graph TD
@@ -32,7 +32,7 @@ graph TD
     end
 
     Caller["AppController / WacomMT_Scribble.cpp"]
-    UIStateNode["UIState (各要素の矩形)"]
+    UIStateNode["UIState (画面の状態と各要素の矩形)"]
 
     MV -->|タイトル画面時| TV
     MV -->|1. 机背景描画| RU
@@ -51,6 +51,7 @@ graph TD
 
     Caller -->|サイズ変更・タブ切替・再生位置の変更など| SL
     SL -->|矩形を書き込み| UIStateNode
+    Caller -->|ホバー・開閉などの更新| UIStateNode
     UIStateNode -.->|配置を参照| MV
 ```
 
@@ -74,6 +75,7 @@ graph TD
   - `int width, int height`: ウィンドウ寸法
   - `GpuInk& gpuInk`: 墨汁エンジン
   - `const AppState& state`: アプリケーション状態
+  - `const UIState& ui`: 画面の状態と各要素の配置
   - `const RECT& rcPaint`: 更新領域
 - **出力 (Output)**:
   - 画面への最終描画ビットマップ転送
@@ -106,16 +108,16 @@ graph TD
   - 書道制作のキャンバス面を描画します。
   - **半紙背景と影**: 繊細な和紙の質感（`Hanshi` 242×333mm 比率）と立体的なドロップシャドウの描画。
   - **墨汁合成**: 通常時は [`GpuInk`](../App/FudeCode/InkEngine/GpuInk.h) から転送（DirectX Interop ゼロコピーと `SRCAND` 合成）。
-  - **運筆リプレイ描画 ([`DrawReplayCanvas`](../App/FudeCode/Views/CanvasView.cpp#L814))**:
+  - **運筆リプレイ描画 ([`DrawReplayCanvas`](../App/FudeCode/Views/CanvasView.cpp#L812))**:
     1. **再生済みの墨**: [`ReplayInk`](../App/FudeCode/InkEngine/ReplayInk.h) による時系列墨汁再生アニメーション。
-    2. **淡墨ゴースト ([`ghostMaster`](../App/FudeCode/Views/CanvasView.cpp#L836))**: 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト。未再生の未来の文字が筆圧グラデーションとして表示され、再生済みの墨と `SRCAND` 合成（インポート記録時は `importedFullInk` 事前ベイクキャッシュを活用）。
-    3. **朱色芯線軌跡 ([`DrawReplayTrajectory`](../App/FudeCode/Views/CanvasView.cpp#L881))**: ペンが実際に通過した軌跡（運筆の芯線）を視認しやすい朱色（`RGB(235, 55, 35)`）の細線で時系列に沿って順次描画。
+    2. **淡墨ゴースト ([`ghostMaster`](../App/FudeCode/Views/CanvasView.cpp#L834))**: 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト。未再生の未来の文字が筆圧グラデーションとして表示され、再生済みの墨と `SRCAND` 合成（インポート記録時は `importedFullInk` 事前ベイクキャッシュを活用）。
+    3. **朱色芯線軌跡 ([`DrawReplayTrajectory`](../App/FudeCode/Views/CanvasView.cpp#L879))**: ペンが実際に通過した軌跡（運筆の芯線）を視認しやすい朱色（`RGB(235, 55, 35)`）の細線で時系列に沿って順次描画。
   - **お手本描画 ([`DrawOtehonGlyph`](../App/FudeCode/Views/CanvasView.cpp))**: 半紙上の升目セル（emボックス）に内接するようフォントサイズを動的計算し、指定透明度で毛筆楷書・教科書体・行書のお手本を描画（`rotateCcw` による紙だけ表示での90度回転描画対応）。また、`HasOtehonFont` により該当フォントがPCに導入されているかを事前検出。解析タブ表示中は、お手本のON/OFFにかかわらず描画しません。
   - **下敷き格子**: 十字、2段、田の字、2x3、2x4 を指定カラーテーマ（朱赤、白線、薄墨）で描画。
   - **3D筆姿勢モニタ ([`Draw3DBrushPose`](../App/FudeCode/Views/CanvasView.cpp))**: 筆先高度角・方位角・接地状態を俯瞰する3D筆を描画。
   - **リソースプール**: `PenPool` により線幅ごとの GDI ペンを再利用し、1画あたり数百個の GDI オブジェクト生成・破棄オーバーヘッドを完全に排除。
 - **入力 (Input)**:
-  - `HDC dc`, `const AppState& state`, `GpuInk& gpuInk`
+  - `HDC dc`, `const AppState& state`, `const UIState& ui`, `GpuInk& gpuInk`（`DrawBackground`、`RenderInk`、`Draw3DBrushPose` は `AppState` を受け取りません）
 - **出力 (Output)**:
   - メモリDC上の半紙領域への描画
 - **使用されている定数の名前 (Constants used)**:
@@ -136,7 +138,7 @@ graph TD
     - **手本タブ**: お手本表示ON/OFF、升目ミニマップ配置UI（選択中文字をマスへ配置/消去）、書体切替（楷書/教科書体/行書、未導入フォントは沈めて表示）、書きたい文字入力欄（IME確定文字列、キャレット描画）、候補タイル8枚、透過度（濃淡）スライダー。
   - **ホームボタン**: タイトル画面へ戻る `rTbHomeBtn` の描画。
 - **入力 (Input)**:
-  - `HDC dc`, `const AppState& state`
+  - `HDC dc`, `const AppState& state`, `const UIState& ui`
 - **出力 (Output)**:
   - 左側UI領域への描画
 - **使用されている定数の名前 (Constants used)**:
@@ -152,9 +154,9 @@ graph TD
   - **墨残量ゲージ**: 硯の真上の `rInkBadge` に「💧 墨残量: ○%」を表示し、20%以下では「⚠️ 墨残量: ○%」として警告赤表示。残量の分だけ左から塗り、つまみで位置を示します。ホバー中とドラッグ中（`isDraggingInkAmount`）は縁を明るくします。
   - **リアルな硯表現**: 墨溜まり（`rInkPool`）、液面の光沢ハイライトライン、磨り面（`rInkLand`）の微細な石目テクスチャを描画。操作が違うので、ペンが乗っている側（しごいている間は磨り面）の枠だけを明るくして区別します。
   - **履歴ボタン表示**: 「↩ 一画戻す」「↪ 一画復元」ボタンに現在の遡り可能画数 `(%d)` を表示し、履歴が無いときは無効色で沈めて描画。
-  - **紙だけ表示用ボタンバー ([`DrawPaperOnlyBar`](../App/FudeCode/Views/InkStoneView.cpp#L182))**: 半紙を横向き最大化した際に、半紙の右側に縦帯で「墨を補充（残り %d%%）」「通常表示に戻る」「筆跡を消す」ボタンを90度回転文字（`DrawRotatedCenter`）で描画。
+  - **紙だけ表示用ボタンバー ([`DrawPaperOnlyBar`](../App/FudeCode/Views/InkStoneView.cpp#L181))**: 半紙を横向き最大化した際に、半紙の右側に縦帯で「墨を補充（残り %d%%）」「通常表示に戻る」「筆跡を消す」ボタンを90度回転文字（`DrawRotatedCenter`）で描画。
 - **入力 (Input)**:
-  - `HDC dc`, `const AppState& state`
+  - `HDC dc`, `const AppState& state`, `const UIState& ui`
 - **出力 (Output)**:
   - 右側硯パネル領域への描画
 - **使用されている定数の名前 (Constants used)**:
@@ -167,12 +169,12 @@ graph TD
 - **責務 (Responsibility)**:
   - 「解析」タブ選択時に左サブパネル内に展開されるリアルタイム書道解析UIを描画します。
   - **インポートバー ([`DrawImportBar`](../App/FudeCode/Views/AnalysisView.cpp#L29))**: 外部運筆アーカイブ（JSON / CSV）の読み込みボタン、およびインポート表示中の「↩ 自分の記録に戻る」ボタン。
-  - **リプレイコントローラ ([`DrawReplayControls`](../App/FudeCode/Views/AnalysisView.cpp#L52))**: 再生/一時停止、前画/次画スキップ、再生速度（0.5x, 1.0x, 2.0x）、シークバー（プログレスバーおよび各画開始目盛り付き）。
+  - **リプレイコントローラ ([`DrawReplayControls`](../App/FudeCode/Views/AnalysisView.cpp#L51))**: 再生/一時停止、前画/次画スキップ、再生速度（0.5x, 1.0x, 2.0x）、シークバー（プログレスバーおよび各画開始目盛り付き）。
   - **メトリクスカード ([`DrawMetricsCard`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆圧、高度角、速度、墨残量、総画数を表示。
   - **筆姿勢コンパス ([`DrawTiltCompass`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆先の仰角・方位角をコンパス状にグラフィカル表示。
   - **リアルタイム波形グラフ ([`DrawWaveformGraph`](../App/FudeCode/Views/AnalysisView.cpp))**: 筆圧、運筆速度、墨残量の推移をオシロスコープ状に描画（クリック/ドラッグでのシーク操作に対応）。描画領域は `ScreenLayout::Layout` が求めた `ui.rAnalysisGraphPlot` を使い、シーク判定と揃えています。
 - **入力 (Input)**:
-  - `HDC dc`, `const RECT& rBox`, `const AppState& state`
+  - `HDC dc`, `const RECT& rBox`, `const AppState& state`, `const UIState& ui`（`DrawMetricsCard` と `DrawTiltCompass` は `ui` を受け取りません）
 - **出力 (Output)**:
   - 解析サブパネル領域への描画
 - **使用されている定数の名前 (Constants used)**:
@@ -186,7 +188,7 @@ graph TD
   - 「すべて消す」ボタン押下時に、半紙の上に重なる確認モーダルダイアログ（半透明暗転オーバーレイ、メッセージ、確認・キャンセルボタン）を描画します。
   - **紙だけ表示（横向き）での回転描画**: `SetWorldTransform`（`GM_ADVANCED`）を用いて座標系を左回りに90度回転させて描画し、倒した向きで正しく読めるダイアログを展開します。
 - **入力 (Input)**:
-  - `HDC dc`, `int width, int height`, `const AppState& state`
+  - `HDC dc`, `int width, int height`, `const UIState& ui`
 - **出力 (Output)**:
   - モーダル領域の描画
 - **使用されている定数の名前 (Constants used)**:
@@ -214,7 +216,7 @@ graph TD
 ### 2.9 [ScreenLayout.h](../App/FudeCode/Views/ScreenLayout.h) / [ScreenLayout.cpp](../App/FudeCode/Views/ScreenLayout.cpp)
 
 - **責務 (Responsibility)**:
-  - ウィンドウサイズと表示モードに応じて全UI要素の位置矩形を計算し、`UIState` へ書き込みます。書き換えるのは `UIState` だけで、ほかのモデルは読むだけです。
+  - ウィンドウサイズと表示モードに応じて全UI要素の位置矩形を計算し、`UIState` へ書き込みます。書き換えるのは `UIState` だけで、モデルは読むだけです。
   - **通常表示 (`Layout`)**: 左メニュー、各タブの操作部品、画面中央の半紙（`rPaper`）、右側硯パネル、全消し確認モーダルを配置します。硯パネルは空き領域に合わせて拡大率（`inkStoneScale`）を決めます。
   - **紙だけ表示 (`LayoutPaperOnly`)**: 横に倒した半紙を画面いっぱいに広げ、右端の帯へボタンを配置します。左メニューと硯パネルは矩形ごと畳み、当たり判定が運筆を横取りしないようにします。硯まわりのドラッグとしごきの状態も解除します。モーダルは倒した向きで組みます。
   - **下敷きと手本の一元配置 (`LayoutGridGeometry`)**: `rGridBorder` と `rGridCell[MAX_GRID_CELLS]`、お手本のミニマップ（`rOtehonCellBtn`）を一括で計算し、罫線描画（`CanvasView::DrawGrid`）とお手本配置を一致させます。
@@ -232,3 +234,35 @@ graph TD
   - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
   - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
   - `MAX_GRID_CELLS`: 升目セル配列の上限 (`8`)。
+
+---
+
+### 2.10 [UIState.h](../App/FudeCode/Views/UIState.h)
+
+- **責務 (Responsibility)**:
+  - 作品や設定のデータではない、画面の状態を構造体 `UIState` にまとめます。Model には含めず、実体は [`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) の `g_uiState` です。
+  - **表示の状態**: 左メニューのタブ（`leftTab`）、サブパネルの開閉（`isSubPanelOpen`）、全消し確認モーダルの表示（`showClearConfirm`）、紙だけ表示（`paperOnly`）、各ボタンのホバー（`hoverTb` など）を保持します。
+  - **操作の状態**: 入力ロック（`suppressPenUntilLift`）、補充中（`isPenRefilling`）、墨残量ゲージのドラッグ中（`isDraggingInkAmount`）、しごき中（`isWiping`）を保持します。
+  - **画面配置の保持**: 半紙領域（`rPaper`）、左メニュー、右側硯パネル（墨溜まり `rInkPool`、磨り面 `rInkLand`、墨残量ゲージ `rInkBadge` を含む）、波形グラフの描画領域（`rAnalysisGraphPlot`）、下敷き升目セル（`rGridBorder`, `rGridCell[MAX_GRID_CELLS]`）の矩形を保持します。計算は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が行います。
+  - **保存通知**: `SetSaveFeedback(message, isError)` により、フィードバック文言と表示開始時刻（`saveFeedbackTime`）、エラー表示フラグ（`saveFeedbackIsError`）を設定します。
+- **入力 (Input)**:
+  - `AppController` と `StrokeController` からの状態の更新、`ScreenLayout` からの矩形の書き込み
+- **出力 (Output)**:
+  - 描画とクリック判定で読む、各要素の矩形と画面の状態
+- **使用されている定数の名前 (Constants used)**:
+  - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
+  - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
+  - `MAX_GRID_CELLS`: 升目セル配列の上限 (`8`)。
+
+---
+
+### 2.11 [UIComponents.h](../App/FudeCode/Views/UIComponents.h)
+
+- **責務 (Responsibility)**:
+  - Win32 の基本矩形構造体 `tagRECT` を継承した軽量UI要素 `UIWidget` を定義します。`left` / `top` / `right` / `bottom` へ直接アクセスでき、`RECT` が必要な関数へそのまま渡せます。
+- **入力 (Input)**:
+  - なし（既定は全座標 0）、`const RECT& r`、または `int l, int t, int r, int b`
+- **出力 (Output)**:
+  - `RECT` として使える矩形
+- **使用されている定数の名前 (Constants used)**:
+  - `NOMINMAX`: マクロ汚染防止。

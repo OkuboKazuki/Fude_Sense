@@ -24,7 +24,6 @@ graph TD
         InkMod["墨・水分モデル (InkModel)"]
         Traj["運筆アーカイブ (TrajectorySession)"]
         Undo["一画戻す/復元 (UndoHistory)"]
-        UI["UI状態・配置 (UIState)"]
         Screen["画面状態 (AppScreen)"]
     end
 
@@ -39,6 +38,7 @@ graph TD
 
     subgraph ViewLayer ["Views レイヤー"]
         SL["ScreenLayout (レイアウト計算)"]
+        UI["UI状態・配置 (UIState)"]
     end
 
     subgraph OSLayer ["OS / Win32"]
@@ -50,6 +50,7 @@ graph TD
     SC -->|墨・水分の消費 (1.02倍スケール)| InkMod
     SC -->|時系列データ追記| Traj
     SC -->|画開始時の控え・硯のしごき| AC
+    SC -->|入力ロック・補充・しごきの状態| UI
     SC -->|セグメント描画命令| GPU
     SC -->|約120Hz 局所Dirty Rect更新| WinMsg
 
@@ -106,6 +107,7 @@ graph TD
   - `HWND hWnd`: 描画先メインウィンドウ
   - `const PenInputEvent& event`: 正規化されたペン入力情報
   - `AppState& state`: アプリケーション状態
+  - `UIState& ui`: 画面の状態と各要素の配置
   - `GpuInk& gpuInk`: 墨汁描画エンジン
 - **出力 (Output)**:
   - `gpuInk.DrawSegmentLinear(seg)`: 運筆線分の描画実行
@@ -135,7 +137,7 @@ graph TD
     - **タブ切り替え (`SelectTab`)**: 筆・紙・解析・保存・お手本を切り替えます。解析以外へ移るときは読み込んだ記録を閉じ、解析へ移るときは再生位置を先頭（0ms）にして一時停止にします。
     - **ショートカットキー (`OnKeyDown`)**: `F9`、`Esc`、`Ctrl+Z`、`Ctrl+Shift+Z`、`Ctrl+Y` を処理します。文字入力中（`otehon.isTyping`）は `F9` 以外を止めます。
     - **カーソル形状 (`OnSetCursor`)**: 半紙の上は十字、お手本の入力欄は I ビーム、それ以外は矢印にします。
-    - **保存結果の通知 (`ExportCanvasWithFeedback`)**: [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) が返した `ImageExportResult` に応じて、`SetSaveFeedback` でメッセージを設定します。
+    - **保存結果の通知 (`ExportCanvasWithFeedback`)**: [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) が返した `ImageExportResult` に応じて、`UIState::SetSaveFeedback` でメッセージを設定します。
     - 運筆アーカイブの保存と読み込みは [`ArchiveDialogs`](../App/FudeCode/Services/ArchiveDialogs.h) を呼び、取り消しでは何も表示せず、失敗のときだけ知らせます。
     - 全消し確認モーダルの判定では、紙だけ表示の倒した向きへ点を移します（`ToClearModalSpace`）。
     - お手本文字の配置・消去（トグル動作）、書体変更。
@@ -165,10 +167,11 @@ graph TD
   - `wchar_t ch`: WM_CHAR で受け取る入力文字（IME確定文字）
   - `int width, int height`: クライアント領域の幅と高さ
   - `AppState& state`: 状態モデル
+  - `UIState& ui`: 画面の状態と各要素の配置（`ReleasePenLock`、`OnPenOutOfRange` はこれだけを受け取ります）
   - `GpuInk& gpuInk`: 墨描画エンジン
 - **出力 (Output)**:
   - 戻り値 `bool`: 各操作がUIによって消費されたか（運筆等への透過を防ぐフラグ）
-  - `state.ui` / `state.brush` / `state.paper` / `state.otehon` / `state.replay` の各フィールド更新
+  - `ui` / `state.brush` / `state.paper` / `state.otehon` / `state.replay` の各フィールド更新
   - `InvalidateRect(hWnd, NULL, FALSE)`: UI変更に伴う画面全体の再描画要求
 - **使用されている定数の名前 (Constants used)**:
   - `LeftTab`: 各タブ識別列挙子。

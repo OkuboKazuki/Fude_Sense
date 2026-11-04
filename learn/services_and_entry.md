@@ -64,6 +64,7 @@ graph TD
 
 - **責務 (Responsibility)**:
   - アプリケーションのエントリポイント（`_tWinMain` / `WinMain`）とメインウィンドウプロシージャ（`WndProc`）を含みます。
+  - **状態の実体**: `g_appState`（[`AppState`](../App/FudeCode/Models/AppState.h)）と `g_uiState`（[`UIState`](../App/FudeCode/Views/UIState.h)）を持ち、Controller と View へ引数で渡します。
   - **メッセージディスパッチ**:
     - `WT_PACKET`: Wintab アダプタ経由で [`StrokeController`](../App/FudeCode/Controllers/StrokeController.h) へ転送。
     - `WM_POINTERDOWN` / `WM_POINTERUPDATE` / `WM_POINTERUP`: Windows Pointer アダプタ経由で [`StrokeController`](../App/FudeCode/Controllers/StrokeController.h) へ転送。
@@ -85,7 +86,7 @@ graph TD
     - `Ctrl + Z`: 一画戻す（`AppController::UndoStroke`）。
     - `Ctrl + Shift + Z` / `Ctrl + Y`: 一画復元（`AppController::RedoStroke`）。
     - `Alt + /` / `Alt + ?`: バージョン情報ダイアログ（About）。
-  - **入力保護 ([`IsStudioAcceptingKeys`](../App/FudeCode/WacomMT_Scribble.cpp#L80))**:
+  - **入力保護 ([`IsStudioAcceptingKeys`](../App/FudeCode/WacomMT_Scribble.cpp#L82))**:
     - タイトル画面および画面遷移中は、F11 以外のすべてのショートカットを遮断し、裏でスタジオ状態が変わることを防止。
     - お手本文字の入力中（`otehon.isTyping`）は、`F11` と `F9` 以外のショートカットを `AppController::OnKeyDown` で一時遮断。
 - **入力 (Input)**:
@@ -145,7 +146,7 @@ graph TD
 - **入力 (Input)**:
   - `HWND hWnd`: 親ウィンドウ
   - `GpuInk& gpuInk`: 墨テクスチャ
-  - `const AppState& state`: 半紙の寸法
+  - `const RECT& rPaper`: 半紙の矩形（書き出す画像の大きさに使います）
   - `bool toClipboard`: クリップボードにコピーするか、ファイル保存するか
 - **出力 (Output)**:
   - ファイル出力（デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png` または `.bmp`）

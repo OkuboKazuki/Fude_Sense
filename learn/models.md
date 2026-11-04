@@ -1,6 +1,6 @@
 # 状態・データモデルレイヤー (Models)
 
-本レイヤーは、Fude Sense のすべての画面状態・設定パラメータ、書道の運筆時系列アーカイブ、および破壊的レンダリングに対応した一画取り消し/復元（Undo/Redo）履歴を一元管理する責務を持ちます。
+本レイヤーは、Fude Sense の画面の種類と遷移の状態、設定パラメータ、書道の運筆時系列アーカイブ、および破壊的レンダリングに対応した一画取り消し/復元（Undo/Redo）履歴を一元管理する責務を持ちます。
 
 ---
 
@@ -24,9 +24,7 @@ classDiagram
         +wstring importedName
         +ReplayModel replay
         +UndoHistory undo
-        +UIState ui
         +AnalysisSession() TrajectorySession&
-        +SetSaveFeedback(wstring message, bool isError)
     }
 
     class BrushModel {
@@ -84,37 +82,11 @@ classDiagram
         +RedoDepth() int
     }
 
-    class UIState {
-        +LeftTab leftTab
-        +bool isSubPanelOpen
-        +bool showClearConfirm
-        +bool suppressPenUntilLift
-        +bool isPenRefilling
-        +bool isDraggingInkAmount
-        +bool isWiping
-        +bool paperOnly
-        +double inkStoneScale
-        +UIWidget rPaper
-        +UIWidget rSub
-        +UIWidget rPaperOnlyBar
-        +RECT rGridCell[8]
-    }
-
-    class UIWidget {
-        +bool isHovered
-        +bool isPressed
-        +Contains(POINT pt) bool
-        +Width() int
-        +Height() int
-    }
-
     AppState *-- BrushModel
     AppState *-- PaperModel
     AppState *-- OtehonModel
     AppState *-- TrajectorySession
     AppState *-- UndoHistory
-    AppState *-- UIState
-    UIState *-- UIWidget
 ```
 
 ---
@@ -152,16 +124,13 @@ classDiagram
 ### 2.2 [AppState.h](../App/FudeCode/Models/AppState.h)
 
 - **責務 (Responsibility)**:
-  - システム全体の中心となる状態ファサードクラス `AppState`、および筆・紙・お手本・UIのサブモデルを定義・管理します。
+  - システム全体の中心となる状態ファサードクラス `AppState`、および筆・紙・お手本のサブモデルを定義・管理します。画面の状態（`UIState`）は持ちません。[Views レイヤー](views.md) を参照してください。
   - **画面状態とアニメーション遷移**: 起動時のタイトル画面（`AppScreen::Title`）から制作画面（`AppScreen::Studio`）への滑らかなアルファブレンド遷移（`transitionProgress`, `transitionDurationMs = 400`）の状態を保持します。
-  - **画面配置の保持**: 半紙領域（`rPaper`）、左メニュー、右側硯パネル（墨溜まり `rInkPool`、磨り面 `rInkLand`、墨残量ゲージ `rInkBadge` を含む）、波形グラフの描画領域（`rAnalysisGraphPlot`）、下敷き升目セル（`rGridBorder`, `rGridCell[MAX_GRID_CELLS]`）の矩形を `UIState` に保持します。計算は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が行います。
   - **お手本パレット管理**: IME入力された文字列からサロゲートペアを考慮して1文字単位の候補タイル（`palette`）を再構築し、升目ミニマップからの配置（`PlaceAtCell`）を管理します（同じ字が置かれているマスを再指定すると消去するトグル動作）。
   - **他者アーカイブの解析サポート**: `importedTrajectory`, `viewingImport`, `importedName` を保持し、`AnalysisSession()` ゲッターにより自分の運筆と読み込んだアーカイブを透過的に切り替えます。
-  - **保存通知とエラーハンドリング**: `SetSaveFeedback(message, isError)` により、保存成否に応じたフィードバック文言と表示時間、エラー表示フラグ（`saveFeedbackIsError`）を管理します。
 - **入力 (Input)**:
   - ユーザー操作による各種パラメータ更新指令
 - **出力 (Output)**:
-  - 各UIコンポーネントの位置矩形（`UIWidget` / `RECT`）の保持値
   - 各種モデルの現在値
 - **使用されている定数の名前 (Constants used)**:
   - `TILT_WIDTH_COMPENSATION`: ペン仰角の違いによる線幅変化を旧環境の手応えに合わせる補正係数 (`1.20`)。
@@ -210,21 +179,7 @@ classDiagram
 
 ---
 
-### 2.5 [UIComponents.h](../App/FudeCode/Models/UIComponents.h)
-
-- **責務 (Responsibility)**:
-  - Win32 の基本矩形構造体 `tagRECT` を継承し、コンポーネント指向でヒットテスト（`Contains(POINT)`）やホバー・押下状態を保持できる軽量UI要素 `UIWidget` を定義します。
-- **入力 (Input)**:
-  - `POINT pt`: カーソル座標
-- **出力 (Output)**:
-  - `Contains`: 内外判定結果 (`bool`)
-  - `Width()`, `Height()`: 矩形寸法
-- **使用されている定数の名前 (Constants used)**:
-  - `NOMINMAX`: マクロ汚染防止。
-
----
-
-### 2.6 [MathUtils.h](../App/FudeCode/Models/MathUtils.h)
+### 2.5 [MathUtils.h](../App/FudeCode/Models/MathUtils.h)
 
 - **責務 (Responsibility)**:
   - 描画に依存しない計算の共通関数を提供します。`Models/` と `Services/` はこのヘッダーを直接使うので、`Views/RenderUtils.h` へ依存しません。

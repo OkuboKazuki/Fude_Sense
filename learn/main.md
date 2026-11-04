@@ -1,6 +1,6 @@
 # Fude Sense アーキテクチャ解説
 
-本書は、デジタル習字・書道制作ワークスペース「[**Fude Sense**](file:///c:/Users/kazuk/デスクトップ/Fudesence/README.md)」のソフトウェア構造およびプログラム全体の設計を解説するドキュメントです。
+本書は、デジタル習字・書道制作ワークスペース「[**Fude Sense**](../README.md)」のソフトウェア構造およびプログラム全体の設計を解説するドキュメントです。
 
 ---
 
@@ -30,7 +30,7 @@ graph TD
     end
 
     subgraph Layer3 ["3. 状態・データモデルレイヤー (Models)"]
-        AppState[統合アプリケーション状態ファサード<br>筆・紙・お手本・UI状態・リプレイ]
+        AppState[統合アプリケーション状態ファサード<br>筆・紙・お手本・墨・リプレイ]
         Archive[時系列アーカイブ・復元履歴<br>運筆軌跡・外部読込・Undo/Redo]
     end
 
@@ -45,6 +45,7 @@ graph TD
         TitleView[タイトル画面・ブレス描画]
         CanvasView[半紙・下敷き・お手本・墨・3D筆・芯線軌跡描画]
         UIViews[フローティングUI・硯・解析・モーダル]
+        UIStateNode[画面の状態と配置 (UIState)]
     end
 
     subgraph Layer6 ["6. 基盤サービス・エントリ (Services & Entry)"]
@@ -63,16 +64,19 @@ graph TD
     StrokeCtrl -->|運筆軌跡の追記| Archive
     StrokeCtrl -->|セグメント描画命令| InkEngine
     StrokeCtrl -->|局所Dirty Rect更新要求| DevOS
+    StrokeCtrl -->|入力ロック・補充・しごきの状態| UIStateNode
 
     AppCtrl -->|状態変更・モード切替| AppState
     AppCtrl -->|履歴巻き戻し・外部アーカイブ読込| Archive
     AppCtrl -->|全消し・リサイズ・回転| InkEngine
     AppCtrl -->|画面再描画要求| DevOS
+    AppCtrl -->|UI操作の状態・レイアウト計算| UIStateNode
 
     GpuSim <-->|DirectX Interop ゼロコピー共有| InkEngine
     Archive -->|運筆パラメータ供給| ReplayEngine
 
     AppState -.->|参照| MainView
+    UIStateNode -.->|参照| MainView
     Archive -.->|参照| CanvasView
     Archive -.->|参照| UIViews
     InkEngine -->|墨テクスチャ転送 (SRCAND)| CanvasView
@@ -90,36 +94,37 @@ graph TD
 
 本プロジェクトは以下の6つのレイヤーから構成されています。各レイヤーの具体的なファイル構成、クラス間の相互作用、入出力、および使用定数については各詳細ドキュメントを参照してください。
 
-### ① [入力抽象化レイヤー (Inputs)](file:///c:/Users/kazuk/デスクトップ/Fudesence/learn/inputs.md)
-- **役割**: ペンタブレットの規格差（Wacom製などの Wintab API、Windows Pointer API）や通常のマウス入力を統一的に扱い、座標・筆圧・高度角・方位角・接触状態を正規化された単一の入力イベント（[`PenInputEvent`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Inputs/PenInputEvent.h)）へと変換します。
+### ① [入力抽象化レイヤー (Inputs)](inputs.md)
+- **役割**: ペンタブレットの規格差（Wacom製などの Wintab API、Windows Pointer API）や通常のマウス入力を統一的に扱い、座標・筆圧・高度角・方位角・接触状態を正規化された単一の入力イベント（[`PenInputEvent`](../App/FudeCode/Inputs/PenInputEvent.h)）へと変換します。
 - **特徴**: アプリケーションの中核ロジックが特定のデバイスドライバやAPIに依存しない疎結合設計を実現しています。
 
-### ② [制御ロジックレイヤー (Controllers)](file:///c:/Users/kazuk/デスクトップ/Fudesence/learn/controllers.md)
+### ② [制御ロジックレイヤー (Controllers)](controllers.md)
 - **役割**: 正規化されたペン入力やユーザーのUI操作を受け取り、ビジネスロジックを実行します。
 - **特徴**: 
-  - **運筆制御 ([`StrokeController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/StrokeController.h))**: 筆圧のスムージング、筆の硬さ補正、ペンの傾き・進行方向に応じた「とめ・はらい」の動的線幅計算、運筆に伴う物理インク消費（満タンで書ける距離のスケール補正および乾き具合連動）、描画エンジンへの線分投入、ならびに軸平行境界ボックス（Dirty Rect）による局所再描画レート制御（約120Hz/8ms）を統括します。
-  - **アプリ制御 ([`AppController`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Controllers/AppController.h))**: タイトル画面とスタジオ画面の遷移、フローティングパネル操作、筆・紙設定変更、全消し、一画戻す/復元（Undo/Redo）、紙を大きくする（横向き）表示（F9）、他者の運筆アーカイブのインポート解析、お手本の IME 日本語入力追従などを統括します。
+  - **運筆制御 ([`StrokeController`](../App/FudeCode/Controllers/StrokeController.h))**: 筆圧のスムージング、筆の硬さ補正、ペンの傾き・進行方向に応じた「とめ・はらい」の動的線幅計算、運筆に伴う物理インク消費（満タンで書ける距離のスケール補正および乾き具合連動）、描画エンジンへの線分投入、ならびに軸平行境界ボックス（Dirty Rect）による局所再描画レート制御（約120Hz/8ms）を統括します。
+  - **アプリ制御 ([`AppController`](../App/FudeCode/Controllers/AppController.h))**: タイトル画面とスタジオ画面の遷移、フローティングパネル操作、筆・紙設定変更、全消し、一画戻す/復元（Undo/Redo）、紙を大きくする（横向き）表示（F9）、他者の運筆アーカイブのインポート解析、お手本の IME 日本語入力追従などを統括します。
 
-### ③ [状態・データモデルレイヤー (Models)](file:///c:/Users/kazuk/デスクトップ/Fudesence/learn/models.md)
+### ③ [状態・データモデルレイヤー (Models)](models.md)
 - **役割**: アプリケーションが保持するすべてのデータ、設定値、履歴、時系列アーカイブを管理します。
 - **特徴**: 
-  - 統合ファサード [`AppState`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Models/AppState.h) により、画面状態、筆・紙・お手本・UI配置ジオメトリを一元管理。
-  - 運筆の全サンプリング点を保持する時系列アーカイブ [`TrajectorySession`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Models/TrajectoryModel.h)（JSON/CSVエクスポート・インポート対応、リビジョン整合性管理）。
-  - 破壊的墨汁描画に対応した RLE 圧縮履歴 [`UndoHistory`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Models/UndoHistory.h)（メモリ上限384MB、紙を大きくする表示の出入り時における90度回転追従保持、終筆保護同期）。
+  - 統合ファサード [`AppState`](../App/FudeCode/Models/AppState.h) により、画面の種類と遷移、筆・紙・お手本・墨残量を一元管理。
+  - 運筆の全サンプリング点を保持する時系列アーカイブ [`TrajectorySession`](../App/FudeCode/Models/TrajectoryModel.h)（JSON/CSVエクスポート・インポート対応、リビジョン整合性管理）。
+  - 破壊的墨汁描画に対応した RLE 圧縮履歴 [`UndoHistory`](../App/FudeCode/Models/UndoHistory.h)（メモリ上限384MB、紙を大きくする表示の出入り時における90度回転追従保持、終筆保護同期）。
 
-### ④ [墨汁物理・描画エンジンレイヤー (InkEngine)](file:///c:/Users/kazuk/デスクトップ/Fudesence/learn/ink_engine.md)
+### ④ [墨汁物理・描画エンジンレイヤー (InkEngine)](ink_engine.md)
 - **役割**: Direct2D および Direct3D 11 Compute Shader を活用し、和紙（半紙）特有の毛細管現象による墨汁の浸透、水分拡散、繊維に沿ったにじみ、ならびに高速運筆時のかすれ（渇筆）をリアルタイムに物理シミュレーションします。
-- **特徴**: Direct3D 11 テクスチャから Direct2D 1.1 の `ID2D1Bitmap1` を共有する**ゼロコピー描画**により、PCIe バス帯域の浪費を排除。単一パラメータ墨残量モデル [`InkModel`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/InkModel.h) によるリアルタイムカスレ駆動、およびチェックポイント方式による高速シーク可能な運筆リプレイエンジン [`ReplayInk`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/InkEngine/ReplayInk.h) を備えます。
+- **特徴**: Direct3D 11 テクスチャから Direct2D 1.1 の `ID2D1Bitmap1` を共有する**ゼロコピー描画**により、PCIe バス帯域の浪費を排除。単一パラメータ墨残量モデル [`InkModel`](../App/FudeCode/InkEngine/InkModel.h) によるリアルタイムカスレ駆動、およびチェックポイント方式による高速シーク可能な運筆リプレイエンジン [`ReplayInk`](../App/FudeCode/InkEngine/ReplayInk.h) を備えます。
 
-### ⑤ [プレゼンテーションレイヤー (Views)](file:///c:/Users/kazuk/デスクトップ/Fudesence/learn/views.md)
+### ⑤ [プレゼンテーションレイヤー (Views)](views.md)
 - **役割**: アプリケーションの視覚的表現を担います。
 - **特徴**: 
-  - チラツキのないダブルバッファリングと運筆中の半紙専用高速局所描画パス（[`MainView`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Views/MainView.h)）。
-  - タイトル画面の WIC ロゴ表示とブレスアニメーション（[`TitleView`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Views/TitleView.h)）。
-  - 和紙の質感、薄墨お手本、下敷き升目格子、`SRCAND` 墨汁合成、3D筆姿勢モニタ、運筆リプレイ時の淡墨ゴーストおよび朱色芯線軌跡描画（[`CanvasView`](file:///c:/Users/kazuk/デスクトップ/Fudesence/App/FudeCode/Views/CanvasView.h)）。
+  - チラツキのないダブルバッファリングと運筆中の半紙専用高速局所描画パス（[`MainView`](../App/FudeCode/Views/MainView.h)）。
+  - タイトル画面の WIC ロゴ表示とブレスアニメーション（[`TitleView`](../App/FudeCode/Views/TitleView.h)）。
+  - 和紙の質感、薄墨お手本、下敷き升目格子、`SRCAND` 墨汁合成、3D筆姿勢モニタ、運筆リプレイ時の淡墨ゴーストおよび朱色芯線軌跡描画（[`CanvasView`](../App/FudeCode/Views/CanvasView.h)）。
   - 文机背景、開閉式フローティングパネル、動的スケール硯パネル、リアルタイム運筆解析グラフ、全消し確認モーダル（回転描画対応）。
+  - ホバーやボタンの矩形、モーダルの開閉などの画面の状態を持つ [`UIState`](../App/FudeCode/Views/UIState.h)。Model には含めず、エントリポイントから View と Controller へ引数で渡します。
 
-### ⑥ [基盤サービス & アプリケーションエントリ (Services & Entry)](file:///c:/Users/kazuk/デスクトップ/Fudesence/learn/services_and_entry.md)
+### ⑥ [基盤サービス & アプリケーションエントリ (Services & Entry)](services_and_entry.md)
 - **役割**: Windows OS との対話、ウィンドウ生成、メッセージループのハンドリング、Wintab デバイスコンテキストの動的ロード・管理、作品画像の高画質エクスポート（WIC PNG / BMP）およびクリップボード連携（`CF_BITMAP`）を担当します。
 - **特徴**: Win32 ネイティブの低遅延イベントディスパッチ、各種ショートカット（F11 全画面、F9 紙を大きくする表示、Ctrl+Z/Ctrl+Y 一画戻す/復元、Esc 全消し確認）、保存失敗時の壊れたファイル自動削除クリーンアップを提供します。
 
@@ -155,7 +160,8 @@ sequenceDiagram
 
     OS->>View: WM_PAINT (描画要求)
     View->>Ink: Direct2D / D3D11 ゼロコピー共有テクスチャから描画
-    View->>Mod: お手本・下敷き・UI配置を取得
+    View->>Mod: お手本・下敷きの設定を取得
+    View->>View: UIState から UI 配置を取得
     View->>OS: 和紙の上に SRCAND 乗算合成し裏画面から一括転送 (BitBlt)
 ```
 

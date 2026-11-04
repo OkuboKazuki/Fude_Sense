@@ -39,16 +39,16 @@
 ### 状態管理のファサード設計 (AppState)
 - `AppState` は、Models (筆・紙・お手本・物理パラメータ), Controllers (運筆・UI制御), Views (各UIパネル) の間を仲介する統合ファサード（Facade）として設計されています。
 - サブシステム間の疎結合を保ちつつ、運筆中の瞬時なパラメータ参照（筆圧、硬さ補正、インク消費量）をキャッシュミスなく O(1) で高速アクセス可能にしています。
+- ホバーやボタンの矩形、モーダルの開閉などの画面の状態は `AppState` に含めず、`Views/UIState.h` の `UIState` に持ちます。実体は `WacomMT_Scribble.cpp` の `g_uiState` で、View と Controller へ引数で渡します。
 
 ```text
 App/FudeCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
-│   ├── UIComponents.h               # UI ウィジェット（RECT 互換）
 │   ├── MathUtils.h                  # 描画に依存しない計算関数 (Clamp, RW, RH, PtIn)
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
-│   └── AppState.h                   # 筆・紙・お手本・UI状態統合ファサード
+│   └── AppState.h                   # 筆・紙・お手本・墨・運筆記録の統合ファサード
 │
 ├── InkEngine/                       # ★ [Ink System] インク管理・物理にじみシミュレーション ★
 │   ├── GpuInk.h / .cpp              # Direct2D/D3D11 リアルタイム墨汁浸透・物理エンジン
@@ -66,6 +66,8 @@ App/FudeCode/
 │   ├── AnalysisView.h / .cpp        # リアルタイム運筆解析・3D筆姿勢モニタ描画
 │   ├── ModalView.h / .cpp           # 全消し確認モーダル描画
 │   ├── ScreenLayout.h / .cpp        # 全UI要素のレイアウト計算
+│   ├── UIState.h                    # 画面の状態と各要素の配置
+│   ├── UIComponents.h               # UI ウィジェット（RECT 互換）
 │   └── MainView.h / .cpp            # ダブルバッファリングと描画統括
 │
 ├── Controllers/                     # [Controller] 運筆・UI制御ロジック

@@ -81,10 +81,9 @@
 App/FudeCode/
 ├── Models/                          # [Model] アプリデータ・設定
 │   ├── AppEnums.h                   # 共通列挙型 (Brush, PaperType, GridPattern 等)
-│   ├── AppState.h                   # 筆・紙・お手本・UI状態統合ファサード
+│   ├── AppState.h                   # 筆・紙・お手本・墨・運筆記録の統合ファサード
 │   ├── TrajectoryModel.h / .cpp     # 運筆時系列アーカイブ・リプレイモデル
 │   ├── UndoHistory.h / .cpp         # RLE圧縮による一画戻す/復元履歴
-│   ├── UIComponents.h               # UIコンポーネント構造体
 │   └── MathUtils.h                  # 描画に依存しない計算関数 (Clamp, RW, RH, PtIn)
 │
 ├── InkEngine/                       # [Ink System] インク管理・物理にじみシミュレーション
@@ -102,6 +101,8 @@ App/FudeCode/
 │   ├── AnalysisView.h / .cpp        # リアルタイム運筆解析・3D筆姿勢モニタ描画
 │   ├── ModalView.h / .cpp           # 全消し確認モーダル描画
 │   ├── ScreenLayout.h / .cpp        # 全UI要素のレイアウト計算
+│   ├── UIState.h                    # 画面の状態と各要素の配置
+│   ├── UIComponents.h               # UIコンポーネント構造体
 │   ├── TitleView.h / .cpp           # タイトル画面・ロゴ・ブレス描画
 │   └── MainView.h / .cpp            # ダブルバッファリングと描画統括
 │
