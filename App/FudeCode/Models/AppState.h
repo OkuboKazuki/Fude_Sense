@@ -293,19 +293,8 @@ public:
     // ウィンドウサイズに応じた全UI要素のレイアウト計算
     void Layout(int clientWidth, int clientHeight);
 
-    // 墨残量ゲージ上の横位置 x に合わせて墨の残量を決める（左端が空、右端が満タン）
-    void SetInkAmountFromBadgeX(int x);
-
-    // 点が硯の下の部分（磨り面とそのまわりの縁）にあるか。硯の残りの上の部分は補充に使う
-    bool IsOnInkStoneLand(POINT pt) const;
-    // 磨り面でしごいている筆を pt まで動かし、その分の墨を落とす。残量が変わったら true。
-    bool WipeInkTo(POINT pt, double pressure);
-
     // シークバーのツマミ位置だけを再計算する
     void UpdateReplaySeekThumb();
-
-    // 画面上の点を全消し確認モーダルの座標系へ移す（紙だけ表示では倒した向き）
-    POINT ToClearModalSpace(POINT pt, int clientHeight) const;
 
     void SetSaveFeedback(const std::wstring& message, bool isError = false) {
         ui.saveFeedback = message;

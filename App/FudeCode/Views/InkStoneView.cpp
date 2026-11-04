@@ -84,7 +84,7 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
 
     Box(dc, rBadge, badgeBg, badgeBorder, 1, badgeH / 2);
 
-    // 残量の分だけ左から塗る。位置の取り方は AppState::SetInkAmountFromBadgeX と合わせる
+    // 残量の分だけ左から塗る。位置の取り方は AppController.cpp の SetInkAmountFromBadgeX と合わせる
     double badgeFrac = Clamp(state.ink.amount / INK_MAX_VALUE, 0.0, 1.0);
     if (badgeFrac > 0.0) {
         int pad = badgeH / 2;

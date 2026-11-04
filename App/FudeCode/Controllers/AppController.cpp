@@ -4,6 +4,7 @@
 #include "ImageExporter.h"
 #include "ArchiveDialogs.h"
 #include <imm.h>
+#include <cmath>
 
 #pragma comment(lib, "imm32.lib")
 
@@ -35,6 +36,48 @@ static void RefillByPress(AppState& state, double penPressure) {
     state.ui.isPenRefilling = true;
     // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
     state.ui.suppressPenUntilLift = true;
+}
+
+// 画面上の点を全消し確認モーダルの座標系へ移す。
+// 紙だけ表示は画面を右回りに90度倒して見るので、倒した向きの右が画面の上、
+// 下が画面の右になる。モーダルはその向きで組んであるため、点も同じ向きへ直す。
+static POINT ToClearModalSpace(const UIState& ui, POINT pt, int clientHeight) {
+    if (!ui.paperOnly) return pt;
+    return { clientHeight - pt.y, pt.x };
+}
+
+// 墨残量ゲージ上の横位置 x に合わせて墨の残量を決める（左端が空、右端が満タン）。
+// ゲージの両端は丸く、端ぴったりは狙いにくいので、少し内側で 0% / 100% に届くようにする
+static void SetInkAmountFromBadgeX(AppState& state, int x) {
+    const UIState& ui = state.ui;
+    int pad = RH(ui.rInkBadge) / 2;
+    double trackW = static_cast<double>(RW(ui.rInkBadge) - 2 * pad);
+    if (trackW <= 0.0) return;
+    double norm = static_cast<double>(x - ui.rInkBadge.left - pad) / trackW;
+    state.ink.amount = Clamp(norm, 0.0, 1.0) * INK_MAX_VALUE;
+}
+
+// 点が硯の下の部分（磨り面とそのまわりの縁）にあるか。硯の残りの上の部分は補充に使う。
+// 硯を磨り面の上端で上下に分ける。縁も近いほうへ含めるので、硯の中に押しても効かない所は残らない。
+static bool IsOnInkStoneLand(const UIState& ui, POINT pt) {
+    return PtIn(ui.rInkStoneLarge, pt) && pt.y >= ui.rInkLand.top;
+}
+
+// しごく長さは硯の幅を単位にする。硯パネルの拡大率が変わっても、
+// 磨り面を端から端までしごいたときに落ちる量が同じになる。
+// 数えるのは下の部分を通っている間だけ。上の墨溜まりや硯の外へ出ている間は減らさない。
+bool AppController::WipeInkTo(POINT pt, double pressure, AppState& state) {
+    UIState& ui = state.ui;
+    double dx = static_cast<double>(pt.x - ui.wipeLastPt.x);
+    double dy = static_cast<double>(pt.y - ui.wipeLastPt.y);
+    ui.wipeLastPt = pt;
+
+    int stoneW = RW(ui.rInkStoneLarge);
+    if (stoneW <= 0 || !IsOnInkStoneLand(ui, pt)) return false;
+
+    double before = state.ink.amount;
+    state.ink.Wipe(std::sqrt(dx * dx + dy * dy) / stoneW, pressure);
+    return state.ink.amount != before;
 }
 
 void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
@@ -335,7 +378,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         // モーダルは半紙の上に重なっている。どのボタンを押した場合でも、
         // モーダルを閉じた直後に接地したままのペンが運筆を始めないようロックする。
         ui.suppressPenUntilLift = true;
-        POINT mp = state.ToClearModalSpace(pt, h);
+        POINT mp = ToClearModalSpace(ui, pt, h);
         if (PtIn(ui.rModalClearBtn, mp)) {
             ClearAllInk(hWnd, state, gpuInk);
             return true;
@@ -709,12 +752,12 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
         // 墨残量ゲージ: 押した位置へ残量を合わせ、離すまで左右の動きに追従させる
         ui.isDraggingInkAmount = true;
         SetCapture(hWnd);
-        state.SetInkAmountFromBadgeX(pt.x);
+        SetInkAmountFromBadgeX(state, pt.x);
         // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
         ui.suppressPenUntilLift = true;
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
-    } else if (state.IsOnInkStoneLand(pt)) {
+    } else if (IsOnInkStoneLand(ui, pt)) {
         // 硯の下の部分は補充ではなく、筆をしごいて墨を落とす。離すまでの動きで減らす
         ui.isWiping = true;
         ui.wipeByMouse = (penPressure < 0.0);
@@ -813,7 +856,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         // 全消し確認モーダルが開いている間は、そのボタンだけを見る
         if (ui.showClearConfirm) {
             int oldModal = ui.hoverClearModal;
-            POINT mp = state.ToClearModalSpace(pt, h);
+            POINT mp = ToClearModalSpace(ui, pt, h);
             ui.hoverClearModal = 0;
             if (PtIn(ui.rModalClearBtn, mp)) ui.hoverClearModal = 1;
             else if (PtIn(ui.rModalCancelBtn, mp)) ui.hoverClearModal = 2;
@@ -845,7 +888,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     }
 
     if (ui.isDraggingInkAmount && (wParam & MK_LBUTTON)) {
-        state.SetInkAmountFromBadgeX(pt.x);
+        SetInkAmountFromBadgeX(state, pt.x);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     }
@@ -886,7 +929,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     // マウスで硯の磨り面をしごいている間。筆圧が無いので中くらいの強さとして扱う
     if (ui.isWiping && ui.wipeByMouse) {
         if (wParam & MK_LBUTTON) {
-            if (state.WipeInkTo(pt, REFILL_FULL_PRESSURE * 0.5)) {
+            if (WipeInkTo(pt, REFILL_FULL_PRESSURE * 0.5, state)) {
                 InvalidateRect(hWnd, &ui.rRight, FALSE);
             }
         } else {
@@ -968,7 +1011,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
         else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = 6;
         else if (PtIn(ui.rInkBadge, pt)) ui.hoverInkStone = 7;
-        else if (state.IsOnInkStoneLand(pt)) ui.hoverInkStone = 8;
+        else if (IsOnInkStoneLand(ui, pt)) ui.hoverInkStone = 8;
         else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
     }
 

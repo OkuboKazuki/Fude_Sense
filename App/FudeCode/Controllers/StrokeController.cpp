@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "StrokeController.h"
+#include "AppController.h"
 #include "RenderUtils.h"
 #include <cmath>
 #include <algorithm>
@@ -50,7 +51,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     if (state.ui.isWiping && !state.ui.wipeByMouse) {
         if (event.pressure > 0.0) {
             POINT wipePt = { event.x, event.y };
-            if (state.WipeInkTo(wipePt, event.pressure)) {
+            if (AppController::WipeInkTo(wipePt, event.pressure, state)) {
                 InvalidateRect(hWnd, &state.ui.rRight, FALSE);
             }
         } else {

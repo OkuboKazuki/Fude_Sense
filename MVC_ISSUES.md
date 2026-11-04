@@ -24,7 +24,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 | 優先度 | 件数 | 項目 |
 |---|---|---|
 | 高 | 3 | M1 レイアウト計算、M2 View への依存（完了）、M3 UI の状態 |
-| 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新 |
+| 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新 |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存、S1 Service の責務 |
 
 ---
@@ -38,12 +38,12 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 | 関数 | 場所 | 内容 |
 |---|---|---|
 | `LayoutClearModal` | `Models/AppState.cpp:27` | 全消し確認モーダルの配置 |
-| `UpdateReplaySeekThumb` | `Models/AppState.cpp:51` | シークバーのツマミの配置 |
-| `AppState::Layout` | `Models/AppState.cpp:61` | 全 UI 要素の配置 |
-| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:374` | 紙だけ表示の配置 |
-| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:432` | 升目のピクセル矩形 |
+| `UpdateReplaySeekThumb` | `Models/AppState.cpp:43` | シークバーのツマミの配置 |
+| `AppState::Layout` | `Models/AppState.cpp:53` | 全 UI 要素の配置 |
+| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:333` | 紙だけ表示の配置 |
+| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:391` | 升目のピクセル矩形 |
 
-**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全514行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
+**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全473行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
 
 **修正の方向:** `Views/` 側にレイアウト専用のクラスを作って移します。Controller はクリック判定のために、その計算結果を読み取ります。
 
@@ -91,7 +91,11 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **修正の方向:** ダイアログの表示は Controller か Services に移します。Model にはファイルパスを受け取る読み書き処理（`ExportToJson`、`ImportFromFile` など）だけを残します。
 
-### M5. Model が画面座標を解釈している（優先度: 中）
+### M5. Model が画面座標を解釈している（優先度: 中）（完了）
+
+4 つの関数を `AppState` から `Controllers/AppController.cpp` へ移しました。`WipeInkTo` は `StrokeController` からも呼ぶので `AppController` の公開関数にし、残りの 3 つはファイル内の関数にしました。計算の内容は変えていません。Windows でのビルドは未確認です。
+
+以下は修正前の記録です。
 
 **場所**
 
@@ -113,7 +117,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 - `Models/AppState.h:18`（`BrushModel::isDraggingHardness`）
 - `Models/AppState.h:78`（`OtehonModel::isDraggingOpacity`）
 - `Models/AppState.h:83`（`OtehonModel::isTyping`）
-- `Models/AppState.h:310`（`SetSaveFeedback`）
+- `Models/AppState.h:299`（`SetSaveFeedback`）
 - `Models/TrajectoryModel.h:85-86`（`isDraggingSeekBar`、`isDraggingWaveform`）
 
 **問題:** ドラッグ中かどうかは、筆やお手本のデータではなく操作の状態です。
@@ -141,10 +145,10 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 行 | 内容 |
 |---|---|
-| `:141` | 筆の硬さを筆圧へ反映 |
-| `:149-187` | 傾き、方位角、止め、払いによる線幅の計算 |
-| `:198-207` 付近 | 線幅の平滑化 |
-| `:209-219` | 墨の消費量の計算 |
+| `:143` | 筆の硬さを筆圧へ反映 |
+| `:151-188` | 傾き、方位角、止め、払いによる線幅の計算 |
+| `:199-207` | 線幅の平滑化 |
+| `:210-220` | 墨の消費量の計算 |
 
 **問題:** 筆の太り方や墨の減り方は、入力の扱いではなくアプリのルールです。Controller にあると、ペン入力を介さずに単体で確かめにくくなります。
 
@@ -229,7 +233,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 1. **M2（完了）:** 共通の計算関数を移し、Model から `RenderUtils.h` への依存をなくす
 2. **M4（完了）:** ダイアログを Model の外へ移す
 3. **C2（完了）:** グラフの余白の重複をなくす
-4. **M5、E1:** 座標の解釈と状態の更新を Controller に集める
+4. **M5（完了）、E1:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1、M7:** ドメインルールと Service、墨エンジンの依存を整理する
 6. **M1、M3、M6:** レイアウトと `UIState` を分離する
 
