@@ -322,7 +322,7 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
         COLORREF border = active ? RGB(85, 150, 245) : (hover ? RGB(72, 82, 102) : RGB(48, 54, 68));
         COLORREF text = active ? RGB(255, 255, 255) : (hover ? RGB(245, 248, 255) : RGB(185, 190, 202));
         Box(dc, r, bg, border, 1, 8);
-        HFONT f = CreateCustomFont(20, active ? FW_BOLD : FW_NORMAL);
+        HFONT f = CreateCustomFont(30, active ? FW_BOLD : FW_NORMAL);
         Center(dc, r, label, f, text);
         DeleteObject(f);
     };
