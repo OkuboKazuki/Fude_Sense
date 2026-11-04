@@ -32,6 +32,7 @@
 #include "AppEnums.h"
 #include "RenderUtils.h"
 #include "AppState.h"
+#include "UIState.h"
 #include "WintabManager.h"
 #include "MainView.h"
 #include "CanvasView.h"
@@ -62,6 +63,7 @@ HWND g_hWndAbout = NULL;
 RECT g_clientRect = { 0, 0, 0, 0 };
 
 static AppState g_appState;
+static UIState g_uiState;
 static WintabManager g_wintab;
 static GpuInk g_gpuInk;
 static StrokeController g_strokeCtrl;
@@ -221,7 +223,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		int w = g_clientRect.right - g_clientRect.left;
 		int h = g_clientRect.bottom - g_clientRect.top;
-		ScreenLayout::Layout(g_appState.ui, g_appState.paper, g_appState.viewingImport, g_appState.replay, w, h);
+		ScreenLayout::Layout(g_uiState, g_appState.paper, g_appState.viewingImport, g_appState.replay, w, h);
 
 		int canvasW = 0, canvasH = 0;
 		g_appState.paper.GetCanvasSize(canvasW, canvasH);
@@ -243,7 +245,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_TIMER:
 	{
-		AppController::OnTimer(hWnd, wParam, g_appState, g_appState.ui);
+		AppController::OnTimer(hWnd, wParam, g_appState, g_uiState);
 		return 0;
 	}
 
@@ -274,7 +276,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// 見えないスタジオ画面の状態（紙だけ表示・一画戻す等）が裏で変わってしまうため。
 		if (!IsStudioAcceptingKeys()) break;
 
-		AppController::OnKeyDown(hWnd, wParam, g_appState, g_appState.ui, g_gpuInk);
+		AppController::OnKeyDown(hWnd, wParam, g_appState, g_uiState, g_gpuInk);
 		break;
 	}
 
@@ -302,7 +304,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_SETCURSOR:
 	{
-		if (AppController::OnSetCursor(hWnd, lParam, g_appState, g_appState.ui))
+		if (AppController::OnSetCursor(hWnd, lParam, g_appState, g_uiState))
 		{
 			return TRUE;
 		}
@@ -322,7 +324,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		if (w > 0 && h > 0)
 		{
-			MainView::Render(hdc, w, h, g_gpuInk, g_appState, g_appState.ui, ps.rcPaint);
+			MainView::Render(hdc, w, h, g_gpuInk, g_appState, g_uiState, ps.rcPaint);
 		}
 
 		EndPaint(hWnd, &ps);
@@ -337,7 +339,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		bool isPenActive = (GetTickCount() - g_lastWintabTick <= 500);
 		// ペンなら直近の筆圧を渡す（硯の補充量に使う）。マウスは筆圧なし（負値）。
 		double penPressure = isPenActive ? g_strokeCtrl.GetLastRawPressure() : -1.0;
-		if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_appState.ui, g_gpuInk, penPressure))
+		if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_uiState, g_gpuInk, penPressure))
 		{
 			// UI を操作したクリックは運筆ではない。進行中のストロークがあれば
 			// ここで打ち切る（運筆ロック解除はペンが紙から離れたときに行う）。
@@ -346,15 +348,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		else
 		{
 			// 半紙上での新しい押下なので運筆ロックを解除（マウス操作時の解除経路）
-			AppController::ReleasePenLock(g_appState.ui);
+			AppController::ReleasePenLock(g_uiState);
 
 			// ペン (Wintab) 入力の直後でない場合のみマウスによる運筆描画を開始
-			if (!isPenActive && RenderUtils::PtIn(g_appState.ui.rPaper, pt))
+			if (!isPenActive && RenderUtils::PtIn(g_uiState.rPaper, pt))
 			{
 				SetCapture(hWnd);
 				s_isMouseDrawing = true;
 				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, true);
-				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_appState.ui, g_gpuInk);
+				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_uiState, g_gpuInk);
 			}
 		}
 		break;
@@ -363,15 +365,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_MOUSEMOVE:
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-		AppController::OnMouseMove(hWnd, pt, wParam, g_appState, g_appState.ui);
+		AppController::OnMouseMove(hWnd, pt, wParam, g_appState, g_uiState);
 
 		// マウスドラッグ描画中のストローク処理
 		if (s_isMouseDrawing && (wParam & MK_LBUTTON))
 		{
-			if (RenderUtils::PtIn(g_appState.ui.rPaper, pt))
+			if (RenderUtils::PtIn(g_uiState.rPaper, pt))
 			{
 				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, true);
-				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_appState.ui, g_gpuInk);
+				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_uiState, g_gpuInk);
 			}
 		}
 		break;
@@ -380,13 +382,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_LBUTTONUP:
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-		AppController::OnLButtonUp(hWnd, pt, g_appState, g_appState.ui);
+		AppController::OnLButtonUp(hWnd, pt, g_appState, g_uiState);
 
 		if (s_isMouseDrawing)
 		{
 			s_isMouseDrawing = false;
 			PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, false);
-			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_appState.ui, g_gpuInk);
+			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_uiState, g_gpuInk);
 			g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			ReleaseCapture();
 		}
@@ -406,7 +408,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		int h = g_clientRect.bottom - g_clientRect.top;
 		if (w > 0 && h > 0)
 		{
-			AppController::OnSize(hWnd, w, h, g_appState, g_appState.ui, g_gpuInk);
+			AppController::OnSize(hWnd, w, h, g_appState, g_uiState, g_gpuInk);
 		}
 		break;
 	}
@@ -420,19 +422,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			if (penEvent.pressure <= 0.0)
 			{
-				AppController::ReleasePenLock(g_appState.ui);
+				AppController::ReleasePenLock(g_uiState);
 			}
 
 			if (penEvent.pressure > 0.0 && g_appState.currentScreen == AppScreen::Title)
 			{
-				if (!g_appState.ui.suppressPenUntilLift)
+				if (!g_uiState.suppressPenUntilLift)
 				{
 					POINT pt = { penEvent.x, penEvent.y };
-					AppController::OnLButtonDown(hWnd, pt, g_appState, g_appState.ui, g_gpuInk);
+					AppController::OnLButtonDown(hWnd, pt, g_appState, g_uiState, g_gpuInk);
 				}
 				break;
 			}
-			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_appState.ui, g_gpuInk);
+			g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_uiState, g_gpuInk);
 		}
 		break;
 	}
@@ -452,16 +454,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				if (message == WM_POINTERDOWN)
 				{
 					POINT pt = { penEvent.x, penEvent.y };
-					if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_appState.ui, g_gpuInk, penEvent.pressure))
+					if (AppController::OnLButtonDown(hWnd, pt, g_appState, g_uiState, g_gpuInk, penEvent.pressure))
 					{
 						g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 						break;
 					}
 				}
-				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_appState.ui, g_gpuInk);
+				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_uiState, g_gpuInk);
 				if (message == WM_POINTERUP)
 				{
-					AppController::ReleasePenLock(g_appState.ui);
+					AppController::ReleasePenLock(g_uiState);
 					g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 				}
 				return 0;
@@ -485,7 +487,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
-			AppController::OnPenOutOfRange(g_appState.ui);
+			AppController::OnPenOutOfRange(g_uiState);
 		}
 		break;
 	}

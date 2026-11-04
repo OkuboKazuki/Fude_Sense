@@ -6,6 +6,7 @@
 
 #include <windows.h>
 #include "AppState.h"
+#include "UIState.h"
 
 // リアルタイム運筆解析・グラフ可視化ビュー
 class AnalysisView {

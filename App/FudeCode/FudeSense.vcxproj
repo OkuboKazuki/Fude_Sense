@@ -112,7 +112,6 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClInclude Include="Models\AppState.h" />
     <ClInclude Include="Models\MathUtils.h" />
     <ClInclude Include="Models\TrajectoryModel.h" />
-    <ClInclude Include="Models\UIComponents.h" />
     <ClInclude Include="Models\UndoHistory.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Services\ArchiveDialogs.h" />
@@ -130,6 +129,8 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClInclude Include="Views\ModalView.h" />
     <ClInclude Include="Views\RenderUtils.h" />
     <ClInclude Include="Views\TitleView.h" />
+    <ClInclude Include="Views\UIComponents.h" />
+    <ClInclude Include="Views\UIState.h" />
     <ClInclude Include="WacomMT_Scribble.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouch.h" />
     <ClInclude Include="Wacom_Feel_SDK\inc\WacomMultiTouchTypes.h" />

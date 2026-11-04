@@ -5,6 +5,7 @@
 #endif
 
 #include "AppState.h"
+#include "UIState.h"
 
 // 画面のレイアウト計算。座標を一か所で求め、描画とクリック判定で同じ値を使う。
 // 書き換えるのは UIState だけで、ほかのモデルは読むだけにする。

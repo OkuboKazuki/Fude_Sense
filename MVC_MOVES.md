@@ -106,8 +106,16 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 | 関数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Models/AppState.h`（`UIState`） | `a6d4b27` |
+| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `a6d4b27`、`未コミット` |
 
 第 3 段階（`173c78a`）: 関数や処理の移動なし。View の関数の引数に `const UIState& ui` を足しました。`AppState` を使わなくなった `CanvasView::DrawBackground`、`CanvasView::RenderInk`、`CanvasView::Draw3DBrushPose`、`ModalView::DrawClearConfirm`、`ModalView::DrawClearConfirmBody` は、引数の `const AppState&` を `const UIState&` に置き換えました。
 
-第 4 段階（`未コミット`）: 関数や処理の移動なし。`AppController` と `StrokeController` の関数の引数に `UIState& ui` を足しました。`AppState` を使わなくなった `AppController::ReleasePenLock`、`AppController::OnPenOutOfRange`、`ExportCanvasWithFeedback` は、引数の `AppState&` を `UIState&` に置き換えました。
+第 4 段階（`66896c1`）: 関数や処理の移動なし。`AppController` と `StrokeController` の関数の引数に `UIState& ui` を足しました。`AppState` を使わなくなった `AppController::ReleasePenLock`、`AppController::OnPenOutOfRange`、`ExportCanvasWithFeedback` は、引数の `AppState&` を `UIState&` に置き換えました。
+
+第 5 段階（`未コミット`）: 型の定義を移し、`AppState` の `ui` メンバーを削除して、実体をエントリポイントに置きました。
+
+| 型・変数 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| `UIState` | `Models/AppState.h` | `Views/UIState.h` | `未コミット` |
+| `UIWidget` | `Models/UIComponents.h` | `Views/UIComponents.h` | `未コミット` |
+| `UIState` の実体 | `Models/AppState.h` の `AppState::ui` | `WacomMT_Scribble.cpp` の `g_uiState` | `未コミット` |

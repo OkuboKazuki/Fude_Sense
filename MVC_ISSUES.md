@@ -10,11 +10,11 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 1. まとめ
 
-最も大きな問題は、**Model（`AppState`）が画面の情報を抱えていること**です。
+最も大きな問題は、**Model（`AppState`）が画面の情報を抱えていること**でした。レイアウトの計算は M1、`UIState` は M3 で Model の外へ移しました。
 
 | 層 | 本来の役割 | 現状の問題 |
 |---|---|---|
-| Model | データとアプリのルール | UI の状態を持っている |
+| Model | データとアプリのルール | `UIState` は M3 で解消。操作中の一時状態と、画面の種類や UI 用の定数が残っている |
 | View | 表示と、そのためのレイアウト | レイアウトの計算は M1 で解消 |
 | Controller | 入力の受け取りと、Model・View への指示 | 運筆や墨消費のルールを持っている |
 | エントリポイント | 起動と Controller への受け渡し | 状態の直接更新は E1 で解消 |
@@ -23,9 +23,9 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 優先度 | 件数 | 項目 |
 |---|---|---|
-| 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態（第 4 段階まで完了） |
+| 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態（完了） |
 | 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新（完了） |
-| 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、S1 Service の責務（第 1 段階まで完了） |
+| 低 | 4 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、M8 画面の種類と UI 用の定数、S1 Service の責務（第 1 段階まで完了） |
 
 ---
 
@@ -60,22 +60,24 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **修正の方向:** これらの4関数を描画と無関係な共通ヘッダーへ移し、Model からは `RenderUtils.h` を読み込まないようにします。
 
-### M3. Model が UI の状態を持っている（優先度: 高）
+### M3. Model が UI の状態を持っている（優先度: 高）（完了）
 
-**終わった段階**
+`UIState` を `Views/UIState.h`、`UIWidget` を `Views/UIComponents.h` へ移し、`AppState::ui` を削除しました。実体は `WacomMT_Scribble.cpp` の `g_uiState` で、View と Controller へは引数で渡します。`Models/` から `UIState` と `UIWidget` への参照はなくなりました。
+
+**段階**
 
 - **第 1 段階:** `UIWidget` の未使用メンバー（`isHovered`、`isPressed`、`isEnabled`、`Contains`、`Width`、`Height`）を削除しました。3 つのコンストラクタは代入で使うので残しています。Windows でのビルドは未確認です。
 - **第 2 段階:** `SetSaveFeedback` を `AppState` から `UIState` へ移しました。`ExportCanvas` は `AppState` の代わりに半紙の矩形を受け取るようにし、`ImageExporter.h` から `AppState.h` への依存をなくしました。Windows でのビルドは未確認です。
 - **第 3 段階:** View の関数が `state.ui` を読まず、`const UIState& ui` を引数で受け取るようにしました。`AppState` を使わなくなった `DrawBackground`、`RenderInk`、`Draw3DBrushPose`、`ModalView` の 2 つの関数は、`UIState` だけを受け取ります。呼び出し元の `WacomMT_Scribble.cpp` は、今は `g_appState.ui` を渡します。Windows でのビルドは未確認です。
 - **第 4 段階:** `AppController` と `StrokeController` の関数が `state.ui` を読まず、`UIState& ui` を引数で受け取るようにしました。`AppState` を使わなくなった `ReleasePenLock`、`OnPenOutOfRange`、`ExportCanvasWithFeedback` は、`AppState` の代わりに `UIState` を受け取ります。呼び出し元の `WacomMT_Scribble.cpp` は、今は `g_appState.ui` を渡します。Windows でのビルドは未確認です。
 
-**残り**
+- **第 5 段階:** 定義を `Views/` へ移し、`AppState::ui` を削除して、`g_uiState` を `WacomMT_Scribble.cpp` に置きました。Windows でのビルドは未確認です。
 
-- **第 5 段階:** 定義を `Views/` へ移し、`AppState::ui` を削除して、`g_uiState` を `WacomMT_Scribble.cpp` に置きます。
+以下は修正前の記録です。
 
 **場所**
 
-- `Models/AppState.h:182-269` の `UIState`（ホバー状態、ボタン矩形、モーダルの開閉など）
+- `Models/AppState.h` の `UIState`（ホバー状態、ボタン矩形、モーダルの開閉など）
 - `Models/UIComponents.h` の `UIWidget`
 
 **問題:** ホバー状態やボタン矩形は、作品や設定のデータではなく画面の状態です。
@@ -119,7 +121,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ### M6. 操作中の一時状態や表示用メッセージが Model にある（優先度: 低）
 
-表示用メッセージの `SetSaveFeedback` は、M3 の第 2 段階で `UIState` へ移しました。`Models/` の外へ出るのは M3 の第 5 段階です。
+表示用メッセージの `SetSaveFeedback` は、M3 で `UIState` ごと `Views/UIState.h` へ移しました。
 
 **場所**
 
@@ -132,7 +134,19 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 `Views/ScreenLayout.cpp:141-142` の `LayoutPaperOnly` も、`ui.isDraggingInkAmount` と `ui.isWiping` を解除しています。これもレイアウトではなく操作の状態です。
 
-**修正の方向:** M3 で UI の状態を移すときに一緒に移します。
+**修正の方向:** M3 では `UIState` を分けずに移したので、`suppressPenUntilLift` や `isWiping` など、`UIState` の中の操作の状態もここで整理します。Model に残るフラグは、`UIState` か操作の状態を持つ専用の構造体へ移します。
+
+### M8. 画面の種類と UI 用の定数が Model に残っている（優先度: 低）
+
+**場所**
+
+- `Models/AppState.h:183-187`（`currentScreen`、`isTransitioning`、`transitionStartTime`、`transitionDurationMs`、`transitionProgress`）
+- `Models/AppEnums.h:54`、`:60`、`:74`（`AppScreen`、`TbButton`、`LeftTab`）
+- `Models/AppEnums.h:88-90`（タイマの ID）
+
+**問題:** どの画面を出しているかや遷移の進み具合、ボタンの種類、タイマの ID は、作品や設定のデータではなく画面の情報です。M3 の修正で、`UIState` を移したあとも残っていることが分かりました。`Models/` のほかの処理からは、`TbButton` と `LeftTab` は使われていません。
+
+**修正の方向:** 遷移の状態は `UIState` へ、UI 用の列挙型とタイマの ID は `Views/` か `Controllers/` のヘッダーへ移します。
 
 ### M7. Model が描画エンジンに依存している（優先度: 低）（完了）
 
@@ -231,7 +245,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 6. 問題ない点
 
-- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` と `const UIState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`UIState&` へ書き込みます（M3 で `UIState` を Model の外へ移すまでの間です）。
+- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` と `const UIState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`UIState&` へ書き込みます。`UIState` は M3 で `Views/` へ移したので、Model への書き込みではありません。
 - **Model 内の描画処理:** `Models/` に描画処理の呼び出しは見つかりませんでした。
 - **運筆の記録:** 正規化座標（`normX`、`normY`）を持っていて、画面サイズに依存しない形にできています。
 - **Controller のカーソル変更や入力位置の指定:** `SetCursor` や IME の位置指定は、Win32 では Controller にあっても大きな問題ではありません。
@@ -257,6 +271,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
-6. **M1（完了）、M3（第 4 段階まで完了）、M6:** レイアウトと `UIState` を分離する
+6. **M1（完了）、M3（完了）、M6:** レイアウトと `UIState` を分離する
+7. **M8:** 画面の種類と UI 用の定数を Model の外へ移す
 
-残りの M3 と M6 は変更範囲が広く、`UIState` は Controller と View の多くの箇所から参照されています。
+残りは C1、M6、M8 と、S1 の第 2 段階です。

@@ -7,6 +7,7 @@
 #include <windows.h>
 #include "PenInputEvent.h"
 #include "AppState.h"
+#include "UIState.h"
 #include "GpuInk.h"
 
 class StrokeController {

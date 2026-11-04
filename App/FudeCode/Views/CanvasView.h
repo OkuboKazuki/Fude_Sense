@@ -6,6 +6,7 @@
 
 #include <windows.h>
 #include "AppState.h"
+#include "UIState.h"
 #include "GpuInk.h"
 
 class CanvasView {
