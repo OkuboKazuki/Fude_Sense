@@ -221,7 +221,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		int w = g_clientRect.right - g_clientRect.left;
 		int h = g_clientRect.bottom - g_clientRect.top;
-		ScreenLayout::Layout(g_appState, w, h);
+		ScreenLayout::Layout(g_appState.ui, g_appState.paper, g_appState.viewingImport, g_appState.replay, w, h);
 
 		int canvasW = 0, canvasH = 0;
 		g_appState.paper.GetCanvasSize(canvasW, canvasH);

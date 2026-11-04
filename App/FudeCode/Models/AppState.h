@@ -290,21 +290,10 @@ public:
     TrajectorySession& AnalysisSession() { return viewingImport ? importedTrajectory : trajectory; }
     const TrajectorySession& AnalysisSession() const { return viewingImport ? importedTrajectory : trajectory; }
 
-    // シークバーのツマミ位置だけを再計算する
-    void UpdateReplaySeekThumb();
-
     void SetSaveFeedback(const std::wstring& message, bool isError = false) {
         ui.saveFeedback = message;
         ui.saveFeedbackTime = GetTickCount();
         ui.saveFeedbackIsError = isError;
     }
-
-    // 以下は ScreenLayout::Layout から呼ぶ。ScreenLayout へ移すまでの間だけ公開する。
-    // 全消し確認モーダルの配置
-    void LayoutClearModal(int clientWidth, int clientHeight);
-    // 紙だけ表示のレイアウト
-    void LayoutPaperOnly(int clientWidth, int clientHeight);
-    // 升目のジオメトリ。rPaper から算出するので通常表示と紙だけ表示で共有する。
-    void LayoutGridGeometry();
 };
 

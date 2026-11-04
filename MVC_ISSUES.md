@@ -14,8 +14,8 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 層 | 本来の役割 | 現状の問題 |
 |---|---|---|
-| Model | データとアプリのルール | 画面レイアウト、UI の状態を持っている |
-| View | 表示と、そのためのレイアウト | レイアウトの計算を Model に任せている |
+| Model | データとアプリのルール | UI の状態を持っている |
+| View | 表示と、そのためのレイアウト | レイアウトの計算は M1 で解消 |
 | Controller | 入力の受け取りと、Model・View への指示 | 運筆や墨消費のルールを持っている |
 | エントリポイント | 起動と Controller への受け渡し | 状態の直接更新は E1 で解消 |
 
@@ -23,7 +23,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 優先度 | 件数 | 項目 |
 |---|---|---|
-| 高 | 3 | M1 レイアウト計算（第 2 段階まで完了）、M2 View への依存（完了）、M3 UI の状態 |
+| 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態 |
 | 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新（完了） |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、S1 Service の責務（第 1 段階まで完了） |
 
@@ -31,25 +31,15 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 2. Model の問題
 
-### M1. Model が画面レイアウトを計算している（優先度: 高）
+### M1. Model が画面レイアウトを計算している（優先度: 高）（完了）
 
-**終わった段階**
+レイアウトの計算を `Views/ScreenLayout` へ移し、`Models/AppState.cpp` を削除しました。`ScreenLayout` は `UIState&` と読み取り専用の `PaperModel`、`viewingImport`、`ReplayModel` を受け取るので、書き換えられるのは `UIState` だけです。計算式と順序は変えていません。Windows でのビルドは未確認です。
 
-- **第 1 段階:** `Views/ScreenLayout` を作り、`Layout` の呼び出し 8 か所と `UpdateReplaySeekThumb` の呼び出し 13 か所をそちらへ切り替えました。
-- **第 2 段階:** 通常表示の `Layout` 本体を `ScreenLayout::Layout` へ移しました。下位の関数は `AppState` に残っていて、移すまでの間だけ `public` にしています。Windows でのビルドは未確認です。
+以下は修正前の記録です。
 
-**残り（第 3 段階）:** `LayoutClearModal`、`LayoutPaperOnly`、`LayoutGridGeometry`、`UpdateReplaySeekThumb` を移し、`AppState.cpp` を削除します。合わせて、`ScreenLayout` の引数を `AppState&` から `UIState&` と読み取り専用の `PaperModel`、`viewingImport`、`ReplayModel` へ変え、レイアウトが書き換えられるのは `UIState` だけにします。下位の関数が `AppState` にある間は、この形に変えられません。
+**場所:** `LayoutClearModal`、`UpdateReplaySeekThumb`、`AppState::Layout`、`AppState::LayoutPaperOnly`、`AppState::LayoutGridGeometry`（いずれも `Models/AppState.cpp`）
 
-**場所**
-
-| 関数 | 場所 | 内容 |
-|---|---|---|
-| `AppState::LayoutClearModal` | `Models/AppState.cpp:29` | 全消し確認モーダルの配置 |
-| `AppState::UpdateReplaySeekThumb` | `Models/AppState.cpp:43` | シークバーのツマミの配置 |
-| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:60` | 紙だけ表示の配置 |
-| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:118` | 升目のピクセル矩形 |
-
-**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全200行のほぼすべてを、これらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
+**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` のほぼすべてを、これらの処理が占めていました。ボタンの大きさを変えるだけでも Model を編集することになります。
 
 **修正の方向:** `Views/` 側にレイアウト専用のクラスを作って移します。Controller はクリック判定のために、その計算結果を読み取ります。
 
@@ -123,12 +113,12 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 - `Models/AppState.h:18`（`BrushModel::isDraggingHardness`）
 - `Models/AppState.h:78`（`OtehonModel::isDraggingOpacity`）
 - `Models/AppState.h:83`（`OtehonModel::isTyping`）
-- `Models/AppState.h:296`（`SetSaveFeedback`）
+- `Models/AppState.h:293`（`SetSaveFeedback`）
 - `Models/TrajectoryModel.h:85-86`（`isDraggingSeekBar`、`isDraggingWaveform`）
 
 **問題:** ドラッグ中かどうかは、筆やお手本のデータではなく操作の状態です。
 
-`Models/AppState.cpp:68-69` の `LayoutPaperOnly` も、`ui.isDraggingInkAmount` と `ui.isWiping` を解除しています。これもレイアウトではなく操作の状態です。
+`Views/ScreenLayout.cpp:141-142` の `LayoutPaperOnly` も、`ui.isDraggingInkAmount` と `ui.isWiping` を解除しています。これもレイアウトではなく操作の状態です。
 
 **修正の方向:** M3 で UI の状態を移すときに一緒に移します。
 
@@ -229,7 +219,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 6. 問題ない点
 
-- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`M1` の間は `AppState&` を受け取ります。
+- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`UIState&` へ書き込みます（M3 で `UIState` を Model の外へ移すまでの間です）。
 - **Model 内の描画処理:** `Models/` に描画処理の呼び出しは見つかりませんでした。
 - **運筆の記録:** 正規化座標（`normX`、`normY`）を持っていて、画面サイズに依存しない形にできています。
 - **Controller のカーソル変更や入力位置の指定:** `SetCursor` や IME の位置指定は、Win32 では Controller にあっても大きな問題ではありません。
@@ -255,6 +245,6 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
-6. **M1（第 2 段階まで完了）、M3、M6:** レイアウトと `UIState` を分離する
+6. **M1（完了）、M3、M6:** レイアウトと `UIState` を分離する
 
-6 は効果が最も大きい一方で、変更範囲も最大です。`Layout` の呼び出しが8か所あり、運筆処理は `rPaper` を、お手本の配置は升目の計算結果を使っています。
+残りの M3 と M6 は変更範囲が広く、`UIState` は Controller と View の多くの箇所から参照されています。

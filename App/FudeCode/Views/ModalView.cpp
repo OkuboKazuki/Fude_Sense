@@ -12,7 +12,7 @@ void ModalView::DrawClearConfirm(HDC dc, int width, int height, const AppState& 
 
     // 紙だけ表示は画面を右回りに90度倒して見るので、倒した向きで読めるよう
     // 座標系ごと左回りに90度回して描く（倒した向きの (u, v) → 画面の (v, height - u)）。
-    // モーダルの矩形も AppState::LayoutPaperOnly で倒した向きに組んである。
+    // モーダルの矩形も ScreenLayout の LayoutPaperOnly で倒した向きに組んである。
     int oldMode = SetGraphicsMode(dc, GM_ADVANCED);
     XFORM xf = {};
     xf.eM11 = 0.0f;  xf.eM12 = -1.0f;
