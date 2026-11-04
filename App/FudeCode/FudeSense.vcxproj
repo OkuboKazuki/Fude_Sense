@@ -126,6 +126,7 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClInclude Include="Views\FloatingMenuView.h" />
     <ClInclude Include="Views\InkStoneView.h" />
     <ClInclude Include="Views\MainView.h" />
+    <ClInclude Include="Views\ScreenLayout.h" />
     <ClInclude Include="Views\ModalView.h" />
     <ClInclude Include="Views\RenderUtils.h" />
     <ClInclude Include="Views\TitleView.h" />
@@ -156,6 +157,7 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClCompile Include="Views\FloatingMenuView.cpp" />
     <ClCompile Include="Views\InkStoneView.cpp" />
     <ClCompile Include="Views\MainView.cpp" />
+    <ClCompile Include="Views\ScreenLayout.cpp" />
     <ClCompile Include="Views\ModalView.cpp" />
     <ClCompile Include="Views\RenderUtils.cpp" />
     <ClCompile Include="Views\TitleView.cpp" />

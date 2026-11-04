@@ -23,7 +23,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 優先度 | 件数 | 項目 |
 |---|---|---|
-| 高 | 3 | M1 レイアウト計算、M2 View への依存（完了）、M3 UI の状態 |
+| 高 | 3 | M1 レイアウト計算（第 1 段階まで完了）、M2 View への依存（完了）、M3 UI の状態 |
 | 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新（完了） |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、S1 Service の責務（第 1 段階まで完了） |
 
@@ -32,6 +32,14 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 ## 2. Model の問題
 
 ### M1. Model が画面レイアウトを計算している（優先度: 高）
+
+**終わった段階（第 1 段階）:** `Views/ScreenLayout` を作り、`Layout` の呼び出し 8 か所と `UpdateReplaySeekThumb` の呼び出し 13 か所をそちらへ切り替えました。計算の本体はまだ `AppState` にあり、`ScreenLayout` は呼び出しを渡すだけです。Windows でのビルドは未確認です。
+
+**残り**
+
+- **第 2 段階:** 通常表示の `Layout` 本体を `ScreenLayout` へ移す。下位の関数は一時的に `public` にする。
+- **第 3 段階:** `LayoutPaperOnly`、`LayoutGridGeometry`、`LayoutClearModal`、`UpdateReplaySeekThumb` を移し、`AppState.cpp` を削除する。
+- **引数:** 今は `AppState&` を受け取っている。本体を移すときに、`UIState&` と読み取り専用の `PaperModel`、`viewingImport`、`ReplayModel` を受け取る形へ変え、レイアウトが書き換えられるのは `UIState` だけにする。
 
 **場所**
 
@@ -43,7 +51,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 | `AppState::LayoutPaperOnly` | `Models/AppState.cpp:333` | 紙だけ表示の配置 |
 | `AppState::LayoutGridGeometry` | `Models/AppState.cpp:391` | 升目のピクセル矩形 |
 
-**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全473行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
+**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全473行のほぼすべてを、これらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
 
 **修正の方向:** `Views/` 側にレイアウト専用のクラスを作って移します。Controller はクリック判定のために、その計算結果を読み取ります。
 
@@ -121,6 +129,8 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 - `Models/TrajectoryModel.h:85-86`（`isDraggingSeekBar`、`isDraggingWaveform`）
 
 **問題:** ドラッグ中かどうかは、筆やお手本のデータではなく操作の状態です。
+
+`Models/AppState.cpp:341-342` の `LayoutPaperOnly` も、`ui.isDraggingInkAmount` と `ui.isWiping` を解除しています。これもレイアウトではなく操作の状態です。
 
 **修正の方向:** M3 で UI の状態を移すときに一緒に移します。
 
@@ -221,7 +231,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 6. 問題ない点
 
-- **View から Model への書き込み:** `Views/` の関数は `const AppState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。
+- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`M1` の間は `AppState&` を受け取ります。
 - **Model 内の描画処理:** `Models/` に描画処理の呼び出しは見つかりませんでした。
 - **運筆の記録:** 正規化座標（`normX`、`normY`）を持っていて、画面サイズに依存しない形にできています。
 - **Controller のカーソル変更や入力位置の指定:** `SetCursor` や IME の位置指定は、Win32 では Controller にあっても大きな問題ではありません。
@@ -230,7 +240,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 7. 当初の設計との関係
 
-`AGENTS.md:50` や `learn/models.md:158` では、`AppState` を UI 状態とレイアウト計算を含むファサードとして説明しています。座標を一か所で計算すれば、描画と判定、升目とお手本の位置が揃うという狙いがあり、書き漏れではなく意図した設計です。
+`AGENTS.md:51` や `learn/models.md:158` では、`AppState` を UI 状態とレイアウト計算を含むファサードとして説明しています。座標を一か所で計算すれば、描画と判定、升目とお手本の位置が揃うという狙いがあり、書き漏れではなく意図した設計です。
 
 そのため、「当初の設計判断だが、厳密な MVC からは外れている」というのが正確な評価です。この狙いは、レイアウト専用のクラスを `Views/` 側に置いても保てます。
 
@@ -247,6 +257,6 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
-6. **M1、M3、M6:** レイアウトと `UIState` を分離する
+6. **M1（第 1 段階まで完了）、M3、M6:** レイアウトと `UIState` を分離する
 
 6 は効果が最も大きい一方で、変更範囲も最大です。`Layout` の呼び出しが8か所あり、運筆処理は `rPaper` を、お手本の配置は升目の計算結果を使っています。

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "AppController.h"
 #include "RenderUtils.h"
+#include "ScreenLayout.h"
 #include "ImageExporter.h"
 #include "ArchiveDialogs.h"
 #include <imm.h>
@@ -133,13 +134,13 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     RECT rcClient = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rcClient);
     if (rcClient.right > 0 && rcClient.bottom > 0) {
-        state.Layout(rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
+        ScreenLayout::Layout(state, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
     }
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
 void AppController::OnSize(HWND hWnd, int width, int height, AppState& state, GpuInk& gpuInk) {
-    state.Layout(width, height);
+    ScreenLayout::Layout(state, width, height);
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -160,7 +161,7 @@ void AppController::SyncReplayTimeline(HWND hWnd, AppState& state) {
     }
     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
         state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-    state.UpdateReplaySeekThumb();
+    ScreenLayout::UpdateReplaySeekThumb(state);
 }
 
 // 解析の対象を切り替えた直後の表示。書き上がった状態（末尾）で一時停止にする
@@ -168,14 +169,14 @@ static void ShowAnalysisSessionFromEnd(HWND hWnd, AppState& state) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
     // 「自分の記録に戻る」ボタンの有無で解析タブの並びが変わる
-    state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+    ScreenLayout::Layout(state, rc.right - rc.left, rc.bottom - rc.top);
 
     AppController::SyncReplayTimeline(hWnd, state);
     state.replay.state = ReplayState::Paused;
     state.replay.currentTimeMs = state.replay.totalDurationMs;
     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
         state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-    state.UpdateReplaySeekThumb();
+    ScreenLayout::UpdateReplaySeekThumb(state);
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -235,7 +236,7 @@ void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
         state.replay.currentTimeMs = 0;
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
             0, state.ui.rPaper, state.replay.currentSample);
-        state.UpdateReplaySeekThumb();
+        ScreenLayout::UpdateReplaySeekThumb(state);
         state.replay.state = ReplayState::Paused;
     } else {
         if (state.replay.state == ReplayState::Playing) {
@@ -247,7 +248,7 @@ void AppController::SelectTab(HWND hWnd, AppState& state, LeftTab newTab) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
     if (rc.right > 0 && rc.bottom > 0) {
-        state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+        ScreenLayout::Layout(state, rc.right - rc.left, rc.bottom - rc.top);
     }
     InvalidateRect(hWnd, NULL, FALSE);
 }
@@ -327,7 +328,7 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, GpuInk& gpuInk) {
 static void RelayoutForPaper(HWND hWnd, AppState& state, GpuInk& gpuInk) {
     RECT rc = { 0, 0, 0, 0 };
     GetClientRect(hWnd, &rc);
-    state.Layout(rc.right - rc.left, rc.bottom - rc.top);
+    ScreenLayout::Layout(state, rc.right - rc.left, rc.bottom - rc.top);
 
     int canvasW = 0, canvasH = 0;
     state.paper.GetCanvasSize(canvasW, canvasH);
@@ -412,7 +413,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, GpuInk& gp
         state.replay.currentTimeMs = state.replay.totalDurationMs;
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
             state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        state.UpdateReplaySeekThumb();
+        ScreenLayout::UpdateReplaySeekThumb(state);
     }
 }
 
@@ -508,7 +509,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
     // 2. 左上トグルボタン「<<<」「>>>」
     if (PtIn(ui.rTbNavToggle, pt)) {
         ui.isSubPanelOpen = !ui.isSubPanelOpen;
-        state.Layout(w, h);
+        ScreenLayout::Layout(state, w, h);
         InvalidateRect(hWnd, NULL, FALSE);
         return true;
     }
@@ -551,7 +552,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                 if (hasRecording && PtIn(ui.rReplayResetBtn, pt)) {
                     state.replay.currentTimeMs = 0;
                     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(0, state.ui.rPaper, state.replay.currentSample);
-                    state.UpdateReplaySeekThumb();
+                    ScreenLayout::UpdateReplaySeekThumb(state);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -568,7 +569,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         state.replay.currentTimeMs = 0;
                     }
                     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.UpdateReplaySeekThumb();
+                    ScreenLayout::UpdateReplaySeekThumb(state);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -591,7 +592,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         SetTimer(hWnd, REPLAY_TIMER_ID, 20, NULL);
                     }
                     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.UpdateReplaySeekThumb();
+                    ScreenLayout::UpdateReplaySeekThumb(state);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -605,7 +606,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         state.replay.currentTimeMs = state.replay.totalDurationMs;
                     }
                     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.UpdateReplaySeekThumb();
+                    ScreenLayout::UpdateReplaySeekThumb(state);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -635,7 +636,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
                     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.UpdateReplaySeekThumb();
+                    ScreenLayout::UpdateReplaySeekThumb(state);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -650,7 +651,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     norm = Clamp(norm, 0.0, 1.0);
                     state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
                     state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-                    state.UpdateReplaySeekThumb();
+                    ScreenLayout::UpdateReplaySeekThumb(state);
                     InvalidateRect(hWnd, &ui.rPaper, FALSE);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -692,7 +693,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                         state.paper.gridPattern = static_cast<GridPattern>(i);
                         // 升目のセル分割は Layout で算出しているため、
                         // パターン変更時は再レイアウトが必要
-                        state.Layout(w, h);
+                        ScreenLayout::Layout(state, w, h);
                         state.otehon.ClearCellChars();
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
@@ -965,7 +966,7 @@ void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state) {
 
         // 動くのは半紙のリプレイと解析パネルだけ。Layout() 全体も全画面の
         // 無効化も要らない。
-        state.UpdateReplaySeekThumb();
+        ScreenLayout::UpdateReplaySeekThumb(state);
         InvalidateRect(hWnd, &state.ui.rPaper, FALSE);
         InvalidateRect(hWnd, &state.ui.rSub, FALSE);
     }
@@ -1109,7 +1110,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        state.UpdateReplaySeekThumb();
+        ScreenLayout::UpdateReplaySeekThumb(state);
         InvalidateRect(hWnd, &ui.rPaper, FALSE);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;
@@ -1122,7 +1123,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         norm = Clamp(norm, 0.0, 1.0);
         state.replay.currentTimeMs = static_cast<DWORD>(state.replay.totalDurationMs * norm);
         state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
-        state.UpdateReplaySeekThumb();
+        ScreenLayout::UpdateReplaySeekThumb(state);
         InvalidateRect(hWnd, &ui.rPaper, FALSE);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;

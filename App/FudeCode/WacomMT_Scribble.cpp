@@ -42,6 +42,7 @@
 #include "StrokeController.h"
 #include "AppController.h"
 #include "AnalysisView.h"
+#include "ScreenLayout.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -220,7 +221,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		int w = g_clientRect.right - g_clientRect.left;
 		int h = g_clientRect.bottom - g_clientRect.top;
-		g_appState.Layout(w, h);
+		ScreenLayout::Layout(g_appState, w, h);
 
 		int canvasW = 0, canvasH = 0;
 		g_appState.paper.GetCanvasSize(canvasW, canvasH);
