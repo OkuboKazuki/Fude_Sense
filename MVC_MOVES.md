@@ -97,3 +97,7 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 | `AppState::LayoutGridGeometry` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
 | `LayoutClearModal` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
 | `GetGridDivision` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
+
+## M3. UI の状態を移す
+
+第 1 段階（`未コミット`）: 関数や処理の移動なし。`Models/UIComponents.h` の `UIWidget` から、未使用の `isHovered`、`isPressed`、`isEnabled`、`Contains`、`Width`、`Height` を削除しました。
