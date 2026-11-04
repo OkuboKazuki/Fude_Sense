@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "ImageExporter.h"
+#include "MathUtils.h"
 #include <shlobj.h>
 #include <knownfolders.h>
 #include <wincodec.h>
@@ -130,7 +131,7 @@ bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* f
 } // namespace
 
 bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
-    using namespace RenderUtils;
+    using namespace MathUtils;
 
     int pw = RW(state.ui.rPaper);
     int ph = RH(state.ui.rPaper);

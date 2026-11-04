@@ -110,6 +110,7 @@ xcopy /Y /D "$(ProjectDir)title_logo.png" "$(OutDir)"</Command>
     <ClInclude Include="Inputs\WintabAdapter.h" />
     <ClInclude Include="Models\AppEnums.h" />
     <ClInclude Include="Models\AppState.h" />
+    <ClInclude Include="Models\MathUtils.h" />
     <ClInclude Include="Models\TrajectoryModel.h" />
     <ClInclude Include="Models\UIComponents.h" />
     <ClInclude Include="Models\UndoHistory.h" />

@@ -23,7 +23,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 優先度 | 件数 | 項目 |
 |---|---|---|
-| 高 | 3 | M1 レイアウト計算、M2 View への依存、M3 UI の状態 |
+| 高 | 3 | M1 レイアウト計算、M2 View への依存（完了）、M3 UI の状態 |
 | 中 | 5 | M4 ダイアログ、M5 画面座標の解釈、C1 ドメインルール、C2 余白の重複、E1 状態の直接更新 |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存、S1 Service の責務 |
 
@@ -37,17 +37,21 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 関数 | 場所 | 内容 |
 |---|---|---|
-| `LayoutClearModal` | `Models/AppState.cpp:26` | 全消し確認モーダルの配置 |
-| `UpdateReplaySeekThumb` | `Models/AppState.cpp:50` | シークバーのツマミの配置 |
-| `AppState::Layout` | `Models/AppState.cpp:60` | 全 UI 要素の配置 |
-| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:372` | 紙だけ表示の配置 |
-| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:430` | 升目のピクセル矩形 |
+| `LayoutClearModal` | `Models/AppState.cpp:27` | 全消し確認モーダルの配置 |
+| `UpdateReplaySeekThumb` | `Models/AppState.cpp:51` | シークバーのツマミの配置 |
+| `AppState::Layout` | `Models/AppState.cpp:61` | 全 UI 要素の配置 |
+| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:373` | 紙だけ表示の配置 |
+| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:431` | 升目のピクセル矩形 |
 
-**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全512行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
+**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全513行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
 
 **修正の方向:** `Views/` 側にレイアウト専用のクラスを作って移します。Controller はクリック判定のために、その計算結果を読み取ります。
 
-### M2. Model が View のヘッダーに依存している（優先度: 高）
+### M2. Model が View のヘッダーに依存している（優先度: 高）（完了）
+
+`Clamp`、`RW`、`RH`、`PtIn` を新しい `Models/MathUtils.h` へ移し、`Models/` と `Services/ImageExporter.cpp` から `RenderUtils` への依存をなくしました。View と Controller の呼び出しは、`RenderUtils.h` の using 宣言でそのまま使えます。Windows でのビルドは未確認です。
+
+以下は修正前の記録です。
 
 **場所**
 
@@ -64,7 +68,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **場所**
 
-- `Models/AppState.h:183-263` の `UIState`（ホバー状態、ボタン矩形、モーダルの開閉など）
+- `Models/AppState.h:182-262` の `UIState`（ホバー状態、ボタン矩形、モーダルの開閉など）
 - `Models/UIComponents.h` の `UIWidget`
 
 **問題:** ホバー状態やボタン矩形は、作品や設定のデータではなく画面の状態です。また、`UIWidget` の `isHovered`、`isPressed`、`isEnabled` はどこからも使われていません。
@@ -89,10 +93,10 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 関数 | 場所 | 内容 |
 |---|---|---|
-| `ToClearModalSpace` | `Models/AppState.cpp:42` | 画面上の点をモーダルの座標系へ変換 |
-| `SetInkAmountFromBadgeX` | `Models/AppState.cpp:333` | ゲージの X 座標から墨の残量を決定 |
-| `IsOnInkStoneLand` | `Models/AppState.cpp:343` | 点が硯の下の部分にあるかを判定 |
-| `WipeInkTo` | `Models/AppState.cpp:351` | 筆の移動距離から墨を落とす |
+| `ToClearModalSpace` | `Models/AppState.cpp:43` | 画面上の点をモーダルの座標系へ変換 |
+| `SetInkAmountFromBadgeX` | `Models/AppState.cpp:334` | ゲージの X 座標から墨の残量を決定 |
+| `IsOnInkStoneLand` | `Models/AppState.cpp:344` | 点が硯の下の部分にあるかを判定 |
+| `WipeInkTo` | `Models/AppState.cpp:352` | 筆の移動距離から墨を落とす |
 
 **問題:** 「画面のこの位置を押した」を「残量を何％にする」に変換するのは、Controller の役割です。
 
@@ -102,10 +106,10 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **場所**
 
-- `Models/AppState.h:19`（`BrushModel::isDraggingHardness`）
-- `Models/AppState.h:79`（`OtehonModel::isDraggingOpacity`）
-- `Models/AppState.h:84`（`OtehonModel::isTyping`）
-- `Models/AppState.h:310`（`SetSaveFeedback`）
+- `Models/AppState.h:18`（`BrushModel::isDraggingHardness`）
+- `Models/AppState.h:78`（`OtehonModel::isDraggingOpacity`）
+- `Models/AppState.h:83`（`OtehonModel::isTyping`）
+- `Models/AppState.h:309`（`SetSaveFeedback`）
 - `Models/TrajectoryModel.h:85-86`（`isDraggingSeekBar`、`isDraggingWaveform`）
 
 **問題:** ドラッグ中かどうかは、筆やお手本のデータではなく操作の状態です。
@@ -181,9 +185,9 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **場所**
 
-- `Services/ImageExporter.cpp:146`（半紙の背景色を直接指定）
-- `Services/ImageExporter.cpp:153`（墨を描画）
-- `Services/ImageExporter.cpp:161`、`:177`、`:184`、`:193`（`AppState` へ画面用メッセージを直接設定）
+- `Services/ImageExporter.cpp:147`（半紙の背景色を直接指定）
+- `Services/ImageExporter.cpp:154`（墨を描画）
+- `Services/ImageExporter.cpp:162`、`:178`、`:185`、`:194`（`AppState` へ画面用メッセージを直接設定）
 
 **問題:** 作品画像の合成は描画の処理で、書き出しとは別の責務です。また、結果の通知まで Service が UI の状態に直接書き込んでいます。
 
@@ -214,7 +218,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 変更が小さく、影響範囲が狭いものから進める案です。
 
-1. **M2:** 共通の計算関数を移し、Model から `RenderUtils.h` への依存をなくす
+1. **M2（完了）:** 共通の計算関数を移し、Model から `RenderUtils.h` への依存をなくす
 2. **M4:** ダイアログを Model の外へ移す
 3. **C2:** グラフの余白の重複をなくす
 4. **M5、E1:** 座標の解釈と状態の更新を Controller に集める

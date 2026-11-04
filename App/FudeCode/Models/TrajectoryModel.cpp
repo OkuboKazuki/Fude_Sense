@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "TrajectoryModel.h"
-#include "RenderUtils.h"
+#include "MathUtils.h"
 #include <chrono>
 #include <fstream>
 #include <sstream>
@@ -59,16 +59,16 @@ void TrajectorySession::RedoStroke(const StrokeData& stroke) {
 // 線幅・速度は画面上のピクセルで持っている。墨の半紙は長辺をそろえて回すので、
 // 画面上の長辺の比で直せば、書いたときと同じ太さで引き直せる。
 static double QuarterTurnScale(const RECT& oldPaper, const RECT& newPaper) {
-    int oldLong = (std::max)(RenderUtils::RW(oldPaper), RenderUtils::RH(oldPaper));
-    int newLong = (std::max)(RenderUtils::RW(newPaper), RenderUtils::RH(newPaper));
+    int oldLong = (std::max)(MathUtils::RW(oldPaper), MathUtils::RH(oldPaper));
+    int newLong = (std::max)(MathUtils::RW(newPaper), MathUtils::RH(newPaper));
     return (oldLong > 0 && newLong > 0) ? static_cast<double>(newLong) / static_cast<double>(oldLong) : 1.0;
 }
 
 void TrajectorySession::RotateStrokeQuarter(StrokeData& stroke, bool counterClockwise, const RECT& oldPaper, const RECT& newPaper) {
     const double kPi = 3.14159265358979323846;
     double scale = QuarterTurnScale(oldPaper, newPaper);
-    int newW = (std::max)(1, RenderUtils::RW(newPaper));
-    int newH = (std::max)(1, RenderUtils::RH(newPaper));
+    int newW = (std::max)(1, MathUtils::RW(newPaper));
+    int newH = (std::max)(1, MathUtils::RH(newPaper));
 
     for (StrokePoint& p : stroke.points) {
         // 左回り: 元の (u, v) は (v, 1 - u) へ移る。右回り: 元の (u, v) は (1 - v, u) へ移る。
@@ -123,8 +123,8 @@ void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper,
         OnStrokeBegin(event.time);
     }
 
-    int paperW = RenderUtils::RW(rPaper);
-    int paperH = RenderUtils::RH(rPaper);
+    int paperW = MathUtils::RW(rPaper);
+    int paperH = MathUtils::RH(rPaper);
     if (paperW <= 0) paperW = 1;
     if (paperH <= 0) paperH = 1;
 
@@ -133,8 +133,8 @@ void TrajectorySession::AddPoint(const PenInputEvent& event, const RECT& rPaper,
 
     double normX = static_cast<double>(px) / static_cast<double>(paperW);
     double normY = static_cast<double>(py) / static_cast<double>(paperH);
-    normX = RenderUtils::Clamp(normX, 0.0, 1.0);
-    normY = RenderUtils::Clamp(normY, 0.0, 1.0);
+    normX = MathUtils::Clamp(normX, 0.0, 1.0);
+    normY = MathUtils::Clamp(normY, 0.0, 1.0);
 
     DWORD curTime = (event.time != 0) ? event.time : GetTickCount();
     DWORD relTime = (curTime >= m_currentStroke.startTime) ? (curTime - m_currentStroke.startTime) : static_cast<DWORD>(m_currentStroke.points.size() * 8);
@@ -613,7 +613,7 @@ private:
             bool has = false;
             if (!ReadOptionalNumber(v, has)) return false;
             if (!has) return true;
-            if      (key == "t")   p.timeMs = static_cast<DWORD>(RenderUtils::Clamp(v, 0.0, kImportMaxStrokeMs));
+            if      (key == "t")   p.timeMs = static_cast<DWORD>(MathUtils::Clamp(v, 0.0, kImportMaxStrokeMs));
             else if (key == "nx")  p.normX = v;
             else if (key == "ny")  p.normY = v;
             else if (key == "p")   p.pressure = v;
@@ -731,7 +731,7 @@ bool ReadArchiveCsv(const std::string& text, std::vector<ImportedStroke>& out, s
 
         ImportedStroke& s = out.back();
         StrokePoint p;
-        p.timeMs = static_cast<DWORD>(RenderUtils::Clamp(t, 0.0, kImportMaxStrokeMs));
+        p.timeMs = static_cast<DWORD>(MathUtils::Clamp(t, 0.0, kImportMaxStrokeMs));
         p.normX = nx;
         p.normY = ny;
         p.width = w;
@@ -785,8 +785,8 @@ double FiniteOr(double v, double fallback) {
 // 読んだ値を、いまの半紙で再生できる記録に整える
 bool FinalizeImport(std::vector<ImportedStroke>& in, const RECT& rPaper, std::vector<StrokeData>& out, std::wstring& err) {
     const double kPi = 3.14159265358979323846;
-    int curW = (std::max)(1, RenderUtils::RW(rPaper));
-    int curH = (std::max)(1, RenderUtils::RH(rPaper));
+    int curW = (std::max)(1, MathUtils::RW(rPaper));
+    int curH = (std::max)(1, MathUtils::RH(rPaper));
     double curLong = static_cast<double>((std::max)(curW, curH));
 
     // 画と画の間の時間は、全部の画に時刻があるときだけ使う
@@ -813,19 +813,19 @@ bool FinalizeImport(std::vector<ImportedStroke>& in, const RECT& rPaper, std::ve
             if (p.timeMs < prevT) p.timeMs = prevT;
             prevT = p.timeMs;
 
-            p.normX = RenderUtils::Clamp(FiniteOr(p.normX, 0.0), 0.0, 1.0);
-            p.normY = RenderUtils::Clamp(FiniteOr(p.normY, 0.0), 0.0, 1.0);
+            p.normX = MathUtils::Clamp(FiniteOr(p.normX, 0.0), 0.0, 1.0);
+            p.normY = MathUtils::Clamp(FiniteOr(p.normY, 0.0), 0.0, 1.0);
             p.paperX = static_cast<int>(p.normX * curW);
             p.paperY = static_cast<int>(p.normY * curH);
-            p.pressure = RenderUtils::Clamp(FiniteOr(p.pressure, 0.0), 0.0, 1.0);
-            p.pressureFactor = RenderUtils::Clamp(FiniteOr(p.pressureFactor, p.pressure), 0.0, 1.0);
-            p.dryness = RenderUtils::Clamp(FiniteOr(p.dryness, 0.0), 0.0, 1.0);
-            p.altitudeDeg = RenderUtils::Clamp(FiniteOr(p.altitudeDeg, 90.0), 0.0, 90.0);
+            p.pressure = MathUtils::Clamp(FiniteOr(p.pressure, 0.0), 0.0, 1.0);
+            p.pressureFactor = MathUtils::Clamp(FiniteOr(p.pressureFactor, p.pressure), 0.0, 1.0);
+            p.dryness = MathUtils::Clamp(FiniteOr(p.dryness, 0.0), 0.0, 1.0);
+            p.altitudeDeg = MathUtils::Clamp(FiniteOr(p.altitudeDeg, 90.0), 0.0, 90.0);
             p.azimuthDeg = std::fmod(FiniteOr(p.azimuthDeg, 0.0), 360.0);
             if (p.azimuthDeg < 0.0) p.azimuthDeg += 360.0;
             p.moveAngleRad = std::fmod(FiniteOr(p.moveAngleRad, 0.0), 2.0 * kPi);
             // 線幅は半紙の長辺の半分まで（それ以上は壊れた値）
-            p.width = RenderUtils::Clamp(FiniteOr(p.width, 0.0) * scale, 0.0, curLong * 0.5);
+            p.width = MathUtils::Clamp(FiniteOr(p.width, 0.0) * scale, 0.0, curLong * 0.5);
             p.speedPxPerSec = (std::max)(0.0, FiniteOr(p.speedPxPerSec, 0.0) * scale);
             p.inkAmount = (std::isfinite(p.inkAmount) && p.inkAmount >= 0.0) ? (std::min)(p.inkAmount, 1.0) : -1.0;
 
@@ -840,8 +840,8 @@ bool FinalizeImport(std::vector<ImportedStroke>& in, const RECT& rPaper, std::ve
 
         DWORD duration = s.points.back().timeMs;
         if (allTimed) {
-            double start = RenderUtils::Clamp(FiniteOr(src.startMs, 0.0), 0.0, 24.0 * 3600.0 * 1000.0);
-            double end = RenderUtils::Clamp(FiniteOr(src.endMs, start), start, 24.0 * 3600.0 * 1000.0);
+            double start = MathUtils::Clamp(FiniteOr(src.startMs, 0.0), 0.0, 24.0 * 3600.0 * 1000.0);
+            double end = MathUtils::Clamp(FiniteOr(src.endMs, start), start, 24.0 * 3600.0 * 1000.0);
             s.startTime = kImportTimeBase + static_cast<DWORD>(start);
             s.endTime = kImportTimeBase + static_cast<DWORD>(end);
             if (s.endTime < s.startTime + duration) s.endTime = s.startTime + duration;
@@ -1016,8 +1016,8 @@ size_t TrajectorySession::GetVisiblePointCount(size_t strokeIdx, DWORD timeMs) c
 bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, ReplaySample& outSample) const {
     if (m_strokes.empty() || m_strokeTimelines.empty()) return false;
 
-    int pw = RenderUtils::RW(rPaper);
-    int ph = RenderUtils::RH(rPaper);
+    int pw = MathUtils::RW(rPaper);
+    int ph = MathUtils::RH(rPaper);
     if (pw <= 0) pw = 1;
     if (ph <= 0) ph = 1;
 
@@ -1049,7 +1049,7 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
                 const auto& p2 = s.points[pIdx + 1];
                 double span = static_cast<double>(p2.timeMs - p1.timeMs);
                 double t = (span > 0.0) ? (static_cast<double>(relTime - p1.timeMs) / span) : 0.0;
-                t = RenderUtils::Clamp(t, 0.0, 1.0);
+                t = MathUtils::Clamp(t, 0.0, 1.0);
 
                 outSample.point.timeMs = relTime;
                 outSample.point.normX = p1.normX + (p2.normX - p1.normX) * t;
@@ -1092,7 +1092,7 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
 
                 double gapSpan = static_cast<double>(nextTl.startTimelineMs - tl.endTimelineMs);
                 double t = (gapSpan > 0.0) ? (static_cast<double>(clampedTime - tl.endTimelineMs) / gapSpan) : 0.0;
-                t = RenderUtils::Clamp(t, 0.0, 1.0);
+                t = MathUtils::Clamp(t, 0.0, 1.0);
 
                 const auto& pEnd = s.points.back();
                 const auto& pStart = nextS.points.front();
@@ -1105,7 +1105,7 @@ bool TrajectorySession::GetReplaySample(DWORD timeMs, const RECT& rPaper, Replay
                 double arc = std::sin(t * 3.14159265358979323846);
                 double baseAlt = pEnd.altitudeDeg + (pStart.altitudeDeg - pEnd.altitudeDeg) * t;
                 outSample.point.altitudeDeg = baseAlt + (85.0 - baseAlt) * arc * 0.6;
-                outSample.point.altitudeDeg = RenderUtils::Clamp(outSample.point.altitudeDeg, 20.0, 90.0);
+                outSample.point.altitudeDeg = MathUtils::Clamp(outSample.point.altitudeDeg, 20.0, 90.0);
                 
                 double dAzm = pStart.azimuthDeg - pEnd.azimuthDeg;
                 while (dAzm > 180.0) dAzm -= 360.0;

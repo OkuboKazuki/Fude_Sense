@@ -7,23 +7,15 @@
 #include <windows.h>
 #include <string>
 #include <algorithm>
+#include "MathUtils.h"
 
 namespace RenderUtils {
 
-    // 範囲制限
-    template<class T>
-    inline T Clamp(T v, T lo, T hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
-    }
-
-    // 矩形の幅・高さ
-    inline int RW(const RECT& r) { return r.right - r.left; }
-    inline int RH(const RECT& r) { return r.bottom - r.top; }
-
-    // 点の内外判定
-    inline bool PtIn(const RECT& r, POINT pt) {
-        return (pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom);
-    }
+    // 計算の共通関数は MathUtils にあり、View と Controller からはこの名前でも呼べる
+    using MathUtils::Clamp;
+    using MathUtils::RW;
+    using MathUtils::RH;
+    using MathUtils::PtIn;
 
     // 筆圧 (0.0: 軽 〜 1.0: 強) に応じた視覚化カラー（青/水色 -> 緑/黄 -> 橙/赤）を取得
     inline COLORREF GetPressureColor(double p) {

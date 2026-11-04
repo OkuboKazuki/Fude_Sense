@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <cmath>
 #include "AppEnums.h"
-#include "RenderUtils.h"
 
 // 筆設定モデル
 struct BrushModel {

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "AppState.h"
+#include "MathUtils.h"
 
 namespace {
 
@@ -49,7 +50,7 @@ POINT AppState::ToClearModalSpace(POINT pt, int clientHeight) const {
 // Layout() 全体を呼び直す必要は無い。
 void AppState::UpdateReplaySeekThumb() {
     double prog = (replay.totalDurationMs > 0) ? (static_cast<double>(replay.currentTimeMs) / static_cast<double>(replay.totalDurationMs)) : 0.0;
-    prog = RenderUtils::Clamp(prog, 0.0, 1.0);
+    prog = MathUtils::Clamp(prog, 0.0, 1.0);
     int trackW = ui.rReplaySeekTrack.right - ui.rReplaySeekTrack.left;
     int thumbX = ui.rReplaySeekTrack.left + static_cast<int>(trackW * prog);
     int thumbCy = (ui.rReplaySeekTrack.top + ui.rReplaySeekTrack.bottom) / 2;
@@ -58,7 +59,7 @@ void AppState::UpdateReplaySeekThumb() {
 }
 
 void AppState::Layout(int w, int h) {
-    using namespace RenderUtils;
+    using namespace MathUtils;
 
     // 紙だけ表示は通常の UI を組まない別レイアウト
     if (ui.paperOnly) {
@@ -331,7 +332,7 @@ void AppState::Layout(int w, int h) {
 
 // ゲージの両端は丸く、端ぴったりは狙いにくいので、少し内側で 0% / 100% に届くようにする
 void AppState::SetInkAmountFromBadgeX(int x) {
-    using namespace RenderUtils;
+    using namespace MathUtils;
     int pad = RH(ui.rInkBadge) / 2;
     double trackW = static_cast<double>(RW(ui.rInkBadge) - 2 * pad);
     if (trackW <= 0.0) return;
@@ -341,7 +342,7 @@ void AppState::SetInkAmountFromBadgeX(int x) {
 
 // 硯を磨り面の上端で上下に分ける。縁も近いほうへ含めるので、硯の中に押しても効かない所は残らない。
 bool AppState::IsOnInkStoneLand(POINT pt) const {
-    using namespace RenderUtils;
+    using namespace MathUtils;
     return PtIn(ui.rInkStoneLarge, pt) && pt.y >= ui.rInkLand.top;
 }
 
@@ -349,7 +350,7 @@ bool AppState::IsOnInkStoneLand(POINT pt) const {
 // 磨り面を端から端までしごいたときに落ちる量が同じになる。
 // 数えるのは下の部分を通っている間だけ。上の墨溜まりや硯の外へ出ている間は減らさない。
 bool AppState::WipeInkTo(POINT pt, double pressure) {
-    using namespace RenderUtils;
+    using namespace MathUtils;
     double dx = static_cast<double>(pt.x - ui.wipeLastPt.x);
     double dy = static_cast<double>(pt.y - ui.wipeLastPt.y);
     ui.wipeLastPt = pt;
@@ -370,7 +371,7 @@ bool AppState::WipeInkTo(POINT pt, double pressure) {
 // 左メニュー・硯パネルは描かないので、当たり判定が残って運筆を横取り
 // しないよう矩形ごと畳んでおく。
 void AppState::LayoutPaperOnly(int w, int h) {
-    using namespace RenderUtils;
+    using namespace MathUtils;
 
     const RECT kNone = { 0, 0, 0, 0 };
     ui.rSub = ui.rRight = kNone;
@@ -428,7 +429,7 @@ void AppState::LayoutPaperOnly(int w, int h) {
 // ミニマップまでを一括で算出する。内側の罫線とセル境界を一致させるため、
 // 通常表示と紙だけ表示のどちらからもここを通す（CanvasView::DrawGrid と共有）。
 void AppState::LayoutGridGeometry() {
-    using namespace RenderUtils;
+    using namespace MathUtils;
 
     {
         // 余白は半紙の短辺から決める。紙だけ表示で倒しても通常表示と同じ幅になる。
