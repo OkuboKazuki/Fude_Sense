@@ -24,7 +24,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 | 優先度 | 件数 | 項目 |
 |---|---|---|
 | 高 | 3 | M1 レイアウト計算、M2 View への依存（完了）、M3 UI の状態 |
-| 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈、C1 ドメインルール、C2 余白の重複、E1 状態の直接更新 |
+| 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新 |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存、S1 Service の責務 |
 
 ---
@@ -40,10 +40,10 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 | `LayoutClearModal` | `Models/AppState.cpp:27` | 全消し確認モーダルの配置 |
 | `UpdateReplaySeekThumb` | `Models/AppState.cpp:51` | シークバーのツマミの配置 |
 | `AppState::Layout` | `Models/AppState.cpp:61` | 全 UI 要素の配置 |
-| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:373` | 紙だけ表示の配置 |
-| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:431` | 升目のピクセル矩形 |
+| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:374` | 紙だけ表示の配置 |
+| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:432` | 升目のピクセル矩形 |
 
-**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全513行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
+**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全514行のうち、約8割をこれらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
 
 **修正の方向:** `Views/` 側にレイアウト専用のクラスを作って移します。Controller はクリック判定のために、その計算結果を読み取ります。
 
@@ -68,7 +68,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **場所**
 
-- `Models/AppState.h:182-262` の `UIState`（ホバー状態、ボタン矩形、モーダルの開閉など）
+- `Models/AppState.h:182-263` の `UIState`（ホバー状態、ボタン矩形、モーダルの開閉など）
 - `Models/UIComponents.h` の `UIWidget`
 
 **問題:** ホバー状態やボタン矩形は、作品や設定のデータではなく画面の状態です。また、`UIWidget` の `isHovered`、`isPressed`、`isEnabled` はどこからも使われていません。
@@ -98,9 +98,9 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 | 関数 | 場所 | 内容 |
 |---|---|---|
 | `ToClearModalSpace` | `Models/AppState.cpp:43` | 画面上の点をモーダルの座標系へ変換 |
-| `SetInkAmountFromBadgeX` | `Models/AppState.cpp:334` | ゲージの X 座標から墨の残量を決定 |
-| `IsOnInkStoneLand` | `Models/AppState.cpp:344` | 点が硯の下の部分にあるかを判定 |
-| `WipeInkTo` | `Models/AppState.cpp:352` | 筆の移動距離から墨を落とす |
+| `SetInkAmountFromBadgeX` | `Models/AppState.cpp:335` | ゲージの X 座標から墨の残量を決定 |
+| `IsOnInkStoneLand` | `Models/AppState.cpp:345` | 点が硯の下の部分にあるかを判定 |
+| `WipeInkTo` | `Models/AppState.cpp:353` | 筆の移動距離から墨を落とす |
 
 **問題:** 「画面のこの位置を押した」を「残量を何％にする」に変換するのは、Controller の役割です。
 
@@ -113,7 +113,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 - `Models/AppState.h:18`（`BrushModel::isDraggingHardness`）
 - `Models/AppState.h:78`（`OtehonModel::isDraggingOpacity`）
 - `Models/AppState.h:83`（`OtehonModel::isTyping`）
-- `Models/AppState.h:309`（`SetSaveFeedback`）
+- `Models/AppState.h:310`（`SetSaveFeedback`）
 - `Models/TrajectoryModel.h:85-86`（`isDraggingSeekBar`、`isDraggingWaveform`）
 
 **問題:** ドラッグ中かどうかは、筆やお手本のデータではなく操作の状態です。
@@ -150,7 +150,11 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **修正の方向:** 計算を Model 側（`BrushModel` や `InkModel`、または運筆計算の専用クラス）へ移し、Controller は入力を渡して結果を受け取るだけにします。
 
-### C2. View の余白の数値が Controller に重複している（優先度: 中）
+### C2. View の余白の数値が Controller に重複している（優先度: 中）（完了）
+
+`AppState::Layout` で波形の描画領域 `ui.rAnalysisGraphPlot` を一度だけ計算し、描画とクリック、ドラッグの判定はその値を読むようにしました。余白の数値は変えていません。余白は `Layout` にあるので、M1 で `Layout` と一緒に `Views/` 側へ移します。Windows でのビルドは未確認です。
+
+以下は修正前の記録です。
 
 **場所:** 同じ `+38 / +32 / -14 / -20` の余白が3か所にあります。
 
@@ -224,7 +228,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 1. **M2（完了）:** 共通の計算関数を移し、Model から `RenderUtils.h` への依存をなくす
 2. **M4（完了）:** ダイアログを Model の外へ移す
-3. **C2:** グラフの余白の重複をなくす
+3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5、E1:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1、M7:** ドメインルールと Service、墨エンジンの依存を整理する
 6. **M1、M3、M6:** レイアウトと `UIState` を分離する

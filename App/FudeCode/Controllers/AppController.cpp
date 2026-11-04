@@ -531,7 +531,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     return true;
                 }
                 // 7. 波形グラフのクリック・ドラッグによるシーク
-                RECT rPlotHit = { ui.rAnalysisGraphBox.left + 38, ui.rAnalysisGraphBox.top + 32, ui.rAnalysisGraphBox.right - 14, ui.rAnalysisGraphBox.bottom - 20 };
+                const RECT& rPlotHit = ui.rAnalysisGraphPlot;
                 if (hasRecording && PtIn(rPlotHit, pt)) {
                     state.replay.isDraggingWaveform = true;
                     SetCapture(hWnd);
@@ -871,7 +871,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     }
 
     if (state.replay.isDraggingWaveform && (wParam & MK_LBUTTON)) {
-        RECT rPlotHit = { ui.rAnalysisGraphBox.left + 38, ui.rAnalysisGraphBox.top + 32, ui.rAnalysisGraphBox.right - 14, ui.rAnalysisGraphBox.bottom - 20 };
+        const RECT& rPlotHit = ui.rAnalysisGraphPlot;
         double plotW = static_cast<double>(RW(rPlotHit));
         double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
         norm = Clamp(norm, 0.0, 1.0);

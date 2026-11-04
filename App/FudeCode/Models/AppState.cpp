@@ -150,6 +150,7 @@ void AppState::Layout(int w, int h) {
         ui.rAnalysisMetricsBox = { ui.rSub.left + 18, ui.rAnalysisReplayBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisReplayBox.bottom + 12 + metricsH };
         ui.rAnalysisCompassBox = { ui.rSub.left + 18, ui.rAnalysisMetricsBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisMetricsBox.bottom + 12 + compassH };
         ui.rAnalysisGraphBox   = { ui.rSub.left + 18, ui.rAnalysisCompassBox.bottom + 12, ui.rSub.right - 18, ui.rAnalysisCompassBox.bottom + 12 + graphH };
+        ui.rAnalysisGraphPlot  = { ui.rAnalysisGraphBox.left + 38, ui.rAnalysisGraphBox.top + 32, ui.rAnalysisGraphBox.right - 14, ui.rAnalysisGraphBox.bottom - 20 };
 
         // リプレイ操作コントロール内矩形
         int repLeft = ui.rAnalysisReplayBox.left;

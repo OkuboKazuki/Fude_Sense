@@ -581,7 +581,7 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
     DeleteObject(fHeader);
 
     // グラフプロット領域
-    RECT rPlot = { rBox.left + 38, rBox.top + 32, rBox.right - 14, rBox.bottom - 20 };
+    const RECT& rPlot = state.ui.rAnalysisGraphPlot;
     int plotW = RW(rPlot);
     int plotH = RH(rPlot);
 

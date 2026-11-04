@@ -236,6 +236,7 @@ struct UIState {
     UIWidget rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
     UIWidget rSaveBtnPng{}, rSaveBtnClip{}, rSaveBtnJson{}, rSaveBtnCsv{};
     UIWidget rAnalysisCompassBox{}, rAnalysisGraphBox{}, rAnalysisMetricsBox{}, rAnalysisReplayBox{};
+    UIWidget rAnalysisGraphPlot{};   // 波形の描画領域（描画とシークの判定で共通）
     UIWidget rReplayPlayBtn{}, rReplayPrevBtn{}, rReplayNextBtn{}, rReplayResetBtn{};
     UIWidget rReplaySeekTrack{}, rReplaySeekThumb{};
     UIWidget rReplaySpeedBtn[3]{};
