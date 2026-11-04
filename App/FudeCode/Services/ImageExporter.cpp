@@ -130,11 +130,11 @@ bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* f
 
 } // namespace
 
-ImageExportResult ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, const AppState& state, bool toClipboard) {
+ImageExportResult ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, const RECT& rPaper, bool toClipboard) {
     using namespace MathUtils;
 
-    int pw = RW(state.ui.rPaper);
-    int ph = RH(state.ui.rPaper);
+    int pw = RW(rPaper);
+    int ph = RH(rPaper);
     if (pw <= 0 || ph <= 0) return ImageExportResult::NothingToExport;
 
     HDC screenDC = GetDC(hWnd);

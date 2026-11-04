@@ -43,21 +43,21 @@ static void RefillByPress(AppState& state, double penPressure) {
 
 // 作品を書き出し、結果を保存タブのメッセージとして出す
 static void ExportCanvasWithFeedback(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
-    switch (ImageExporter::ExportCanvas(hWnd, gpuInk, state, toClipboard)) {
+    switch (ImageExporter::ExportCanvas(hWnd, gpuInk, state.ui.rPaper, toClipboard)) {
     case ImageExportResult::NothingToExport:
         break;
     case ImageExportResult::Failed:
-        state.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
-                                          : L"× 画像を保存できませんでした", true);
+        state.ui.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
+                                             : L"× 画像を保存できませんでした", true);
         break;
     case ImageExportResult::CopiedToClipboard:
-        state.SetSaveFeedback(L"✓ クリップボードにコピーしました");
+        state.ui.SetSaveFeedback(L"✓ クリップボードにコピーしました");
         break;
     case ImageExportResult::SavedPng:
-        state.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
+        state.ui.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
         break;
     case ImageExportResult::SavedBmp:
-        state.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
+        state.ui.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
         break;
     }
 }
@@ -724,10 +724,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     state.ui.suppressPenUntilLift = true;
                     switch (ArchiveDialogs::PromptSaveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
                     case ArchiveDialogs::Result::Saved:
-                        state.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
+                        state.ui.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
                         break;
                     case ArchiveDialogs::Result::Failed:
-                        state.SetSaveFeedback(L"× JSON を保存できませんでした", true);
+                        state.ui.SetSaveFeedback(L"× JSON を保存できませんでした", true);
                         break;
                     case ArchiveDialogs::Result::Canceled:
                         break;
@@ -741,10 +741,10 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
                     state.ui.suppressPenUntilLift = true;
                     switch (ArchiveDialogs::PromptSaveCsv(hWnd, state.trajectory)) {
                     case ArchiveDialogs::Result::Saved:
-                        state.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
+                        state.ui.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
                         break;
                     case ArchiveDialogs::Result::Failed:
-                        state.SetSaveFeedback(L"× CSV を出力できませんでした", true);
+                        state.ui.SetSaveFeedback(L"× CSV を出力できませんでした", true);
                         break;
                     case ArchiveDialogs::Result::Canceled:
                         break;

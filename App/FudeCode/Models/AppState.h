@@ -218,6 +218,12 @@ struct UIState {
     DWORD saveFeedbackTime = 0;
     bool saveFeedbackIsError = false; // 保存に失敗したときは赤で出す
 
+    void SetSaveFeedback(const std::wstring& message, bool isError = false) {
+        saveFeedback = message;
+        saveFeedbackTime = GetTickCount();
+        saveFeedbackIsError = isError;
+    }
+
     // 各種UIウィジェット（コンポーネント指向・RECT互換）
     UIWidget rSub{};
     UIWidget rCanvasArea{};
@@ -289,11 +295,5 @@ public:
     // 解析タブのリプレイ・グラフが見ている記録。読み込んだ記録を表示中ならそちら
     TrajectorySession& AnalysisSession() { return viewingImport ? importedTrajectory : trajectory; }
     const TrajectorySession& AnalysisSession() const { return viewingImport ? importedTrajectory : trajectory; }
-
-    void SetSaveFeedback(const std::wstring& message, bool isError = false) {
-        ui.saveFeedback = message;
-        ui.saveFeedbackTime = GetTickCount();
-        ui.saveFeedbackIsError = isError;
-    }
 };
 

@@ -6,7 +6,6 @@
 
 #include <windows.h>
 #include <string>
-#include "AppState.h"
 #include "GpuInk.h"
 
 // 作品の書き出しの結果。表示するメッセージは呼び出し側で決める。
@@ -21,5 +20,6 @@ enum class ImageExportResult {
 class ImageExporter {
 public:
     // キャンバス作品をクリップボードまたはデスクトップの画像ファイルへ保存
-    static ImageExportResult ExportCanvas(HWND hWnd, GpuInk& gpuInk, const AppState& state, bool toClipboard);
+    // rPaper: 半紙の矩形。書き出す画像の大きさに使う
+    static ImageExportResult ExportCanvas(HWND hWnd, GpuInk& gpuInk, const RECT& rPaper, bool toClipboard);
 };

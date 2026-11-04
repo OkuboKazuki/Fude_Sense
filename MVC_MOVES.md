@@ -100,4 +100,10 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 ## M3. UI の状態を移す
 
-第 1 段階（`未コミット`）: 関数や処理の移動なし。`Models/UIComponents.h` の `UIWidget` から、未使用の `isHovered`、`isPressed`、`isEnabled`、`Contains`、`Width`、`Height` を削除しました。
+第 1 段階（`9f234b7`）: 関数や処理の移動なし。`Models/UIComponents.h` の `UIWidget` から、未使用の `isHovered`、`isPressed`、`isEnabled`、`Contains`、`Width`、`Height` を削除しました。
+
+第 2 段階: `ExportCanvas` の引数を、`const AppState&` から `const RECT& rPaper` に変えました。
+
+| 関数 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Models/AppState.h`（`UIState`） | `未コミット` |
