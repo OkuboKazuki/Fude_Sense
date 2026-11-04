@@ -815,7 +815,142 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state) {
         ReleaseCapture();
         handled = true;
     }
+
+    // ボタンが離れた＝紙から離れたので運筆ロックを解除（マウス操作時の解除経路）。
+    // これがないとホームボタンでタイトルへ戻った後、マウスのクリックが
+    // ロックに阻まれてスタジオ画面へ入れなくなる。
+    state.ui.suppressPenUntilLift = false;
+    state.ui.isWiping = false;
     return handled;
+}
+
+void AppController::ReleasePenLock(AppState& state) {
+    state.ui.suppressPenUntilLift = false;
+}
+
+void AppController::OnPenOutOfRange(AppState& state) {
+    // ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
+    state.ui.suppressPenUntilLift = false;
+    state.ui.isPenRefilling = false;
+    state.ui.isWiping = false;
+}
+
+// 前回の再生タイマ刻。停止中は 0。
+static DWORD s_lastReplayTick = 0;
+
+void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state) {
+    if (timerId == TRANSITION_TIMER_ID) {
+        if (!state.isTransitioning) {
+            KillTimer(hWnd, TRANSITION_TIMER_ID);
+            return;
+        }
+
+        DWORD now = GetTickCount();
+        DWORD elapsed = now - state.transitionStartTime;
+        if (elapsed >= state.transitionDurationMs) {
+            state.isTransitioning = false;
+            state.transitionProgress = 1.0f;
+            state.currentScreen = AppScreen::Studio;
+            state.ui.leftTab = LeftTab::Brush;
+            KillTimer(hWnd, TRANSITION_TIMER_ID);
+        } else {
+            state.transitionProgress = static_cast<float>(elapsed) / static_cast<float>(state.transitionDurationMs);
+        }
+        InvalidateRect(hWnd, NULL, FALSE);
+        return;
+    }
+
+    if (timerId == TITLE_ANIM_TIMER_ID) {
+        if (state.currentScreen != AppScreen::Title || state.isTransitioning) {
+            KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
+            return;
+        }
+        InvalidateRect(hWnd, NULL, FALSE);
+        return;
+    }
+
+    if (timerId == REPLAY_TIMER_ID) {
+        // 再生中でなくなったらタイマを止める。再び張るのは再生ボタン側。
+        if (state.ui.leftTab != LeftTab::Analysis || state.replay.state != ReplayState::Playing) {
+            KillTimer(hWnd, REPLAY_TIMER_ID);
+            s_lastReplayTick = 0;
+            return;
+        }
+
+        DWORD now = GetTickCount();
+        DWORD dt = (s_lastReplayTick != 0) ? (now - s_lastReplayTick) : 16;
+        if (dt > 100) dt = 16;
+        s_lastReplayTick = now;
+
+        DWORD advanceMs = static_cast<DWORD>(dt * state.replay.playbackSpeed);
+        if (advanceMs < 1 && state.replay.playbackSpeed > 0.0) advanceMs = 1;
+
+        state.replay.currentTimeMs += advanceMs;
+        if (state.replay.currentTimeMs >= state.replay.totalDurationMs) {
+            state.replay.currentTimeMs = state.replay.totalDurationMs;
+            state.replay.state = ReplayState::Paused;
+            KillTimer(hWnd, REPLAY_TIMER_ID);
+            s_lastReplayTick = 0;
+        }
+
+        state.replay.hasValidSample = state.AnalysisSession().GetReplaySample(
+            state.replay.currentTimeMs, state.ui.rPaper, state.replay.currentSample);
+
+        // 動くのは半紙のリプレイと解析パネルだけ。Layout() 全体も全画面の
+        // 無効化も要らない。
+        state.UpdateReplaySeekThumb();
+        InvalidateRect(hWnd, &state.ui.rPaper, FALSE);
+        InvalidateRect(hWnd, &state.ui.rSub, FALSE);
+    }
+}
+
+void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gpuInk) {
+    // F9 は「紙だけ表示（横向き）」の切り替え。硯パネルのボタンと同じ働き。
+    if (key == VK_F9) {
+        SetPaperOnly(hWnd, !state.ui.paperOnly, state, gpuInk);
+        return;
+    }
+
+    // 文字入力中はショートカット（Esc=全消しの確認 / Ctrl+Z・Ctrl+Y=一画戻す・復元）を止める。
+    // Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
+    if (state.otehon.isTyping) return;
+
+    switch (key) {
+    case VK_ESCAPE:
+        // 確認モーダル表示中の Esc は「キャンセル」として閉じる
+        if (state.ui.showClearConfirm) {
+            state.ui.showClearConfirm = false;
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        }
+
+        // 硯パネルの「全消し」ボタンと同じ確認モーダルを出す。
+        // 紙だけ表示では倒した向きで読めるよう回して描く（ModalView::DrawClearConfirm）。
+        state.ui.hoverClearModal = 0;
+        state.ui.showClearConfirm = true;
+        InvalidateRect(hWnd, NULL, FALSE);
+        break;
+    case 'Z':
+    case 'z':
+        // Ctrl+Z で一画戻す、Ctrl+Shift+Z で一画復元
+        if (GetKeyState(VK_CONTROL) < 0) {
+            if (GetKeyState(VK_SHIFT) < 0) {
+                RedoStroke(hWnd, state, gpuInk);
+            } else {
+                UndoStroke(hWnd, state, gpuInk);
+            }
+        }
+        break;
+    case 'Y':
+    case 'y':
+        // Ctrl+Y でも一画復元
+        if (GetKeyState(VK_CONTROL) < 0) {
+            RedoStroke(hWnd, state, gpuInk);
+        }
+        break;
+    default:
+        break;
+    }
 }
 
 bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {

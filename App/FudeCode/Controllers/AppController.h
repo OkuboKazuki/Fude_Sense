@@ -16,6 +16,14 @@ public:
     static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& gpuInk, double penPressure = -1.0);
     static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state);
     static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state);
+    // タイマの処理（タイトルからの遷移、タイトルのアニメーション、運筆の再生）
+    static void OnTimer(HWND hWnd, WPARAM timerId, AppState& state);
+    // スタジオ画面のショートカットキー。受け付けてよいかは呼び出し側で確かめる。
+    static void OnKeyDown(HWND hWnd, WPARAM key, AppState& state, GpuInk& gpuInk);
+    // 「ペンが離れるまで運筆を受け付けない」ロックを解除する
+    static void ReleasePenLock(AppState& state);
+    // ペンが圏外へ出たときに、接地中の操作の状態を解除する
+    static void OnPenOutOfRange(AppState& state);
     // カーソル形状の制御（半紙上は十字カーソル、テキスト入力欄はIビーム、UIパネルや外側は標準カーソル）
     static bool OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state);
     // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。

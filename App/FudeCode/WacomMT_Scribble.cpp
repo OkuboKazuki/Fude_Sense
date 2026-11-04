@@ -66,8 +66,6 @@ static GpuInk g_gpuInk;
 static StrokeController g_strokeCtrl;
 static AppController g_appCtrl;
 
-// 前回の再生タイマ刻。停止中は 0。
-static DWORD g_lastReplayTick = 0;
 DWORD g_lastWintabTick = 0;
 
 // Forward declarations
@@ -244,79 +242,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_TIMER:
 	{
-		if (wParam == TRANSITION_TIMER_ID)
-		{
-			if (!g_appState.isTransitioning)
-			{
-				KillTimer(hWnd, TRANSITION_TIMER_ID);
-				return 0;
-			}
-
-			DWORD now = GetTickCount();
-			DWORD elapsed = now - g_appState.transitionStartTime;
-			if (elapsed >= g_appState.transitionDurationMs)
-			{
-				g_appState.isTransitioning = false;
-				g_appState.transitionProgress = 1.0f;
-				g_appState.currentScreen = AppScreen::Studio;
-				g_appState.ui.leftTab = LeftTab::Brush;
-				KillTimer(hWnd, TRANSITION_TIMER_ID);
-			}
-			else
-			{
-				g_appState.transitionProgress = static_cast<float>(elapsed) / static_cast<float>(g_appState.transitionDurationMs);
-			}
-			InvalidateRect(hWnd, NULL, FALSE);
-			return 0;
-		}
-
-		if (wParam == TITLE_ANIM_TIMER_ID)
-		{
-			if (g_appState.currentScreen != AppScreen::Title || g_appState.isTransitioning)
-			{
-				KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
-				return 0;
-			}
-			InvalidateRect(hWnd, NULL, FALSE);
-			return 0;
-		}
-
-		if (wParam == REPLAY_TIMER_ID)
-		{
-			// 再生中でなくなったらタイマを止める。再び張るのは再生ボタン側。
-			if (g_appState.ui.leftTab != LeftTab::Analysis || g_appState.replay.state != ReplayState::Playing)
-			{
-				KillTimer(hWnd, REPLAY_TIMER_ID);
-				g_lastReplayTick = 0;
-				return 0;
-			}
-
-			DWORD now = GetTickCount();
-			DWORD dt = (g_lastReplayTick != 0) ? (now - g_lastReplayTick) : 16;
-			if (dt > 100) dt = 16;
-			g_lastReplayTick = now;
-
-			DWORD advanceMs = static_cast<DWORD>(dt * g_appState.replay.playbackSpeed);
-			if (advanceMs < 1 && g_appState.replay.playbackSpeed > 0.0) advanceMs = 1;
-
-			g_appState.replay.currentTimeMs += advanceMs;
-			if (g_appState.replay.currentTimeMs >= g_appState.replay.totalDurationMs)
-			{
-				g_appState.replay.currentTimeMs = g_appState.replay.totalDurationMs;
-				g_appState.replay.state = ReplayState::Paused;
-				KillTimer(hWnd, REPLAY_TIMER_ID);
-				g_lastReplayTick = 0;
-			}
-
-			g_appState.replay.hasValidSample = g_appState.AnalysisSession().GetReplaySample(
-				g_appState.replay.currentTimeMs, g_appState.ui.rPaper, g_appState.replay.currentSample);
-
-			// 動くのは半紙のリプレイと解析パネルだけ。Layout() 全体も全画面の
-			// 無効化も要らない。
-			g_appState.UpdateReplaySeekThumb();
-			InvalidateRect(hWnd, &g_appState.ui.rPaper, FALSE);
-			InvalidateRect(hWnd, &g_appState.ui.rSub, FALSE);
-		}
+		AppController::OnTimer(hWnd, wParam, g_appState);
 		return 0;
 	}
 
@@ -347,66 +273,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// 見えないスタジオ画面の状態（紙だけ表示・一画戻す等）が裏で変わってしまうため。
 		if (!IsStudioAcceptingKeys()) break;
 
-		// F9 は「紙だけ表示（横向き）」の切り替え。硯パネルのボタンと同じ働き。
-		if (wParam == VK_F9)
-		{
-			AppController::SetPaperOnly(hWnd, !g_appState.ui.paperOnly, g_appState, g_gpuInk);
-			break;
-		}
-
-		// 文字入力中はショートカット（Esc=全消しの確認 / Ctrl+Z・Ctrl+Y=一画戻す・復元）を止める。
-		// Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
-		if (g_appState.otehon.isTyping) break;
-
-		switch (wParam)
-		{
-		case VK_ESCAPE:
-		{
-			// 確認モーダル表示中の Esc は「キャンセル」として閉じる
-			if (g_appState.ui.showClearConfirm)
-			{
-				g_appState.ui.showClearConfirm = false;
-				InvalidateRect(hWnd, NULL, FALSE);
-				break;
-			}
-
-			// 硯パネルの「全消し」ボタンと同じ確認モーダルを出す。
-			// 紙だけ表示では倒した向きで読めるよう回して描く（ModalView::DrawClearConfirm）。
-			g_appState.ui.hoverClearModal = 0;
-			g_appState.ui.showClearConfirm = true;
-			InvalidateRect(hWnd, NULL, FALSE);
-			break;
-		}
-		case 'Z':
-		case 'z':
-		{
-			// Ctrl+Z で一画戻す、Ctrl+Shift+Z で一画復元
-			if (GetKeyState(VK_CONTROL) < 0)
-			{
-				if (GetKeyState(VK_SHIFT) < 0)
-				{
-					AppController::RedoStroke(hWnd, g_appState, g_gpuInk);
-				}
-				else
-				{
-					AppController::UndoStroke(hWnd, g_appState, g_gpuInk);
-				}
-			}
-			break;
-		}
-		case 'Y':
-		case 'y':
-		{
-			// Ctrl+Y でも一画復元
-			if (GetKeyState(VK_CONTROL) < 0)
-			{
-				AppController::RedoStroke(hWnd, g_appState, g_gpuInk);
-			}
-			break;
-		}
-		default:
-			break;
-		}
+		AppController::OnKeyDown(hWnd, wParam, g_appState, g_gpuInk);
 		break;
 	}
 
@@ -478,7 +345,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		else
 		{
 			// 半紙上での新しい押下なので運筆ロックを解除（マウス操作時の解除経路）
-			g_appState.ui.suppressPenUntilLift = false;
+			AppController::ReleasePenLock(g_appState);
 
 			// ペン (Wintab) 入力の直後でない場合のみマウスによる運筆描画を開始
 			if (!isPenActive && RenderUtils::PtIn(g_appState.ui.rPaper, pt))
@@ -513,12 +380,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		AppController::OnLButtonUp(hWnd, pt, g_appState);
-
-		// ボタンが離れた＝紙から離れたので運筆ロックを解除（マウス操作時の解除経路）。
-		// これがないとホームボタンでタイトルへ戻った後、マウスのクリックが
-		// ロックに阻まれてスタジオ画面へ入れなくなる。
-		g_appState.ui.suppressPenUntilLift = false;
-		g_appState.ui.isWiping = false;
 
 		if (s_isMouseDrawing)
 		{
@@ -558,7 +419,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			if (penEvent.pressure <= 0.0)
 			{
-				g_appState.ui.suppressPenUntilLift = false;
+				AppController::ReleasePenLock(g_appState);
 			}
 
 			if (penEvent.pressure > 0.0 && g_appState.currentScreen == AppScreen::Title)
@@ -599,7 +460,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_gpuInk);
 				if (message == WM_POINTERUP)
 				{
-					g_appState.ui.suppressPenUntilLift = false;
+					AppController::ReleasePenLock(g_appState);
 					g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 				}
 				return 0;
@@ -623,10 +484,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			g_strokeCtrl.ResetStroke(g_gpuInk, &g_appState);
 			g_gpuInk.UpdatePenZ(0, 0, 0, true);
-			// ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
-			g_appState.ui.suppressPenUntilLift = false;
-			g_appState.ui.isPenRefilling = false;
-			g_appState.ui.isWiping = false;
+			AppController::OnPenOutOfRange(g_appState);
 		}
 		break;
 	}
