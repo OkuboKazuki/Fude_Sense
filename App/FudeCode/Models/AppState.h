@@ -253,7 +253,7 @@ struct UIState {
     UIWidget rClearModalBox{}, rModalClearBtn{}, rModalCancelBtn{};
 
     // 下敷き升目のジオメトリ。罫線描画（CanvasView::DrawGrid）とお手本の配置が
-    // 同じセルを参照できるよう、AppState::Layout で一元的に算出する。
+    // 同じセルを参照できるよう、ScreenLayout::Layout で一元的に算出する。
     // ここを分けて計算すると、お手本がマスからずれる。
     RECT rGridBorder{};                 // 升目の外枠（半紙の内側マージン適用後）
     RECT rGridCell[MAX_GRID_CELLS]{};   // 升目セル。並びは縦書きの書字順（右列を上から下、次に左列）
@@ -290,9 +290,6 @@ public:
     TrajectorySession& AnalysisSession() { return viewingImport ? importedTrajectory : trajectory; }
     const TrajectorySession& AnalysisSession() const { return viewingImport ? importedTrajectory : trajectory; }
 
-    // ウィンドウサイズに応じた全UI要素のレイアウト計算
-    void Layout(int clientWidth, int clientHeight);
-
     // シークバーのツマミ位置だけを再計算する
     void UpdateReplaySeekThumb();
 
@@ -302,7 +299,9 @@ public:
         ui.saveFeedbackIsError = isError;
     }
 
-private:
+    // 以下は ScreenLayout::Layout から呼ぶ。ScreenLayout へ移すまでの間だけ公開する。
+    // 全消し確認モーダルの配置
+    void LayoutClearModal(int clientWidth, int clientHeight);
     // 紙だけ表示のレイアウト
     void LayoutPaperOnly(int clientWidth, int clientHeight);
     // 升目のジオメトリ。rPaper から算出するので通常表示と紙だけ表示で共有する。

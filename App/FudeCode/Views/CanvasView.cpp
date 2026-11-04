@@ -309,7 +309,7 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     using namespace RenderUtils;
     const UIState& ui = state.ui;
 
-    // 外枠・セル分割は AppState::Layout が算出済みのものを使う。
+    // 外枠・セル分割は ScreenLayout::Layout が算出済みのものを使う。
     // ここで再計算すると、お手本の配置に使うセルと罫線がずれる。
     const RECT& rBorder = ui.rGridBorder;
     if (RW(rBorder) <= 0 || RH(rBorder) <= 0) return;

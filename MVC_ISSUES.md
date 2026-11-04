@@ -23,7 +23,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 優先度 | 件数 | 項目 |
 |---|---|---|
-| 高 | 3 | M1 レイアウト計算（第 1 段階まで完了）、M2 View への依存（完了）、M3 UI の状態 |
+| 高 | 3 | M1 レイアウト計算（第 2 段階まで完了）、M2 View への依存（完了）、M3 UI の状態 |
 | 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新（完了） |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、S1 Service の責務（第 1 段階まで完了） |
 
@@ -33,25 +33,23 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ### M1. Model が画面レイアウトを計算している（優先度: 高）
 
-**終わった段階（第 1 段階）:** `Views/ScreenLayout` を作り、`Layout` の呼び出し 8 か所と `UpdateReplaySeekThumb` の呼び出し 13 か所をそちらへ切り替えました。計算の本体はまだ `AppState` にあり、`ScreenLayout` は呼び出しを渡すだけです。Windows でのビルドは未確認です。
+**終わった段階**
 
-**残り**
+- **第 1 段階:** `Views/ScreenLayout` を作り、`Layout` の呼び出し 8 か所と `UpdateReplaySeekThumb` の呼び出し 13 か所をそちらへ切り替えました。
+- **第 2 段階:** 通常表示の `Layout` 本体を `ScreenLayout::Layout` へ移しました。下位の関数は `AppState` に残っていて、移すまでの間だけ `public` にしています。Windows でのビルドは未確認です。
 
-- **第 2 段階:** 通常表示の `Layout` 本体を `ScreenLayout` へ移す。下位の関数は一時的に `public` にする。
-- **第 3 段階:** `LayoutPaperOnly`、`LayoutGridGeometry`、`LayoutClearModal`、`UpdateReplaySeekThumb` を移し、`AppState.cpp` を削除する。
-- **引数:** 今は `AppState&` を受け取っている。本体を移すときに、`UIState&` と読み取り専用の `PaperModel`、`viewingImport`、`ReplayModel` を受け取る形へ変え、レイアウトが書き換えられるのは `UIState` だけにする。
+**残り（第 3 段階）:** `LayoutClearModal`、`LayoutPaperOnly`、`LayoutGridGeometry`、`UpdateReplaySeekThumb` を移し、`AppState.cpp` を削除します。合わせて、`ScreenLayout` の引数を `AppState&` から `UIState&` と読み取り専用の `PaperModel`、`viewingImport`、`ReplayModel` へ変え、レイアウトが書き換えられるのは `UIState` だけにします。下位の関数が `AppState` にある間は、この形に変えられません。
 
 **場所**
 
 | 関数 | 場所 | 内容 |
 |---|---|---|
-| `LayoutClearModal` | `Models/AppState.cpp:27` | 全消し確認モーダルの配置 |
-| `UpdateReplaySeekThumb` | `Models/AppState.cpp:43` | シークバーのツマミの配置 |
-| `AppState::Layout` | `Models/AppState.cpp:53` | 全 UI 要素の配置 |
-| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:333` | 紙だけ表示の配置 |
-| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:391` | 升目のピクセル矩形 |
+| `AppState::LayoutClearModal` | `Models/AppState.cpp:29` | 全消し確認モーダルの配置 |
+| `AppState::UpdateReplaySeekThumb` | `Models/AppState.cpp:43` | シークバーのツマミの配置 |
+| `AppState::LayoutPaperOnly` | `Models/AppState.cpp:60` | 紙だけ表示の配置 |
+| `AppState::LayoutGridGeometry` | `Models/AppState.cpp:118` | 升目のピクセル矩形 |
 
-**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全473行のほぼすべてを、これらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
+**問題:** ボタンの座標や大きさは「どう見せるか」の情報です。`AppState.cpp` 全200行のほぼすべてを、これらの処理が占めています。ボタンの大きさを変えるだけでも Model を編集することになります。
 
 **修正の方向:** `Views/` 側にレイアウト専用のクラスを作って移します。Controller はクリック判定のために、その計算結果を読み取ります。
 
@@ -125,12 +123,12 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 - `Models/AppState.h:18`（`BrushModel::isDraggingHardness`）
 - `Models/AppState.h:78`（`OtehonModel::isDraggingOpacity`）
 - `Models/AppState.h:83`（`OtehonModel::isTyping`）
-- `Models/AppState.h:299`（`SetSaveFeedback`）
+- `Models/AppState.h:296`（`SetSaveFeedback`）
 - `Models/TrajectoryModel.h:85-86`（`isDraggingSeekBar`、`isDraggingWaveform`）
 
 **問題:** ドラッグ中かどうかは、筆やお手本のデータではなく操作の状態です。
 
-`Models/AppState.cpp:341-342` の `LayoutPaperOnly` も、`ui.isDraggingInkAmount` と `ui.isWiping` を解除しています。これもレイアウトではなく操作の状態です。
+`Models/AppState.cpp:68-69` の `LayoutPaperOnly` も、`ui.isDraggingInkAmount` と `ui.isWiping` を解除しています。これもレイアウトではなく操作の状態です。
 
 **修正の方向:** M3 で UI の状態を移すときに一緒に移します。
 
@@ -257,6 +255,6 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
-6. **M1（第 1 段階まで完了）、M3、M6:** レイアウトと `UIState` を分離する
+6. **M1（第 2 段階まで完了）、M3、M6:** レイアウトと `UIState` を分離する
 
 6 は効果が最も大きい一方で、変更範囲も最大です。`Layout` の呼び出しが8か所あり、運筆処理は `rPaper` を、お手本の配置は升目の計算結果を使っています。
