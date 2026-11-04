@@ -38,6 +38,27 @@ static void RefillByPress(AppState& state, double penPressure) {
     state.ui.suppressPenUntilLift = true;
 }
 
+// 作品を書き出し、結果を保存タブのメッセージとして出す
+static void ExportCanvasWithFeedback(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
+    switch (ImageExporter::ExportCanvas(hWnd, gpuInk, state, toClipboard)) {
+    case ImageExportResult::NothingToExport:
+        break;
+    case ImageExportResult::Failed:
+        state.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
+                                          : L"× 画像を保存できませんでした", true);
+        break;
+    case ImageExportResult::CopiedToClipboard:
+        state.SetSaveFeedback(L"✓ クリップボードにコピーしました");
+        break;
+    case ImageExportResult::SavedPng:
+        state.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
+        break;
+    case ImageExportResult::SavedBmp:
+        state.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
+        break;
+    }
+}
+
 // 画面上の点を全消し確認モーダルの座標系へ移す。
 // 紙だけ表示は画面を右回りに90度倒して見るので、倒した向きの右が画面の上、
 // 下が画面の右になる。モーダルはその向きで組んであるため、点も同じ向きへ直す。
@@ -643,12 +664,12 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, GpuInk& 
             } else if (ui.leftTab == LeftTab::Save) {
                 if (PtIn(ui.rSaveBtnPng, pt)) {
                     state.ui.suppressPenUntilLift = true;
-                    ImageExporter::ExportCanvas(hWnd, gpuInk, state, false);
+                    ExportCanvasWithFeedback(hWnd, gpuInk, state, false);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnClip, pt)) {
                     state.ui.suppressPenUntilLift = true;
-                    ImageExporter::ExportCanvas(hWnd, gpuInk, state, true);
+                    ExportCanvasWithFeedback(hWnd, gpuInk, state, true);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnJson, pt)) {

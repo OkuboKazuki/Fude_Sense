@@ -130,12 +130,12 @@ bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* f
 
 } // namespace
 
-bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, bool toClipboard) {
+ImageExportResult ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, const AppState& state, bool toClipboard) {
     using namespace MathUtils;
 
     int pw = RW(state.ui.rPaper);
     int ph = RH(state.ui.rPaper);
-    if (pw <= 0 || ph <= 0) return false;
+    if (pw <= 0 || ph <= 0) return ImageExportResult::NothingToExport;
 
     HDC screenDC = GetDC(hWnd);
     HDC memDC = CreateCompatibleDC(screenDC);
@@ -153,13 +153,14 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
     // 含めない（画面表示のみ）。下敷きの罫線を書き出さないのと同じ扱い。
     gpuInk.Render(memDC, 0, 0, pw, ph);
 
+    ImageExportResult result = ImageExportResult::Failed;
     bool success = false;
     if (toClipboard) {
         if (OpenClipboard(hWnd)) {
             EmptyClipboard();
             // クリップボードへ所有権を引き渡す（成功時はシステムがメモリを管理するため DeleteObject してはならない）
             if (SetClipboardData(CF_BITMAP, memBmp)) {
-                state.SetSaveFeedback(L"✓ クリップボードにコピーしました");
+                result = ImageExportResult::CopiedToClipboard;
                 success = true;
             }
             CloseClipboard();
@@ -175,24 +176,19 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
 
             // WIC による PNG 保存を実行
             if (SaveBitmapAsPng(memBmp, pw, ph, filePath)) {
-                state.SetSaveFeedback(L"✓ デスクトップにPNG保存しました");
+                result = ImageExportResult::SavedPng;
                 success = true;
             } else {
                 // WIC 失敗時は拡張子を .bmp にしてフォールバック保存
                 swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
                     pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
                 if (SaveBitmapAsBmp(memDC, memBmp, pw, ph, filePath)) {
-                    state.SetSaveFeedback(L"✓ デスクトップに保存しました(BMP)");
+                    result = ImageExportResult::SavedBmp;
                     success = true;
                 }
             }
             CoTaskMemFree(pDeskPath);
         }
-    }
-
-    if (!success) {
-        state.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
-                                          : L"× 画像を保存できませんでした", true);
     }
 
     SelectObject(memDC, oldBmp);
@@ -203,5 +199,5 @@ bool ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, AppState& state, boo
     DeleteDC(memDC);
     ReleaseDC(hWnd, screenDC);
 
-    return success;
+    return result;
 }
