@@ -156,14 +156,14 @@ HFONT GetOtehonFont(HDC dc, int emSize, OtehonFontStyle style) {
 
 } // namespace
 
-void CanvasView::DrawBackground(HDC dc, const AppState& state) {
+void CanvasView::DrawBackground(HDC dc, const UIState& ui) {
     using namespace RenderUtils;
-    const RECT& rPaper = state.ui.rPaper;
+    const RECT& rPaper = ui.rPaper;
     if (RW(rPaper) <= 0 || RH(rPaper) <= 0) return;
 
     // 1. 本物の書道用下敷き（毛氈：縦長フェルト布マット）。
     //    紙だけ表示では半紙が画面いっぱいなので描かない。
-    if (!state.ui.paperOnly) {
+    if (!ui.paperOnly) {
         int marginX = (std::max)(22, RW(rPaper) / 18);
         int marginTop = (std::max)(26, RH(rPaper) / 16);
         int marginBottom = (std::max)(32, RH(rPaper) / 13);
@@ -281,12 +281,11 @@ void CanvasView::DrawOtehonGlyph(HDC dc, const RECT& cell, const std::wstring& t
     SelectObject(layerDC, oldFont);
 }
 
-void CanvasView::DrawOtehon(HDC dc, const AppState& state) {
+void CanvasView::DrawOtehon(HDC dc, const AppState& state, const UIState& ui) {
     if (!state.otehon.isVisible) return;
     // 解析タブ表示中は、お手本のON/OFFにかかわらず非表示にする
-    if (state.ui.leftTab == LeftTab::Analysis) return;
+    if (ui.leftTab == LeftTab::Analysis) return;
 
-    const UIState& ui = state.ui;
     const double opacity = state.otehon.opacity;
 
     // マスごとに置いた字をすべて出す。
@@ -303,11 +302,10 @@ void CanvasView::DrawCross(HDC dc, int x, int y, int s) {
     MoveToEx(dc, x, y - s, nullptr); LineTo(dc, x, y + s);
 }
 
-void CanvasView::DrawGrid(HDC dc, const AppState& state) {
+void CanvasView::DrawGrid(HDC dc, const AppState& state, const UIState& ui) {
     if (state.paper.gridPattern == GridPattern::None) return;
 
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
 
     // 外枠・セル分割は ScreenLayout::Layout が算出済みのものを使う。
     // ここで再計算すると、お手本の配置に使うセルと罫線がずれる。
@@ -389,11 +387,11 @@ void CanvasView::DrawGrid(HDC dc, const AppState& state) {
     DeleteObject(gp);
 }
 
-void CanvasView::RenderInk(HDC dc, GpuInk& gpuInk, const AppState& state) {
-    int dispW = RenderUtils::RW(state.ui.rPaper);
-    int dispH = RenderUtils::RH(state.ui.rPaper);
+void CanvasView::RenderInk(HDC dc, GpuInk& gpuInk, const UIState& ui) {
+    int dispW = RenderUtils::RW(ui.rPaper);
+    int dispH = RenderUtils::RH(ui.rPaper);
     if (dispW > 0 && dispH > 0) {
-        gpuInk.Render(dc, state.ui.rPaper.left, state.ui.rPaper.top, dispW, dispH);
+        gpuInk.Render(dc, ui.rPaper.left, ui.rPaper.top, dispW, dispH);
     }
 }
 
@@ -811,8 +809,8 @@ void CanvasView::ReleaseReplayCache() {
     g_replayInk.Release();
 }
 
-void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state) {
-    const RECT& rPaper = state.ui.rPaper;
+void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state, const UIState& ui) {
+    const RECT& rPaper = ui.rPaper;
     int pw = RenderUtils::RW(rPaper);
     int ph = RenderUtils::RH(rPaper);
     if (pw <= 0 || ph <= 0) return;
@@ -874,7 +872,7 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state)
     }
 
     if (state.replay.hasValidSample) {
-        Draw3DBrushPose(dc, state, state.replay.currentSample.point, state.replay.currentSample.isPenDown);
+        Draw3DBrushPose(dc, ui, state.replay.currentSample.point, state.replay.currentSample.isPenDown);
     }
 }
 
@@ -956,14 +954,14 @@ void CanvasView::DrawReplayTrajectory(HDC dc, const TrajectorySession& session, 
     DeleteObject(trajPen);
 }
 
-void CanvasView::Draw3DBrushPose(HDC dc, const AppState& state, const StrokePoint& pose, bool isPenDown) {
+void CanvasView::Draw3DBrushPose(HDC dc, const UIState& ui, const StrokePoint& pose, bool isPenDown) {
     using namespace RenderUtils;
     int cx = pose.paperX;
     int cy = pose.paperY;
 
     // 半紙外周から離れすぎている場合は描画しない
-    if (cx < state.ui.rPaper.left - 50 || cx > state.ui.rPaper.right + 50 ||
-        cy < state.ui.rPaper.top - 50 || cy > state.ui.rPaper.bottom + 50) {
+    if (cx < ui.rPaper.left - 50 || cx > ui.rPaper.right + 50 ||
+        cy < ui.rPaper.top - 50 || cy > ui.rPaper.bottom + 50) {
         return;
     }
 

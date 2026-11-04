@@ -23,7 +23,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 優先度 | 件数 | 項目 |
 |---|---|---|
-| 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態（第 2 段階まで完了） |
+| 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態（第 3 段階まで完了） |
 | 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新（完了） |
 | 低 | 3 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、S1 Service の責務（第 1 段階まで完了） |
 
@@ -66,10 +66,10 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 - **第 1 段階:** `UIWidget` の未使用メンバー（`isHovered`、`isPressed`、`isEnabled`、`Contains`、`Width`、`Height`）を削除しました。3 つのコンストラクタは代入で使うので残しています。Windows でのビルドは未確認です。
 - **第 2 段階:** `SetSaveFeedback` を `AppState` から `UIState` へ移しました。`ExportCanvas` は `AppState` の代わりに半紙の矩形を受け取るようにし、`ImageExporter.h` から `AppState.h` への依存をなくしました。Windows でのビルドは未確認です。
+- **第 3 段階:** View の関数が `state.ui` を読まず、`const UIState& ui` を引数で受け取るようにしました。`AppState` を使わなくなった `DrawBackground`、`RenderInk`、`Draw3DBrushPose`、`ModalView` の 2 つの関数は、`UIState` だけを受け取ります。呼び出し元の `WacomMT_Scribble.cpp` は、今は `g_appState.ui` を渡します。Windows でのビルドは未確認です。
 
 **残り**
 
-- **第 3 段階:** View の関数が `const UIState&` を受け取るようにします。
 - **第 4 段階:** Controller の関数が `UIState&` を受け取るようにします。
 - **第 5 段階:** 定義を `Views/` へ移し、`AppState::ui` を削除して、`g_uiState` を `WacomMT_Scribble.cpp` に置きます。
 
@@ -231,7 +231,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 ## 6. 問題ない点
 
-- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`UIState&` へ書き込みます（M3 で `UIState` を Model の外へ移すまでの間です）。
+- **View から Model への書き込み:** 描画を行う `Views/` の関数は `const AppState&` と `const UIState&` を受け取っていて、`const_cast` や `mutable` も見つかりませんでした。レイアウトを計算する `ScreenLayout` だけは例外で、`UIState&` へ書き込みます（M3 で `UIState` を Model の外へ移すまでの間です）。
 - **Model 内の描画処理:** `Models/` に描画処理の呼び出しは見つかりませんでした。
 - **運筆の記録:** 正規化座標（`normX`、`normY`）を持っていて、画面サイズに依存しない形にできています。
 - **Controller のカーソル変更や入力位置の指定:** `SetCursor` や IME の位置指定は、Win32 では Controller にあっても大きな問題ではありません。
@@ -257,6 +257,6 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
-6. **M1（完了）、M3（第 2 段階まで完了）、M6:** レイアウトと `UIState` を分離する
+6. **M1（完了）、M3（第 3 段階まで完了）、M6:** レイアウトと `UIState` を分離する
 
 残りの M3 と M6 は変更範囲が広く、`UIState` は Controller と View の多くの箇所から参照されています。

@@ -61,9 +61,8 @@ void DrawRotatedCenter(HDC dc, const RECT& r, const wchar_t* s, int size, int we
 
 } // namespace
 
-void InkStoneView::Draw(HDC dc, const AppState& state) {
+void InkStoneView::Draw(HDC dc, const AppState& state, const UIState& ui) {
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
     // 硯パネルは Layout で拡大されることがあるので、文字や内側の余白も同じ倍率で広げる
     const double sc = ui.inkStoneScale;
     auto S = [sc](int v) { return (int)(v * sc + 0.5); };
@@ -179,9 +178,8 @@ void InkStoneView::Draw(HDC dc, const AppState& state) {
     DeleteObject(fView);
 }
 
-void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state) {
+void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state, const UIState& ui) {
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
 
     // ボタンの帯。机の背景は描かないので、無地で塗る
     Fill(dc, ui.rPaperOnlyBar, RGB(24, 26, 34));

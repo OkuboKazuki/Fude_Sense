@@ -2,11 +2,11 @@
 #include "ModalView.h"
 #include "RenderUtils.h"
 
-void ModalView::DrawClearConfirm(HDC dc, int width, int height, const AppState& state) {
-    if (!state.ui.showClearConfirm) return;
+void ModalView::DrawClearConfirm(HDC dc, int width, int height, const UIState& ui) {
+    if (!ui.showClearConfirm) return;
 
-    if (!state.ui.paperOnly) {
-        DrawClearConfirmBody(dc, width, height, state);
+    if (!ui.paperOnly) {
+        DrawClearConfirmBody(dc, width, height, ui);
         return;
     }
 
@@ -20,16 +20,15 @@ void ModalView::DrawClearConfirm(HDC dc, int width, int height, const AppState& 
     xf.eDx = 0.0f;   xf.eDy = static_cast<FLOAT>(height);
     SetWorldTransform(dc, &xf);
 
-    DrawClearConfirmBody(dc, height, width, state);
+    DrawClearConfirmBody(dc, height, width, ui);
 
     // GM_COMPATIBLE へ戻すには先に変換を単位行列へ戻しておく必要がある
     ModifyWorldTransform(dc, nullptr, MWT_IDENTITY);
     SetGraphicsMode(dc, oldMode);
 }
 
-void ModalView::DrawClearConfirmBody(HDC dc, int width, int height, const AppState& state) {
+void ModalView::DrawClearConfirmBody(HDC dc, int width, int height, const UIState& ui) {
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
 
     // 全画面の半透明暗転オーバーレイ
     for (int y = 0; y < height; y += 2) {

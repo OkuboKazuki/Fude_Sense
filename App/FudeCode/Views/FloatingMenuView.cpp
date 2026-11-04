@@ -5,11 +5,10 @@
 #include "RenderUtils.h"
 #include <cwchar>
 
-void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
-    if (!state.ui.isSubPanelOpen) return;
+void FloatingMenuView::DrawSub(HDC dc, const AppState& state, const UIState& ui) {
+    if (!ui.isSubPanelOpen) return;
 
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
 
     if (ui.leftTab == LeftTab::Brush) {
         DrawSubCard(dc, ui.rSubSmall, L"小筆", L"かな・名入れ・細線", 2, state.brush.type == Brush::Small, ui.hoverSub == 1);
@@ -84,7 +83,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
         DrawColorThemeButton(dc, ui.rColorBtn[2], L"薄墨", RGB(150, 155, 168), state.paper.gridColor == GridColorTheme::InkGray, ui.hoverSub == 32);
     }
     else if (ui.leftTab == LeftTab::Analysis) {
-        AnalysisView::Draw(dc, state);
+        AnalysisView::Draw(dc, state, ui);
     }
     else if (ui.leftTab == LeftTab::Save) {
         bool hovPng = (ui.hoverSub == 60);
@@ -277,9 +276,8 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state) {
     }
 }
 
-void FloatingMenuView::Draw(HDC dc, const AppState& state) {
+void FloatingMenuView::Draw(HDC dc, const AppState& state, const UIState& ui) {
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
 
     if (!ui.isSubPanelOpen) {
         bool hovHome = (ui.hoverTb == TbButton::Home);
@@ -333,5 +331,5 @@ void FloatingMenuView::Draw(HDC dc, const AppState& state) {
     DrawTab(ui.rTbSave,     L"保存", ui.leftTab == LeftTab::Save,     ui.hoverTb == TbButton::Save);
     DrawTab(ui.rTbOtehon,   L"手本", ui.leftTab == LeftTab::Otehon,   ui.hoverTb == TbButton::Otehon);
 
-    DrawSub(dc, state);
+    DrawSub(dc, state, ui);
 }

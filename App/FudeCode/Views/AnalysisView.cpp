@@ -18,17 +18,16 @@ int TextWidth(HDC dc, HFONT f, const wchar_t* s) {
 
 } // namespace
 
-void AnalysisView::Draw(HDC dc, const AppState& state) {
-    DrawImportBar(dc, state);
-    DrawReplayControls(dc, state.ui.rAnalysisReplayBox, state);
-    DrawMetricsCard(dc, state.ui.rAnalysisMetricsBox, state);
-    DrawTiltCompass(dc, state.ui.rAnalysisCompassBox, state);
-    DrawWaveformGraph(dc, state.ui.rAnalysisGraphBox, state);
+void AnalysisView::Draw(HDC dc, const AppState& state, const UIState& ui) {
+    DrawImportBar(dc, state, ui);
+    DrawReplayControls(dc, ui.rAnalysisReplayBox, state, ui);
+    DrawMetricsCard(dc, ui.rAnalysisMetricsBox, state);
+    DrawTiltCompass(dc, ui.rAnalysisCompassBox, state);
+    DrawWaveformGraph(dc, ui.rAnalysisGraphBox, state, ui);
 }
 
-void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
+void AnalysisView::DrawImportBar(HDC dc, const AppState& state, const UIState& ui) {
     using namespace RenderUtils;
-    const UIState& ui = state.ui;
 
     bool hovImport = (ui.hoverReplayBtn == 9);
     Box(dc, ui.rAnalysisImportBtn, hovImport ? RGB(68, 58, 34) : RGB(48, 42, 26),
@@ -49,7 +48,7 @@ void AnalysisView::DrawImportBar(HDC dc, const AppState& state) {
     }
 }
 
-void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& state) {
+void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& state, const UIState& ui) {
     using namespace RenderUtils;
     // 読み込んだ記録を見ている間は、自分の記録と取り違えないよう枠の色を変える
     Box(dc, rBox, RGB(26, 29, 36), state.viewingImport ? RGB(200, 155, 55) : RGB(46, 52, 66), 1, 8);
@@ -94,7 +93,7 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     DeleteObject(fHeader);
 
     // 2. シークバー
-    const RECT& rTrack = state.ui.rReplaySeekTrack;
+    const RECT& rTrack = ui.rReplaySeekTrack;
     Box(dc, rTrack, RGB(16, 18, 24), RGB(50, 56, 70), 1, 4);
 
 
@@ -123,8 +122,8 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     }
 
     // シークバーのツマミ (Thumb)
-    const RECT& rThumb = state.ui.rReplaySeekThumb;
-    bool isThumbActive = hasRecording && (state.ui.hoverReplayBtn == 8 || rep.isDraggingSeekBar);
+    const RECT& rThumb = ui.rReplaySeekThumb;
+    bool isThumbActive = hasRecording && (ui.hoverReplayBtn == 8 || rep.isDraggingSeekBar);
     COLORREF thumbColor = !hasRecording ? RGB(56, 61, 74) : (isThumbActive ? RGB(255, 230, 100) : RGB(230, 240, 255));
     COLORREF thumbBorder = !hasRecording ? DIS_BORDER : (isThumbActive ? RGB(255, 255, 255) : RGB(80, 160, 240));
     Box(dc, rThumb, thumbColor, thumbBorder, 2, 4);
@@ -133,29 +132,29 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
     HFONT fBtnIcon = CreateCustomFont(22, FW_BOLD);
 
     // 最初に戻る (↺)
-    bool hReset = (state.ui.hoverReplayBtn == 1);
-    Box(dc, state.ui.rReplayResetBtn, !hasRecording ? DIS_BG : (hReset ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hReset ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
-    Center(dc, state.ui.rReplayResetBtn, L"↺", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
+    bool hReset = (ui.hoverReplayBtn == 1);
+    Box(dc, ui.rReplayResetBtn, !hasRecording ? DIS_BG : (hReset ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hReset ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
+    Center(dc, ui.rReplayResetBtn, L"↺", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
     // 前画 (⏮)
-    bool hPrev = (state.ui.hoverReplayBtn == 2);
-    Box(dc, state.ui.rReplayPrevBtn, !hasRecording ? DIS_BG : (hPrev ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hPrev ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
-    Center(dc, state.ui.rReplayPrevBtn, L"⏮", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
+    bool hPrev = (ui.hoverReplayBtn == 2);
+    Box(dc, ui.rReplayPrevBtn, !hasRecording ? DIS_BG : (hPrev ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hPrev ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
+    Center(dc, ui.rReplayPrevBtn, L"⏮", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
     // 再現 / 一時停止 (▶ / ❚❚)
     bool isPlaying = hasRecording && (rep.state == ReplayState::Playing);
-    bool hPlay = (state.ui.hoverReplayBtn == 3);
+    bool hPlay = (ui.hoverReplayBtn == 3);
     COLORREF playBg = !hasRecording ? DIS_BG : isPlaying ? (hPlay ? RGB(200, 70, 60) : RGB(170, 50, 45)) : (hPlay ? RGB(40, 160, 230) : RGB(28, 130, 200));
     COLORREF playBorder = !hasRecording ? DIS_BORDER : (isPlaying ? RGB(255, 110, 100) : RGB(80, 190, 255));
-    Box(dc, state.ui.rReplayPlayBtn, playBg, playBorder, 1, 6);
+    Box(dc, ui.rReplayPlayBtn, playBg, playBorder, 1, 6);
     HFONT fPlay = CreateCustomFont(26, FW_BOLD);
-    Center(dc, state.ui.rReplayPlayBtn, isPlaying ? L"❚❚ 一時停止" : L"▶ 運筆再生", fPlay, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
+    Center(dc, ui.rReplayPlayBtn, isPlaying ? L"❚❚ 一時停止" : L"▶ 運筆再生", fPlay, hasRecording ? RGB(255, 255, 255) : DIS_TEXT);
     DeleteObject(fPlay);
 
     // 次画 (⏭)
-    bool hNext = (state.ui.hoverReplayBtn == 4);
-    Box(dc, state.ui.rReplayNextBtn, !hasRecording ? DIS_BG : (hNext ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hNext ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
-    Center(dc, state.ui.rReplayNextBtn, L"⏭", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
+    bool hNext = (ui.hoverReplayBtn == 4);
+    Box(dc, ui.rReplayNextBtn, !hasRecording ? DIS_BG : (hNext ? RGB(45, 52, 68) : RGB(34, 38, 48)), !hasRecording ? DIS_BORDER : (hNext ? RGB(100, 120, 160) : RGB(58, 66, 84)), 1, 6);
+    Center(dc, ui.rReplayNextBtn, L"⏭", fBtnIcon, hasRecording ? RGB(200, 215, 235) : DIS_TEXT);
 
     DeleteObject(fBtnIcon);
 
@@ -166,14 +165,14 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
 
     for (int i = 0; i < 3; ++i) {
         bool isSel = (std::abs(rep.playbackSpeed - spdVals[i]) < 0.05);
-        bool isHov = (state.ui.hoverReplayBtn == (5 + i));
+        bool isHov = (ui.hoverReplayBtn == (5 + i));
 
         COLORREF sBg = isSel ? RGB(35, 75, 125) : (isHov ? RGB(42, 48, 62) : RGB(30, 34, 44));
         COLORREF sBorder = isSel ? RGB(80, 170, 255) : (isHov ? RGB(70, 80, 100) : RGB(50, 56, 72));
         COLORREF sText = isSel ? RGB(240, 250, 255) : (isHov ? RGB(200, 210, 230) : RGB(140, 150, 170));
 
-        Box(dc, state.ui.rReplaySpeedBtn[i], sBg, sBorder, isSel ? 2 : 1, 6);
-        Center(dc, state.ui.rReplaySpeedBtn[i], spdLabels[i], fSpd, sText);
+        Box(dc, ui.rReplaySpeedBtn[i], sBg, sBorder, isSel ? 2 : 1, 6);
+        Center(dc, ui.rReplaySpeedBtn[i], spdLabels[i], fSpd, sText);
     }
     DeleteObject(fSpd);
 }
@@ -556,7 +555,7 @@ void AnalysisView::ReleaseWaveformCache() {
     g_waveformCache.Release();
 }
 
-void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& state) {
+void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& state, const UIState& ui) {
     using namespace RenderUtils;
     Box(dc, rBox, RGB(20, 23, 30), RGB(45, 52, 66), 1, 8);
 
@@ -581,7 +580,7 @@ void AnalysisView::DrawWaveformGraph(HDC dc, const RECT& rBox, const AppState& s
     DeleteObject(fHeader);
 
     // グラフプロット領域
-    const RECT& rPlot = state.ui.rAnalysisGraphPlot;
+    const RECT& rPlot = ui.rAnalysisGraphPlot;
     int plotW = RW(rPlot);
     int plotH = RH(rPlot);
 

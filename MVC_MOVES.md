@@ -102,8 +102,10 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 第 1 段階（`9f234b7`）: 関数や処理の移動なし。`Models/UIComponents.h` の `UIWidget` から、未使用の `isHovered`、`isPressed`、`isEnabled`、`Contains`、`Width`、`Height` を削除しました。
 
-第 2 段階: `ExportCanvas` の引数を、`const AppState&` から `const RECT& rPaper` に変えました。
+第 2 段階（`a6d4b27`）: `ExportCanvas` の引数を、`const AppState&` から `const RECT& rPaper` に変えました。
 
 | 関数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Models/AppState.h`（`UIState`） | `未コミット` |
+| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Models/AppState.h`（`UIState`） | `a6d4b27` |
+
+第 3 段階（`未コミット`）: 関数や処理の移動なし。View の関数の引数に `const UIState& ui` を足しました。`AppState` を使わなくなった `CanvasView::DrawBackground`、`CanvasView::RenderInk`、`CanvasView::Draw3DBrushPose`、`ModalView::DrawClearConfirm`、`ModalView::DrawClearConfirmBody` は、引数の `const AppState&` を `const UIState&` に置き換えました。

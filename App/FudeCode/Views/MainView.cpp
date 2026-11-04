@@ -64,12 +64,12 @@ void MainView::ReleaseBackBuffer() {
     TitleView::ReleaseResources();
 }
 
-void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state) {
+void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state, const UIState& ui) {
     RECT rcFull = { 0, 0, width, height };
-    Render(hdc, width, height, gpuInk, state, rcFull);
+    Render(hdc, width, height, gpuInk, state, ui, rcFull);
 }
 
-void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state, const RECT& rcPaint) {
+void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppState& state, const UIState& ui, const RECT& rcPaint) {
     if (width <= 0 || height <= 0) return;
 
     // 裏画面へ一括描画してから転送する（フリッカー防止）
@@ -87,12 +87,12 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     if (state.isTransitioning) {
         // 1. 背景バッファ（memDC）にスタジオ画面を描画
         RenderUtils::DrawWoodDesk(memDC, width, height);
-        CanvasView::DrawBackground(memDC, state);
-        CanvasView::RenderInk(memDC, gpuInk, state);
-        CanvasView::DrawOtehon(memDC, state);
-        CanvasView::DrawGrid(memDC, state);
-        InkStoneView::Draw(memDC, state);
-        FloatingMenuView::Draw(memDC, state);
+        CanvasView::DrawBackground(memDC, ui);
+        CanvasView::RenderInk(memDC, gpuInk, ui);
+        CanvasView::DrawOtehon(memDC, state, ui);
+        CanvasView::DrawGrid(memDC, state, ui);
+        InkStoneView::Draw(memDC, state, ui);
+        FloatingMenuView::Draw(memDC, state, ui);
 
         // 2. 一時バッファにタイトル画面を描画
         if (g_titleBuffer.Ensure(hdc, width, height)) {
@@ -118,80 +118,80 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     bool isFullRedraw = (rcPaint.left <= 0 && rcPaint.top <= 0 && rcPaint.right >= width && rcPaint.bottom >= height);
 
     RECT dummy;
-    bool hitPaper = (IntersectRect(&dummy, &rcPaint, &state.ui.rPaper) != FALSE);
-    bool hitRight = (IntersectRect(&dummy, &rcPaint, &state.ui.rRight) != FALSE);
-    bool hitLeft = (IntersectRect(&dummy, &rcPaint, &state.ui.rTbNavToggle) != FALSE)
-                || (IntersectRect(&dummy, &rcPaint, &state.ui.rTbHomeBtn) != FALSE)
-                || (state.ui.isSubPanelOpen && IntersectRect(&dummy, &rcPaint, &state.ui.rSub) != FALSE);
-    bool hitModal = state.ui.showClearConfirm;
+    bool hitPaper = (IntersectRect(&dummy, &rcPaint, &ui.rPaper) != FALSE);
+    bool hitRight = (IntersectRect(&dummy, &rcPaint, &ui.rRight) != FALSE);
+    bool hitLeft = (IntersectRect(&dummy, &rcPaint, &ui.rTbNavToggle) != FALSE)
+                || (IntersectRect(&dummy, &rcPaint, &ui.rTbHomeBtn) != FALSE)
+                || (ui.isSubPanelOpen && IntersectRect(&dummy, &rcPaint, &ui.rSub) != FALSE);
+    bool hitModal = ui.showClearConfirm;
 
     // 運筆中など半紙専用の局所更新で、モーダルや左メニュー、硯パネル、木目余白と交差しない場合のみ背景を再描画しない
     // （硯パネルは透明テキスト「墨残量: ○○%」を描画するため、木目背景の再描画・クリアが必要）
     // 紙だけ表示では解析パネルが無いので、常に書いている墨を出す。
-    bool showReplay = (state.ui.leftTab == LeftTab::Analysis && !state.ui.paperOnly);
+    bool showReplay = (ui.leftTab == LeftTab::Analysis && !ui.paperOnly);
 
     if (isFullRedraw || hitModal || hitLeft || hitRight || !hitPaper) {
         // 1. 和風木製机（文机）の背景描画。紙だけ表示では机を描かず、
         //    半紙の比率に合わせて空いた余白をボタンの帯と同じ無地で塗る。
-        if (state.ui.paperOnly) {
+        if (ui.paperOnly) {
             RenderUtils::Fill(memDC, rcFull, RGB(24, 26, 34));
         } else {
             RenderUtils::DrawWoodDesk(memDC, width, height);
         }
 
         // 2. 半紙背景
-        CanvasView::DrawBackground(memDC, state);
+        CanvasView::DrawBackground(memDC, ui);
 
         // 3. 墨汁の描画（解析タブ表示中はリプレイ墨＆3D筆姿勢、通常時は GPU 墨汁テクスチャ）
         if (showReplay) {
-            CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
+            CanvasView::DrawReplayCanvas(memDC, gpuInk, state, ui);
         } else {
-            CanvasView::RenderInk(memDC, gpuInk, state);
+            CanvasView::RenderInk(memDC, gpuInk, ui);
         }
 
         // 3-2. お手本文字
-        CanvasView::DrawOtehon(memDC, state);
+        CanvasView::DrawOtehon(memDC, state, ui);
 
         // 4. 下敷き・升目格子ガイド
-        CanvasView::DrawGrid(memDC, state);
+        CanvasView::DrawGrid(memDC, state, ui);
 
-        if (state.ui.paperOnly) {
+        if (ui.paperOnly) {
             // 5. 紙だけ表示。操作は半紙の右の「墨を補充」「通常表示に戻る」「筆跡を消す」だけ。
-            InkStoneView::DrawPaperOnlyBar(memDC, state);
+            InkStoneView::DrawPaperOnlyBar(memDC, state, ui);
             // 全消し確認モーダル（倒した向きで描く）
-            ModalView::DrawClearConfirm(memDC, width, height, state);
+            ModalView::DrawClearConfirm(memDC, width, height, ui);
             BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
             return;
         }
 
         // 5. 右側 硯パネル
-        InkStoneView::Draw(memDC, state);
+        InkStoneView::Draw(memDC, state, ui);
 
         // 6. 左側 フローティングメニュー
-        FloatingMenuView::Draw(memDC, state);
+        FloatingMenuView::Draw(memDC, state, ui);
 
         // 8. 全消し確認モーダルオーバーレイ
-        ModalView::DrawClearConfirm(memDC, width, height, state);
+        ModalView::DrawClearConfirm(memDC, width, height, ui);
 
         // 画面へ一括転送 (フリッカーフリー)
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
     } else {
         // 局所更新パス（運筆中の半紙専用高速描画パス）
         if (hitPaper) {
-            CanvasView::DrawBackground(memDC, state);
+            CanvasView::DrawBackground(memDC, ui);
             if (showReplay) {
-                CanvasView::DrawReplayCanvas(memDC, gpuInk, state);
+                CanvasView::DrawReplayCanvas(memDC, gpuInk, state, ui);
             } else {
-                CanvasView::RenderInk(memDC, gpuInk, state);
+                CanvasView::RenderInk(memDC, gpuInk, ui);
             }
-            CanvasView::DrawOtehon(memDC, state);
-            CanvasView::DrawGrid(memDC, state);
+            CanvasView::DrawOtehon(memDC, state, ui);
+            CanvasView::DrawGrid(memDC, state, ui);
         }
 
         // 紙だけ表示では墨の残量を「墨を補充」ボタンに出しているので、
         // 運筆中もボタンの帯を描き直して残量を追従させる
-        if (state.ui.paperOnly && IntersectRect(&dummy, &rcPaint, &state.ui.rPaperOnlyBar)) {
-            InkStoneView::DrawPaperOnlyBar(memDC, state);
+        if (ui.paperOnly && IntersectRect(&dummy, &rcPaint, &ui.rPaperOnlyBar)) {
+            InkStoneView::DrawPaperOnlyBar(memDC, state, ui);
         }
 
         // 無効化領域のみを画面へ高速転送 (CPU/GPU バス帯域を劇的に節約)

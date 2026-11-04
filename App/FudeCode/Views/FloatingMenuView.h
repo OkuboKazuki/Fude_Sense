@@ -9,8 +9,8 @@
 
 class FloatingMenuView {
 public:
-    static void Draw(HDC dc, const AppState& state);
+    static void Draw(HDC dc, const AppState& state, const UIState& ui);
 
 private:
-    static void DrawSub(HDC dc, const AppState& state);
+    static void DrawSub(HDC dc, const AppState& state, const UIState& ui);
 };
