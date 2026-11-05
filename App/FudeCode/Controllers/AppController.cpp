@@ -389,7 +389,7 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, UIState& u
     ui.interaction.isDraggingHardness = false;
     ui.interaction.isDraggingInkAmount = false;
     ui.interaction.isWiping = false;
-    ui.hoverPaperOnly = 0;
+    ui.hoverPaperOnly = PaperOnlyHover::None;
 
     // 書いていた墨を控える（半紙を作り直すと消えるため）
     InkSnapshot keep;
@@ -476,7 +476,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     if (ui.paperOnly) {
         // 通常表示の「全消し」ボタンと同じ確認モーダルを出す（倒した向きで描く）
         if (PtIn(ui.rPaperOnlyClearBtn, pt)) {
-            ui.hoverPaperOnly = 0;
+            ui.hoverPaperOnly = PaperOnlyHover::None;
             ui.hoverClearModal = ClearModalHover::None;
             ui.showClearConfirm = true;
             ui.interaction.suppressPenUntilLift = true;
@@ -1078,11 +1078,11 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
             return true;
         }
 
-        int oldPaperOnly = ui.hoverPaperOnly;
-        ui.hoverPaperOnly = 0;
-        if (PtIn(ui.rPaperOnlyExitBtn, pt)) ui.hoverPaperOnly = 1;
-        else if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverPaperOnly = 2;
-        else if (PtIn(ui.rPaperOnlyClearBtn, pt)) ui.hoverPaperOnly = 3;
+        PaperOnlyHover oldPaperOnly = ui.hoverPaperOnly;
+        ui.hoverPaperOnly = PaperOnlyHover::None;
+        if (PtIn(ui.rPaperOnlyExitBtn, pt)) ui.hoverPaperOnly = PaperOnlyHover::Exit;
+        else if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverPaperOnly = PaperOnlyHover::Refill;
+        else if (PtIn(ui.rPaperOnlyClearBtn, pt)) ui.hoverPaperOnly = PaperOnlyHover::Clear;
         if (oldPaperOnly != ui.hoverPaperOnly) {
             InvalidateRect(hWnd, &ui.rPaperOnlyExitBtn, FALSE);
             InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);

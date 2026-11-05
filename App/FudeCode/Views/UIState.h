@@ -45,6 +45,14 @@ enum class ClearModalHover {
     Cancel      // キャンセル
 };
 
+// 紙だけ表示でホバーしているボタン
+enum class PaperOnlyHover {
+    None,
+    Exit,    // 通常表示に戻る
+    Refill,  // 墨を補充
+    Clear    // 筆跡を消す
+};
+
 // 操作の状態。押してから離すまでのドラッグや入力中など、今進行している操作を表す。
 struct InteractionState {
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
@@ -93,7 +101,7 @@ struct UIState {
     // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
     // 硯が無いので、墨の補充は半紙の右のボタンから行う。
     bool paperOnly = false;
-    int hoverPaperOnly = 0;  // 1: 通常表示に戻る, 2: 墨を補充, 3: 筆跡を消す
+    PaperOnlyHover hoverPaperOnly = PaperOnlyHover::None;
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
     int hoverInkStone = 0;

@@ -187,7 +187,7 @@ void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state, const UIState
     // 墨を補充。硯が見えないので残量もボタンに添え、少ないときは赤くする
     int inkPercent = (int)(state.ink.amount * 100.0);
     bool low = (inkPercent <= 20);
-    bool hovRefill = (ui.hoverPaperOnly == 2);
+    bool hovRefill = (ui.hoverPaperOnly == PaperOnlyHover::Refill);
     Box(dc, ui.rInkRefillBtn, hovRefill ? RGB(42, 72, 110) : RGB(26, 30, 38),
         hovRefill ? RGB(85, 145, 235) : (low ? RGB(180, 70, 70) : RGB(72, 80, 98)), low ? 2 : 1, 8);
     // 画面を倒して見る前提なので、文字も倒して描く
@@ -197,14 +197,14 @@ void InkStoneView::DrawPaperOnlyBar(HDC dc, const AppState& state, const UIState
     DrawRotatedCenter(dc, ui.rInkRefillBtn, buf, 22, FW_BOLD, fg);
 
     // 通常表示（メニュー・硯パネルあり）へ戻る
-    bool hovExit = (ui.hoverPaperOnly == 1);
+    bool hovExit = (ui.hoverPaperOnly == PaperOnlyHover::Exit);
     Box(dc, ui.rPaperOnlyExitBtn, hovExit ? RGB(42, 72, 110) : RGB(26, 30, 38),
         hovExit ? RGB(85, 145, 235) : RGB(72, 80, 98), 1, 8);
     DrawRotatedCenter(dc, ui.rPaperOnlyExitBtn, L"通常表示に戻る", 18, FW_BOLD,
         hovExit ? RGB(255, 255, 255) : RGB(220, 230, 245));
 
     // 筆跡を消す（押すと確認モーダルを出す）
-    bool hovClear = (ui.hoverPaperOnly == 3);
+    bool hovClear = (ui.hoverPaperOnly == PaperOnlyHover::Clear);
     Box(dc, ui.rPaperOnlyClearBtn, hovClear ? RGB(85, 38, 38) : RGB(42, 30, 32),
         hovClear ? RGB(180, 70, 70) : RGB(74, 48, 52), 1, 8);
     DrawRotatedCenter(dc, ui.rPaperOnlyClearBtn, L"筆跡を消す", 18, FW_BOLD,

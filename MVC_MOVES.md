@@ -197,4 +197,6 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 
 ## C5. ホバーの番号に名前を付ける
 
-第 1 段階（`未コミット`）: 関数や処理の移動なし。`UIState::hoverClearModal` の型を、`int` から `Views/UIState.h` の新しい列挙型 `ClearModalHover` に変えました。
+第 1 段階（`6d1ea87`）: 関数や処理の移動なし。`UIState::hoverClearModal` の型を、`int` から `Views/UIState.h` の新しい列挙型 `ClearModalHover` に変えました。
+
+第 2 段階（`未コミット`）: 関数や処理の移動なし。`UIState::hoverPaperOnly` の型を、`int` から `Views/UIState.h` の新しい列挙型 `PaperOnlyHover` に変えました。
