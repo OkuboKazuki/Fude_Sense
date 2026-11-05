@@ -296,7 +296,7 @@ Model のフラグと `UIState` の中の操作の状態を、`Views/UIState.h` 
 - `hoverReplayBtn`
 - `hoverSub`
 
-**場所:** `Views/UIState.h:119`、`:123`（`hoverSub`、`hoverReplayBtn`）
+**場所:** `Views/UIState.h:118`、`:122`（`hoverSub`、`hoverReplayBtn`）
 
 **問題:** たとえば `hoverSub == 10 + i` は升目のタイルを表します。Controller が番号を書き、View が同じ番号を読むので、片方だけ変えると表示が崩れます。意味はコメントかコードを読まないと分かりません。
 
