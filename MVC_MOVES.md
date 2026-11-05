@@ -192,5 +192,9 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 
 | 処理 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| 硯と墨残量の再描画の範囲の計算 | `Controllers/StrokeController.cpp` の `ProcessPenEvent`（2 か所） | `Views/ScreenLayout.cpp` の `ScreenLayout::Layout` | `未コミット` |
-| IME の候補の位置の計算 | `Controllers/AppController.cpp` の `SetOtehonImePosition` | `Views/ScreenLayout.cpp` の `ScreenLayout::Layout` | `未コミット` |
+| 硯と墨残量の再描画の範囲の計算 | `Controllers/StrokeController.cpp` の `ProcessPenEvent`（2 か所） | `Views/ScreenLayout.cpp` の `ScreenLayout::Layout` | `fa45f02` |
+| IME の候補の位置の計算 | `Controllers/AppController.cpp` の `SetOtehonImePosition` | `Views/ScreenLayout.cpp` の `ScreenLayout::Layout` | `fa45f02` |
+
+## C5. ホバーの番号に名前を付ける
+
+第 1 段階（`未コミット`）: 関数や処理の移動なし。`UIState::hoverClearModal` の型を、`int` から `Views/UIState.h` の新しい列挙型 `ClearModalHover` に変えました。

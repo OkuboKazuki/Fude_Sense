@@ -477,7 +477,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
         // 通常表示の「全消し」ボタンと同じ確認モーダルを出す（倒した向きで描く）
         if (PtIn(ui.rPaperOnlyClearBtn, pt)) {
             ui.hoverPaperOnly = 0;
-            ui.hoverClearModal = 0;
+            ui.hoverClearModal = ClearModalHover::None;
             ui.showClearConfirm = true;
             ui.interaction.suppressPenUntilLift = true;
             InvalidateRect(hWnd, NULL, FALSE);
@@ -1006,7 +1006,7 @@ void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, UIState& u
 
         // 硯パネルの「全消し」ボタンと同じ確認モーダルを出す。
         // 紙だけ表示では倒した向きで読めるよう回して描く（ModalView::DrawClearConfirm）。
-        ui.hoverClearModal = 0;
+        ui.hoverClearModal = ClearModalHover::None;
         ui.showClearConfirm = true;
         InvalidateRect(hWnd, NULL, FALSE);
         break;
@@ -1069,11 +1069,11 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     if (ui.paperOnly) {
         // 全消し確認モーダルが開いている間は、そのボタンだけを見る
         if (ui.showClearConfirm) {
-            int oldModal = ui.hoverClearModal;
+            ClearModalHover oldModal = ui.hoverClearModal;
             POINT mp = ToClearModalSpace(ui, pt, h);
-            ui.hoverClearModal = 0;
-            if (PtIn(ui.rModalClearBtn, mp)) ui.hoverClearModal = 1;
-            else if (PtIn(ui.rModalCancelBtn, mp)) ui.hoverClearModal = 2;
+            ui.hoverClearModal = ClearModalHover::None;
+            if (PtIn(ui.rModalClearBtn, mp)) ui.hoverClearModal = ClearModalHover::ClearAll;
+            else if (PtIn(ui.rModalCancelBtn, mp)) ui.hoverClearModal = ClearModalHover::Cancel;
             if (oldModal != ui.hoverClearModal) InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
@@ -1154,18 +1154,18 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     TbButton oldTb = ui.hoverTb;
     int oldSub = ui.hoverSub;
     int oldStone = ui.hoverInkStone;
-    int oldModal = ui.hoverClearModal;
+    ClearModalHover oldModal = ui.hoverClearModal;
     int oldReplay = ui.hoverReplayBtn;
 
     ui.hoverTb = TbButton::None;
     ui.hoverSub = 0;
     ui.hoverInkStone = 0;
-    ui.hoverClearModal = 0;
+    ui.hoverClearModal = ClearModalHover::None;
     ui.hoverReplayBtn = 0;
 
     if (ui.showClearConfirm) {
-        if (PtIn(ui.rModalClearBtn, pt)) ui.hoverClearModal = 1;
-        else if (PtIn(ui.rModalCancelBtn, pt)) ui.hoverClearModal = 2;
+        if (PtIn(ui.rModalClearBtn, pt)) ui.hoverClearModal = ClearModalHover::ClearAll;
+        else if (PtIn(ui.rModalCancelBtn, pt)) ui.hoverClearModal = ClearModalHover::Cancel;
     } else {
         if (PtIn(ui.rTbHomeBtn, pt)) ui.hoverTb = TbButton::Home;
         else if (PtIn(ui.rTbNavToggle, pt)) ui.hoverTb = TbButton::NavToggle;

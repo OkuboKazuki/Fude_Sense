@@ -38,6 +38,13 @@ enum class LeftTab {
     Otehon
 };
 
+// 全消し確認モーダルでホバーしているボタン
+enum class ClearModalHover {
+    None,
+    ClearAll,   // すべて消す
+    Cancel      // キャンセル
+};
+
 // 操作の状態。押してから離すまでのドラッグや入力中など、今進行している操作を表す。
 struct InteractionState {
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
@@ -79,7 +86,7 @@ struct UIState {
     LeftTab leftTab = LeftTab::Brush;
     bool isSubPanelOpen = true;
     bool showClearConfirm = false;
-    int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
+    ClearModalHover hoverClearModal = ClearModalHover::None;
 
     InteractionState interaction;
 

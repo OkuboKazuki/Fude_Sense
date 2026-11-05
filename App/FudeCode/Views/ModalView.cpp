@@ -65,13 +65,13 @@ void ModalView::DrawClearConfirmBody(HDC dc, int width, int height, const UIStat
     DeleteObject(fDesc);
 
     // キャンセルボタン
-    bool hovCancel = (ui.hoverClearModal == 2);
+    bool hovCancel = (ui.hoverClearModal == ClearModalHover::Cancel);
     Box(dc, ui.rModalCancelBtn, hovCancel ? RGB(52, 57, 68) : RGB(38, 42, 50), hovCancel ? RGB(80, 88, 104) : RGB(56, 62, 74), 1, 6);
     HFONT fBtn = CreateCustomFont(14, FW_NORMAL);
     Center(dc, ui.rModalCancelBtn, L"キャンセル", fBtn, hovCancel ? RGB(255, 255, 255) : RGB(210, 215, 225));
 
     // すべて消すボタン
-    bool hovClear = (ui.hoverClearModal == 1);
+    bool hovClear = (ui.hoverClearModal == ClearModalHover::ClearAll);
     Box(dc, ui.rModalClearBtn, hovClear ? RGB(185, 48, 48) : RGB(150, 36, 36), hovClear ? RGB(225, 75, 75) : RGB(190, 50, 50), 1, 6);
     Center(dc, ui.rModalClearBtn, L"すべて消す", fBtn, RGB(255, 255, 255));
     DeleteObject(fBtn);
