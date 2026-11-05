@@ -14,7 +14,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 | 層 | 本来の役割 | 現状の問題 |
 |---|---|---|
-| Model | データとアプリのルール | `UIState` は M3 で解消。操作中の一時状態と、画面の種類や UI 用の定数が残っている |
+| Model | データとアプリのルール | `UIState` は M3、操作中の一時状態は M6 で解消。画面の種類と UI 用の定数が残っている |
 | View | 表示と、そのためのレイアウト | レイアウトの計算は M1 で解消 |
 | Controller | 入力の受け取りと、Model・View への指示 | 運筆や墨消費のルールを持っている |
 | エントリポイント | 起動と Controller への受け渡し | 状態の直接更新は E1 で解消 |
@@ -25,7 +25,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 |---|---|---|
 | 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態（完了） |
 | 中 | 5 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、C1 ドメインルール、C2 余白の重複（完了）、E1 状態の直接更新（完了） |
-| 低 | 4 | M6 操作中の一時状態、M7 描画エンジンへの依存（完了）、M8 画面の種類と UI 用の定数、S1 Service の責務（第 1 段階まで完了） |
+| 低 | 4 | M6 操作中の一時状態（完了）、M7 描画エンジンへの依存（完了）、M8 画面の種類と UI 用の定数、S1 Service の責務（第 1 段階まで完了） |
 
 ---
 
@@ -119,9 +119,11 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **修正の方向:** 座標の解釈は Controller に移します。Model には `ink.amount` の変更や `ink.Wipe` のように、座標を含まない操作だけを残します。
 
-### M6. 操作中の一時状態や表示用メッセージが Model にある（優先度: 低）
+### M6. 操作中の一時状態や表示用メッセージが Model にある（優先度: 低）（完了）
 
-表示用メッセージの `SetSaveFeedback` は、M3 で `UIState` ごと `Views/UIState.h` へ移しました。
+Model のフラグと `UIState` の中の操作の状態を、`Views/UIState.h` の新しい `InteractionState`（`ui.interaction`）へまとめました。`ReplayModel::Reset` と `LayoutPaperOnly` にあったフラグの解除は、`ClearAllInk` と `SetPaperOnly` へ移しました。Windows でのビルドは未確認です。
+
+以下は修正前の記録です。表示用メッセージの `SetSaveFeedback` は、M3 で `UIState` ごと `Views/UIState.h` へ移しました。
 
 **場所**
 
@@ -140,7 +142,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 
 **場所**
 
-- `Models/AppState.h:183-187`（`currentScreen`、`isTransitioning`、`transitionStartTime`、`transitionDurationMs`、`transitionProgress`）
+- `Models/AppState.h:180-184`（`currentScreen`、`isTransitioning`、`transitionStartTime`、`transitionDurationMs`、`transitionProgress`）
 - `Models/AppEnums.h:54`、`:60`、`:74`（`AppScreen`、`TbButton`、`LeftTab`）
 - `Models/AppEnums.h:88-90`（タイマの ID）
 
@@ -271,7 +273,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
 5. **C1、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
-6. **M1（完了）、M3（完了）、M6:** レイアウトと `UIState` を分離する
+6. **M1（完了）、M3（完了）、M6（完了）:** レイアウトと `UIState` を分離する
 7. **M8:** 画面の種類と UI 用の定数を Model の外へ移す
 
-残りは C1、M6、M8 と、S1 の第 2 段階です。
+残りは C1、M8 と、S1 の第 2 段階です。

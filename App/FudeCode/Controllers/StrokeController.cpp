@@ -30,12 +30,12 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // ダイアログを閉じた後もペンが離れるまで描画をロックする
     if (hWnd && !IsWindowEnabled(hWnd)) {
         ResetStroke(gpuInk, &state);
-        ui.suppressPenUntilLift = true;
+        ui.interaction.suppressPenUntilLift = true;
         return;
     }
 
     // 硯・「墨を補充」をペンで押している間は、強く押し込むほど墨を継ぎ足す
-    if (ui.isPenRefilling) {
+    if (ui.interaction.isPenRefilling) {
         if (event.pressure > 0.0) {
             double before = state.ink.amount;
             state.ink.PressRefill(event.pressure);
@@ -43,33 +43,33 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
                 InvalidateRect(hWnd, ui.paperOnly ? &ui.rInkRefillBtn : &ui.rRight, FALSE);
             }
         } else {
-            ui.isPenRefilling = false;
+            ui.interaction.isPenRefilling = false;
         }
     }
 
     // 硯の磨り面をペンでしごいている間は、動かした長さと筆圧に応じて墨を落とす
-    if (ui.isWiping && !ui.wipeByMouse) {
+    if (ui.interaction.isWiping && !ui.interaction.wipeByMouse) {
         if (event.pressure > 0.0) {
             POINT wipePt = { event.x, event.y };
             if (AppController::WipeInkTo(wipePt, event.pressure, state, ui)) {
                 InvalidateRect(hWnd, &ui.rRight, FALSE);
             }
         } else {
-            ui.isWiping = false;
+            ui.interaction.isWiping = false;
             InvalidateRect(hWnd, &ui.rRight, FALSE);
         }
     }
 
     // UI操作（半紙に重なる全消しモーダル等）の直後は、ペンが紙から一度離れるまで
     // 運筆を受け付けない。接地したままのペンのパケットで墨が落ちるのを防ぐ。
-    if (ui.suppressPenUntilLift) {
+    if (ui.interaction.suppressPenUntilLift) {
         if (event.pressure > 0.0) {
             ResetStroke(gpuInk, &state);
             m_ptOld = { event.x, event.y };
             InvalidateRect(hWnd, NULL, FALSE);
             return;
         }
-        ui.suppressPenUntilLift = false;
+        ui.interaction.suppressPenUntilLift = false;
     }
 
     // 筆圧のスムージング（急激な変化を抑制して滑らかな筆運びにする）

@@ -82,8 +82,6 @@ struct ReplayModel {
     DWORD currentTimeMs = 0;
     DWORD totalDurationMs = 0;
     double playbackSpeed = 1.0; // 0.5, 1.0, 2.0
-    bool isDraggingSeekBar = false;
-    bool isDraggingWaveform = false;
     ReplaySample currentSample;
     bool hasValidSample = false;
 
@@ -91,8 +89,6 @@ struct ReplayModel {
         state = ReplayState::Stopped;
         currentTimeMs = 0;
         totalDurationMs = 0;
-        isDraggingSeekBar = false;
-        isDraggingWaveform = false;
         currentSample = ReplaySample();
         hasValidSample = false;
     }

@@ -36,9 +36,9 @@ static void RefillByPress(AppState& state, UIState& ui, double penPressure) {
     }
     state.ink.BeginPressRefill();
     state.ink.PressRefill(penPressure);
-    ui.isPenRefilling = true;
+    ui.interaction.isPenRefilling = true;
     // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
-    ui.suppressPenUntilLift = true;
+    ui.interaction.suppressPenUntilLift = true;
 }
 
 // 作品を書き出し、結果を保存タブのメッセージとして出す
@@ -90,9 +90,9 @@ static bool IsOnInkStoneLand(const UIState& ui, POINT pt) {
 // 磨り面を端から端までしごいたときに落ちる量が同じになる。
 // 数えるのは下の部分を通っている間だけ。上の墨溜まりや硯の外へ出ている間は減らさない。
 bool AppController::WipeInkTo(POINT pt, double pressure, AppState& state, UIState& ui) {
-    double dx = static_cast<double>(pt.x - ui.wipeLastPt.x);
-    double dy = static_cast<double>(pt.y - ui.wipeLastPt.y);
-    ui.wipeLastPt = pt;
+    double dx = static_cast<double>(pt.x - ui.interaction.wipeLastPt.x);
+    double dy = static_cast<double>(pt.y - ui.interaction.wipeLastPt.y);
+    ui.interaction.wipeLastPt = pt;
 
     int stoneW = RW(ui.rInkStoneLarge);
     if (stoneW <= 0 || !IsOnInkStoneLand(ui, pt)) return false;
@@ -107,6 +107,8 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, UIState& ui, GpuInk&
     state.trajectory.Clear();
     state.undo.Clear();
     state.replay.Reset();
+    ui.interaction.isDraggingSeekBar = false;
+    ui.interaction.isDraggingWaveform = false;
 
     // 読み込んだ記録を見ている間であれば、インポート状態を解除する
     if (state.viewingImport) {
@@ -126,7 +128,7 @@ void AppController::ClearAllInk(HWND hWnd, AppState& state, UIState& ui, GpuInk&
     ui.showClearConfirm = false;
     // 消去した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする。
-    ui.suppressPenUntilLift = true;
+    ui.interaction.suppressPenUntilLift = true;
     // シークバーのツマミ位置は再生時刻から Layout で決まる。全消しで時刻を 0 へ戻した後に
     // 取り直さないと、ツマミだけ古い位置に残る。
     RECT rcClient = { 0, 0, 0, 0 };
@@ -202,7 +204,7 @@ void AppController::ImportArchive(HWND hWnd, AppState& state, UIState& ui) {
         break;
     }
     // ダイアログを閉じたペンが接地したままでも、半紙に墨を落とさない
-    ui.suppressPenUntilLift = true;
+    ui.interaction.suppressPenUntilLift = true;
 }
 
 void AppController::CloseImportedArchive(HWND hWnd, AppState& state, UIState& ui) {
@@ -293,7 +295,7 @@ bool AppController::UndoStroke(HWND hWnd, AppState& state, UIState& ui, GpuInk& 
 
     // 戻した瞬間にペンが半紙へ接地したままだと、直後のパケットで墨が落ちてしまう。
     // ペンが紙から離れるまで運筆入力をロックする（全消しと同じ扱い）。
-    ui.suppressPenUntilLift = true;
+    ui.interaction.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
     return true;
 }
@@ -315,7 +317,7 @@ bool AppController::RedoStroke(HWND hWnd, AppState& state, UIState& ui, GpuInk& 
 
     SyncReplayTimeline(hWnd, state, ui);
 
-    ui.suppressPenUntilLift = true;
+    ui.interaction.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
     return true;
 }
@@ -351,7 +353,7 @@ static void RelayoutForPaper(HWND hWnd, AppState& state, UIState& ui, GpuInk& gp
     // 「一画戻す」の控えは元の縦横の寸法で持っているので、呼び出し側で新しい半紙へ回す
     ui.showClearConfirm = false;
     // ペンが接地したままでも、新しい半紙で運筆を始めないようロックする
-    ui.suppressPenUntilLift = true;
+    ui.interaction.suppressPenUntilLift = true;
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -369,10 +371,11 @@ void AppController::SetPaperOnly(HWND hWnd, bool on, AppState& state, UIState& u
         state.replay.state = ReplayState::Paused;
         KillTimer(hWnd, REPLAY_TIMER_ID);
     }
-    state.otehon.isTyping = false;
-    state.otehon.isDraggingOpacity = false;
-    state.brush.isDraggingHardness = false;
-    ui.isDraggingInkAmount = false;
+    ui.interaction.isTyping = false;
+    ui.interaction.isDraggingOpacity = false;
+    ui.interaction.isDraggingHardness = false;
+    ui.interaction.isDraggingInkAmount = false;
+    ui.interaction.isWiping = false;
     ui.hoverPaperOnly = 0;
 
     // 書いていた墨を控える（半紙を作り直すと消えるため）
@@ -424,9 +427,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     // 0. タイトル画面でのクリック / タップ処理
     if (state.currentScreen == AppScreen::Title) {
         if (state.isTransitioning) return true;
-        if (ui.suppressPenUntilLift) return true;
+        if (ui.interaction.suppressPenUntilLift) return true;
 
-        ui.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
+        ui.interaction.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
 
         // 墨染めフェード遷移を開始
         state.isTransitioning = true;
@@ -442,7 +445,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     if (ui.showClearConfirm) {
         // モーダルは半紙の上に重なっている。どのボタンを押した場合でも、
         // モーダルを閉じた直後に接地したままのペンが運筆を始めないようロックする。
-        ui.suppressPenUntilLift = true;
+        ui.interaction.suppressPenUntilLift = true;
         POINT mp = ToClearModalSpace(ui, pt, h);
         if (PtIn(ui.rModalClearBtn, mp)) {
             ClearAllInk(hWnd, state, ui, gpuInk);
@@ -463,7 +466,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
             ui.hoverPaperOnly = 0;
             ui.hoverClearModal = 0;
             ui.showClearConfirm = true;
-            ui.suppressPenUntilLift = true;
+            ui.interaction.suppressPenUntilLift = true;
             InvalidateRect(hWnd, NULL, FALSE);
             return true;
         }
@@ -473,7 +476,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
         }
         if (PtIn(ui.rInkRefillBtn, pt)) {
             RefillByPress(state, ui, penPressure);
-            ui.suppressPenUntilLift = true;
+            ui.interaction.suppressPenUntilLift = true;
             InvalidateRect(hWnd, &ui.rInkRefillBtn, FALSE);
             return true;
         }
@@ -481,8 +484,8 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     }
 
     // 入力欄以外を押したら文字入力を終える
-    if (state.otehon.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
-        state.otehon.isTyping = false;
+    if (ui.interaction.isTyping && !PtIn(ui.rOtehonInputBox, pt)) {
+        ui.interaction.isTyping = false;
         InvalidateRect(hWnd, &ui.rSub, FALSE);
     }
 
@@ -495,7 +498,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
         state.isTransitioning = false;
         state.transitionProgress = 0.0f;
         state.replay.state = ReplayState::Stopped;
-        ui.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
+        ui.interaction.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
         KillTimer(hWnd, REPLAY_TIMER_ID);
         KillTimer(hWnd, TRANSITION_TIMER_ID);
         SetTimer(hWnd, TITLE_ANIM_TIMER_ID, 33, NULL);
@@ -626,7 +629,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                 RECT rSeekHit = ui.rReplaySeekTrack;
                 rSeekHit.top -= 6; rSeekHit.bottom += 6;
                 if (hasRecording && PtIn(rSeekHit, pt)) {
-                    state.replay.isDraggingSeekBar = true;
+                    ui.interaction.isDraggingSeekBar = true;
                     SetCapture(hWnd);
                     double trackW = static_cast<double>(RW(ui.rReplaySeekTrack));
                     double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
@@ -641,7 +644,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                 // 7. 波形グラフのクリック・ドラッグによるシーク
                 const RECT& rPlotHit = ui.rAnalysisGraphPlot;
                 if (hasRecording && PtIn(rPlotHit, pt)) {
-                    state.replay.isDraggingWaveform = true;
+                    ui.interaction.isDraggingWaveform = true;
                     SetCapture(hWnd);
                     double plotW = static_cast<double>(RW(rPlotHit));
                     double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
@@ -659,7 +662,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                     RECT hitBox = ui.rHardnessTrack;
                     hitBox.top -= 6; hitBox.bottom += 6;
                     if (PtIn(hitBox, pt)) {
-                        state.brush.isDraggingHardness = true;
+                        ui.interaction.isDraggingHardness = true;
                         SetCapture(hWnd);
                         double trackW = static_cast<double>(RW(ui.rHardnessTrack));
                         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rHardnessTrack.left) / trackW : 0.2;
@@ -707,18 +710,18 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                 }
             } else if (ui.leftTab == LeftTab::Save) {
                 if (PtIn(ui.rSaveBtnPng, pt)) {
-                    ui.suppressPenUntilLift = true;
+                    ui.interaction.suppressPenUntilLift = true;
                     ExportCanvasWithFeedback(hWnd, gpuInk, ui, false);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnClip, pt)) {
-                    ui.suppressPenUntilLift = true;
+                    ui.interaction.suppressPenUntilLift = true;
                     ExportCanvasWithFeedback(hWnd, gpuInk, ui, true);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnJson, pt)) {
                     // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
-                    ui.suppressPenUntilLift = true;
+                    ui.interaction.suppressPenUntilLift = true;
                     switch (ArchiveDialogs::PromptSaveJson(hWnd, state.trajectory, state.paper.type, state.brush.type, state.brush.hardness)) {
                     case ArchiveDialogs::Result::Saved:
                         ui.SetSaveFeedback(L"✓ 運筆アーカイブ(JSON)を保存しました");
@@ -730,12 +733,12 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                         break;
                     }
                     // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
-                    ui.suppressPenUntilLift = true;
+                    ui.interaction.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 } else if (PtIn(ui.rSaveBtnCsv, pt)) {
                     // ダイアログを開く前と閉じた直後、ペンが離れるまで半紙への運筆をロック
-                    ui.suppressPenUntilLift = true;
+                    ui.interaction.suppressPenUntilLift = true;
                     switch (ArchiveDialogs::PromptSaveCsv(hWnd, state.trajectory)) {
                     case ArchiveDialogs::Result::Saved:
                         ui.SetSaveFeedback(L"✓ 運筆データ(CSV)を出力しました");
@@ -747,7 +750,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                         break;
                     }
                     // ダイアログの「保存」ボタンを押したペンが半紙に接地したまま露出しても描画させない
-                    ui.suppressPenUntilLift = true;
+                    ui.interaction.suppressPenUntilLift = true;
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }
@@ -779,7 +782,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
 
                 // 文字入力欄
                 if (PtIn(ui.rOtehonInputBox, pt)) {
-                    state.otehon.isTyping = true;
+                    ui.interaction.isTyping = true;
                     SetOtehonImePosition(hWnd, ui.rOtehonInputBox);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
@@ -798,7 +801,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                     RECT hitBox = ui.rOtehonOpacityTrack;
                     hitBox.top -= 6; hitBox.bottom += 6;
                     if (PtIn(hitBox, pt)) {
-                        state.otehon.isDraggingOpacity = true;
+                        ui.interaction.isDraggingOpacity = true;
                         SetCapture(hWnd);
                         double trackW = static_cast<double>(RW(ui.rOtehonOpacityTrack));
                         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rOtehonOpacityTrack.left) / trackW : 0.35;
@@ -815,20 +818,20 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     // 4. 右側 硯・墨補充・一画戻す・一画復元・全消し
     if (PtIn(ui.rInkBadge, pt)) {
         // 墨残量ゲージ: 押した位置へ残量を合わせ、離すまで左右の動きに追従させる
-        ui.isDraggingInkAmount = true;
+        ui.interaction.isDraggingInkAmount = true;
         SetCapture(hWnd);
         SetInkAmountFromBadgeX(state, ui, pt.x);
         // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
-        ui.suppressPenUntilLift = true;
+        ui.interaction.suppressPenUntilLift = true;
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     } else if (IsOnInkStoneLand(ui, pt)) {
         // 硯の下の部分は補充ではなく、筆をしごいて墨を落とす。離すまでの動きで減らす
-        ui.isWiping = true;
-        ui.wipeByMouse = (penPressure < 0.0);
-        ui.wipeLastPt = pt;
+        ui.interaction.isWiping = true;
+        ui.interaction.wipeByMouse = (penPressure < 0.0);
+        ui.interaction.wipeLastPt = pt;
         // 押したままのペンがそのまま運筆を始めないよう、離すまでロックする
-        ui.suppressPenUntilLift = true;
+        ui.interaction.suppressPenUntilLift = true;
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     } else if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
@@ -853,30 +856,30 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     return false;
 }
 
-bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state, UIState& ui) {
+bool AppController::OnLButtonUp(HWND hWnd, POINT pt, UIState& ui) {
     bool handled = false;
-    if (state.brush.isDraggingHardness) {
-        state.brush.isDraggingHardness = false;
+    if (ui.interaction.isDraggingHardness) {
+        ui.interaction.isDraggingHardness = false;
         ReleaseCapture();
         handled = true;
     }
-    if (state.otehon.isDraggingOpacity) {
-        state.otehon.isDraggingOpacity = false;
+    if (ui.interaction.isDraggingOpacity) {
+        ui.interaction.isDraggingOpacity = false;
         ReleaseCapture();
         handled = true;
     }
-    if (state.replay.isDraggingSeekBar) {
-        state.replay.isDraggingSeekBar = false;
+    if (ui.interaction.isDraggingSeekBar) {
+        ui.interaction.isDraggingSeekBar = false;
         ReleaseCapture();
         handled = true;
     }
-    if (ui.isDraggingInkAmount) {
-        ui.isDraggingInkAmount = false;
+    if (ui.interaction.isDraggingInkAmount) {
+        ui.interaction.isDraggingInkAmount = false;
         ReleaseCapture();
         handled = true;
     }
-    if (state.replay.isDraggingWaveform) {
-        state.replay.isDraggingWaveform = false;
+    if (ui.interaction.isDraggingWaveform) {
+        ui.interaction.isDraggingWaveform = false;
         ReleaseCapture();
         handled = true;
     }
@@ -884,20 +887,20 @@ bool AppController::OnLButtonUp(HWND hWnd, POINT pt, AppState& state, UIState& u
     // ボタンが離れた＝紙から離れたので運筆ロックを解除（マウス操作時の解除経路）。
     // これがないとホームボタンでタイトルへ戻った後、マウスのクリックが
     // ロックに阻まれてスタジオ画面へ入れなくなる。
-    ui.suppressPenUntilLift = false;
-    ui.isWiping = false;
+    ui.interaction.suppressPenUntilLift = false;
+    ui.interaction.isWiping = false;
     return handled;
 }
 
 void AppController::ReleasePenLock(UIState& ui) {
-    ui.suppressPenUntilLift = false;
+    ui.interaction.suppressPenUntilLift = false;
 }
 
 void AppController::OnPenOutOfRange(UIState& ui) {
     // ペンが圏外へ出た＝紙から離れたので運筆ロックを解除
-    ui.suppressPenUntilLift = false;
-    ui.isPenRefilling = false;
-    ui.isWiping = false;
+    ui.interaction.suppressPenUntilLift = false;
+    ui.interaction.isPenRefilling = false;
+    ui.interaction.isWiping = false;
 }
 
 // 前回の再生タイマ刻。停止中は 0。
@@ -978,7 +981,7 @@ void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, UIState& u
 
     // 文字入力中はショートカット（Esc=全消しの確認 / Ctrl+Z・Ctrl+Y=一画戻す・復元）を止める。
     // Esc と BackSpace は WM_CHAR 側で入力終了・1文字削除として処理する。
-    if (state.otehon.isTyping) return;
+    if (ui.interaction.isTyping) return;
 
     switch (key) {
     case VK_ESCAPE:
@@ -1018,8 +1021,8 @@ void AppController::OnKeyDown(HWND hWnd, WPARAM key, AppState& state, UIState& u
     }
 }
 
-bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {
-    if (!state.otehon.isTyping) return false;
+bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state, UIState& ui) {
+    if (!ui.interaction.isTyping) return false;
 
     switch (ch) {
     case L'\b':
@@ -1028,7 +1031,7 @@ bool AppController::OnChar(HWND hWnd, wchar_t ch, AppState& state) {
     case L'\r':
     case L'\n':
     case 0x1B: // Esc
-        state.otehon.isTyping = false;
+        ui.interaction.isTyping = false;
         break;
     default:
         state.otehon.AppendInputChar(ch);
@@ -1077,7 +1080,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     }
 
     // スライダードラッグ中の更新
-    if (state.brush.isDraggingHardness && (wParam & MK_LBUTTON)) {
+    if (ui.interaction.isDraggingHardness && (wParam & MK_LBUTTON)) {
         double trackW = static_cast<double>(RW(ui.rHardnessTrack));
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rHardnessTrack.left) / trackW : 0.2;
         norm = Clamp(norm, 0.0, 1.0);
@@ -1086,13 +1089,13 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
-    if (ui.isDraggingInkAmount && (wParam & MK_LBUTTON)) {
+    if (ui.interaction.isDraggingInkAmount && (wParam & MK_LBUTTON)) {
         SetInkAmountFromBadgeX(state, ui, pt.x);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
     }
 
-    if (state.otehon.isDraggingOpacity && (wParam & MK_LBUTTON)) {
+    if (ui.interaction.isDraggingOpacity && (wParam & MK_LBUTTON)) {
         double trackW = static_cast<double>(RW(ui.rOtehonOpacityTrack));
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rOtehonOpacityTrack.left) / trackW : 0.35;
         state.otehon.opacity = Clamp(norm, 0.05, 1.0);
@@ -1100,7 +1103,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
-    if (state.replay.isDraggingSeekBar && (wParam & MK_LBUTTON)) {
+    if (ui.interaction.isDraggingSeekBar && (wParam & MK_LBUTTON)) {
         double trackW = static_cast<double>(RW(ui.rReplaySeekTrack));
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rReplaySeekTrack.left) / trackW : 0.0;
         norm = Clamp(norm, 0.0, 1.0);
@@ -1112,7 +1115,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
         return true;
     }
 
-    if (state.replay.isDraggingWaveform && (wParam & MK_LBUTTON)) {
+    if (ui.interaction.isDraggingWaveform && (wParam & MK_LBUTTON)) {
         const RECT& rPlotHit = ui.rAnalysisGraphPlot;
         double plotW = static_cast<double>(RW(rPlotHit));
         double norm = (plotW > 0.0) ? static_cast<double>(pt.x - rPlotHit.left) / plotW : 0.0;
@@ -1126,13 +1129,13 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     }
 
     // マウスで硯の磨り面をしごいている間。筆圧が無いので中くらいの強さとして扱う
-    if (ui.isWiping && ui.wipeByMouse) {
+    if (ui.interaction.isWiping && ui.interaction.wipeByMouse) {
         if (wParam & MK_LBUTTON) {
             if (WipeInkTo(pt, REFILL_FULL_PRESSURE * 0.5, state, ui)) {
                 InvalidateRect(hWnd, &ui.rRight, FALSE);
             }
         } else {
-            ui.isWiping = false;
+            ui.interaction.isWiping = false;
         }
     }
 

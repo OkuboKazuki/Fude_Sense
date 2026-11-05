@@ -15,7 +15,6 @@
 struct BrushModel {
     Brush type = Brush::Medium;
     double hardness = 0.5; // 0.1: 超極軟 ~ 2.0: 非常に硬い
-    bool isDraggingHardness = false;
 
     // 傾き非対応タブレットからの移行にともなう線幅の補正。
     // 旧環境（Wacom One Creative Pen Display）は傾きを返さないので pkOrientation が
@@ -75,12 +74,10 @@ struct OtehonModel {
     bool isVisible = false;
     int selectedIndex = 0; // palette 内の選択位置
     double opacity = 0.35; // 0.05 ～ 1.0
-    bool isDraggingOpacity = false;
 
     // 書きたい文字の入力（IME 変換確定後の文字を WM_CHAR で受け取る）。
     // 入力があればその文字が候補タイルになり、空なら既定の8字に戻る。
     std::wstring inputText;
-    bool isTyping = false;
     std::vector<std::wstring> palette;
 
     // 手本の書体。楷書・教科書体・行書を練習内容で切り替える。

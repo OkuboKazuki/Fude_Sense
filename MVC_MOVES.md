@@ -106,16 +106,36 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 | 関数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `a6d4b27`、`未コミット` |
+| `SetSaveFeedback` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `a6d4b27`、`5482aaa` |
 
 第 3 段階（`173c78a`）: 関数や処理の移動なし。View の関数の引数に `const UIState& ui` を足しました。`AppState` を使わなくなった `CanvasView::DrawBackground`、`CanvasView::RenderInk`、`CanvasView::Draw3DBrushPose`、`ModalView::DrawClearConfirm`、`ModalView::DrawClearConfirmBody` は、引数の `const AppState&` を `const UIState&` に置き換えました。
 
 第 4 段階（`66896c1`）: 関数や処理の移動なし。`AppController` と `StrokeController` の関数の引数に `UIState& ui` を足しました。`AppState` を使わなくなった `AppController::ReleasePenLock`、`AppController::OnPenOutOfRange`、`ExportCanvasWithFeedback` は、引数の `AppState&` を `UIState&` に置き換えました。
 
-第 5 段階（`未コミット`）: 型の定義を移し、`AppState` の `ui` メンバーを削除して、実体をエントリポイントに置きました。
+第 5 段階（`5482aaa`）: 型の定義を移し、`AppState` の `ui` メンバーを削除して、実体をエントリポイントに置きました。
 
 | 型・変数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `UIState` | `Models/AppState.h` | `Views/UIState.h` | `未コミット` |
-| `UIWidget` | `Models/UIComponents.h` | `Views/UIComponents.h` | `未コミット` |
-| `UIState` の実体 | `Models/AppState.h` の `AppState::ui` | `WacomMT_Scribble.cpp` の `g_uiState` | `未コミット` |
+| `UIState` | `Models/AppState.h` | `Views/UIState.h` | `5482aaa` |
+| `UIWidget` | `Models/UIComponents.h` | `Views/UIComponents.h` | `5482aaa` |
+| `UIState` の実体 | `Models/AppState.h` の `AppState::ui` | `WacomMT_Scribble.cpp` の `g_uiState` | `5482aaa` |
+
+## M6. 操作の状態をまとめる
+
+`Views/UIState.h` に `InteractionState` を作り、`UIState` の `interaction` メンバーにしました。`AppController::OnChar` の引数に `UIState& ui` を足し、`AppState` を使わなくなった `AppController::OnLButtonUp` の引数から `AppState&` を削除しました。`LayoutPaperOnly` にあった `isDraggingInkAmount` の解除は、`SetPaperOnly` に同じ解除があるので削除しました。
+
+| 変数・処理 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| `isDraggingHardness` | `Models/AppState.h`（`BrushModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isDraggingOpacity` | `Models/AppState.h`（`OtehonModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isTyping` | `Models/AppState.h`（`OtehonModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isDraggingSeekBar` | `Models/TrajectoryModel.h`（`ReplayModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isDraggingWaveform` | `Models/TrajectoryModel.h`（`ReplayModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `suppressPenUntilLift` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isPenRefilling` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isDraggingInkAmount` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `isWiping` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `wipeByMouse` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| `wipeLastPt` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
+| シークバーと波形のドラッグの解除 | `Models/TrajectoryModel.h` の `ReplayModel::Reset` | `Controllers/AppController.cpp` の `ClearAllInk` | `未コミット` |
+| しごきの解除 | `Views/ScreenLayout.cpp` の `LayoutPaperOnly` | `Controllers/AppController.cpp` の `SetPaperOnly` | `未コミット` |

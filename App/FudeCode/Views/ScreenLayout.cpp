@@ -138,8 +138,6 @@ void LayoutPaperOnly(UIState& ui, const PaperModel& paper, int w, int h) {
     ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
     ui.rInkStoneLarge = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = ui.rPaperOnlyBtn = kNone;
     ui.rInkBadge = ui.rInkPool = ui.rInkLand = kNone;
-    ui.isDraggingInkAmount = false;
-    ui.isWiping = false;
     // 全消し確認モーダル（Esc・筆跡を消すボタンで出す）は倒した向きで読めるよう、幅と高さを入れ替えて組む
     LayoutClearModal(ui, h, w);
     ui.rCanvasArea = { 0, 0, w, h };

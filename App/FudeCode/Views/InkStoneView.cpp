@@ -78,7 +78,7 @@ void InkStoneView::Draw(HDC dc, const AppState& state, const UIState& ui) {
     // バッジは残量を手で動かすゲージを兼ねる。つかめることが分かるよう、乗せたときと動かしている間は縁を明るくする
     const RECT& rBadge = ui.rInkBadge;
     int badgeH = RH(rBadge);
-    bool badgeActive = (ui.hoverInkStone == 7) || ui.isDraggingInkAmount;
+    bool badgeActive = (ui.hoverInkStone == 7) || ui.interaction.isDraggingInkAmount;
     if (badgeActive) badgeBorder = isLow ? RGB(255, 140, 140) : RGB(85, 145, 235);
 
     Box(dc, rBadge, badgeBg, badgeBorder, 1, badgeH / 2);
@@ -112,7 +112,7 @@ void InkStoneView::Draw(HDC dc, const AppState& state, const UIState& ui) {
     bool hoverStone = (ui.hoverInkStone == 1);
     // 上の墨溜まりは墨を含ませる所、下の磨り面は筆をしごいて墨を整える所。
     // 操作が違うので、ペンが乗っている側（しごいている間は磨り面）の枠だけを明るくして区別する。
-    bool landActive = (ui.hoverInkStone == 8) || ui.isWiping;
+    bool landActive = (ui.hoverInkStone == 8) || ui.interaction.isWiping;
     COLORREF stoneBorder = (hoverStone || landActive) ? RGB(75, 130, 210) : RGB(48, 52, 62);
     Box(dc, ui.rInkStoneLarge, RGB(26, 28, 34), stoneBorder, 1, 8);
 

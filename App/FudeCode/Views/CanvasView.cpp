@@ -821,7 +821,7 @@ void CanvasView::DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state,
         // 1. 再生済みの墨（時系列アニメーション）
         int canvasW = 0, canvasH = 0;
         state.paper.GetCanvasSize(canvasW, canvasH);
-        bool scrubbing = (state.replay.isDraggingSeekBar || state.replay.isDraggingWaveform);
+        bool scrubbing = (ui.interaction.isDraggingSeekBar || ui.interaction.isDraggingWaveform);
         if (g_replayInk.Update(session, state.replay.currentTimeMs, canvasW, canvasH, pw, ph, scrubbing)) {
             g_replayInk.Render(dc, rPaper.left, rPaper.top, pw, ph);
         }

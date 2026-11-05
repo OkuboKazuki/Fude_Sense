@@ -9,13 +9,8 @@
 #include "AppEnums.h"
 #include "UIComponents.h"
 
-// UI・レイアウト状態
-struct UIState {
-    LeftTab leftTab = LeftTab::Brush;
-    bool isSubPanelOpen = true;
-    bool showClearConfirm = false;
-    int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
-
+// 操作の状態。押してから離すまでのドラッグや入力中など、今進行している操作を表す。
+struct InteractionState {
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
     // 全消しモーダル等のボタンは半紙の上に重なるため、押した直後にペンが
     // 紙へ触れたままだと、そのまま墨が落ちてしまう。ペンが紙から離れる
@@ -33,6 +28,25 @@ struct UIState {
     bool isWiping = false;
     bool wipeByMouse = false;
     POINT wipeLastPt{};
+
+    // スライダーやシークバー、波形をつかんでいる最中
+    bool isDraggingHardness = false;
+    bool isDraggingOpacity = false;
+    bool isDraggingSeekBar = false;
+    bool isDraggingWaveform = false;
+
+    // お手本の入力欄で文字を入力している最中
+    bool isTyping = false;
+};
+
+// UI・レイアウト状態
+struct UIState {
+    LeftTab leftTab = LeftTab::Brush;
+    bool isSubPanelOpen = true;
+    bool showClearConfirm = false;
+    int hoverClearModal = 0; // 1: すべて消す, 2: キャンセル
+
+    InteractionState interaction;
 
     // 紙だけ表示。左メニューと硯パネルを畳み、横向きの半紙を画面いっぱいに出す。
     // 硯が無いので、墨の補充は半紙の右のボタンから行う。

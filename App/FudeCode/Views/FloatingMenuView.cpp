@@ -42,7 +42,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state, const UIState& ui)
         Fill(dc, rLevel, RGB(70, 130, 210));
 
         RECT thumb = { thumbX - 7, ui.rHardnessTrack.top - 6, thumbX + 7, ui.rHardnessTrack.bottom + 6 };
-        Box(dc, thumb, state.brush.isDraggingHardness ? RGB(190, 220, 255) : RGB(145, 190, 245), RGB(230, 242, 255), 1, 4);
+        Box(dc, thumb, ui.interaction.isDraggingHardness ? RGB(190, 220, 255) : RGB(145, 190, 245), RGB(230, 242, 255), 1, 4);
 
         HFONT fSub = CreateCustomFont(15, FW_NORMAL);
         RECT rMinLab = { ui.rHardnessTrack.left, ui.rHardnessTrack.bottom + 6, ui.rHardnessTrack.left + 100, ui.rHardnessTrack.bottom + 26 };
@@ -210,7 +210,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state, const UIState& ui)
         DeleteObject(foh);
 
         // 文字入力欄。入力中は枠を強調し、末尾にキャレットを描く
-        bool typing = state.otehon.isTyping;
+        bool typing = ui.interaction.isTyping;
         bool hovInput = (ui.hoverSub == 73);
         Box(dc, ui.rOtehonInputBox, RGB(22, 24, 29),
             typing ? RGB(90, 155, 235) : (hovInput ? RGB(66, 72, 86) : RGB(50, 55, 68)), typing ? 2 : 1, 6);
@@ -272,7 +272,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state, const UIState& ui)
         Fill(dc, rLevel, RGB(70, 130, 210));
 
         RECT thumb = { thumbX - 7, ui.rOtehonOpacityTrack.top - 6, thumbX + 7, ui.rOtehonOpacityTrack.bottom + 6 };
-        Box(dc, thumb, state.otehon.isDraggingOpacity ? RGB(190, 220, 255) : RGB(145, 190, 245), RGB(230, 242, 255), 1, 4);
+        Box(dc, thumb, ui.interaction.isDraggingOpacity ? RGB(190, 220, 255) : RGB(145, 190, 245), RGB(230, 242, 255), 1, 4);
     }
 }
 

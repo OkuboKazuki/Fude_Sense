@@ -259,7 +259,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// お手本の文字入力（IME 変換確定後の文字がここへ届く）。
 		// タイトル画面では入力欄が見えないので受け付けない。
 		if (!IsStudioAcceptingKeys()) break;
-		AppController::OnChar(hWnd, (wchar_t)wParam, g_appState);
+		AppController::OnChar(hWnd, (wchar_t)wParam, g_appState, g_uiState);
 		break;
 	}
 
@@ -382,7 +382,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_LBUTTONUP:
 	{
 		POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-		AppController::OnLButtonUp(hWnd, pt, g_appState, g_uiState);
+		AppController::OnLButtonUp(hWnd, pt, g_uiState);
 
 		if (s_isMouseDrawing)
 		{
@@ -427,7 +427,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			if (penEvent.pressure > 0.0 && g_appState.currentScreen == AppScreen::Title)
 			{
-				if (!g_uiState.suppressPenUntilLift)
+				if (!g_uiState.interaction.suppressPenUntilLift)
 				{
 					POINT pt = { penEvent.x, penEvent.y };
 					AppController::OnLButtonDown(hWnd, pt, g_appState, g_uiState, g_gpuInk);

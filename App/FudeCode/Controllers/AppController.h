@@ -15,7 +15,7 @@ public:
     // penPressure: ペンで押したときの筆圧 (0.0 ~ 1.0)。マウスなど筆圧の無い入力は負値。
     // 硯・「墨を補充」はこの筆圧で補充量を変える。
     static bool OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState& ui, GpuInk& gpuInk, double penPressure = -1.0);
-    static bool OnLButtonUp(HWND hWnd, POINT pt, AppState& state, UIState& ui);
+    static bool OnLButtonUp(HWND hWnd, POINT pt, UIState& ui);
     static bool OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& state, UIState& ui);
     // タイマの処理（タイトルからの遷移、タイトルのアニメーション、運筆の再生）
     static void OnTimer(HWND hWnd, WPARAM timerId, AppState& state, UIState& ui);
@@ -29,7 +29,7 @@ public:
     static bool OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state, const UIState& ui);
     // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。
     // 入力中なら true を返し、呼び出し側は他のキー処理を行わない。
-    static bool OnChar(HWND hWnd, wchar_t ch, AppState& state);
+    static bool OnChar(HWND hWnd, wchar_t ch, AppState& state, UIState& ui);
     static void OnSize(HWND hWnd, int width, int height, AppState& state, UIState& ui, GpuInk& gpuInk);
     static void ClearAllInk(HWND hWnd, AppState& state, UIState& ui, GpuInk& gpuInk);
     // 磨り面でしごいている筆を pt まで動かし、その分の墨を落とす。残量が変わったら true。

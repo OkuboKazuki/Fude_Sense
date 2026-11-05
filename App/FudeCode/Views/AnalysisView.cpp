@@ -123,7 +123,7 @@ void AnalysisView::DrawReplayControls(HDC dc, const RECT& rBox, const AppState& 
 
     // シークバーのツマミ (Thumb)
     const RECT& rThumb = ui.rReplaySeekThumb;
-    bool isThumbActive = hasRecording && (ui.hoverReplayBtn == 8 || rep.isDraggingSeekBar);
+    bool isThumbActive = hasRecording && (ui.hoverReplayBtn == 8 || ui.interaction.isDraggingSeekBar);
     COLORREF thumbColor = !hasRecording ? RGB(56, 61, 74) : (isThumbActive ? RGB(255, 230, 100) : RGB(230, 240, 255));
     COLORREF thumbBorder = !hasRecording ? DIS_BORDER : (isThumbActive ? RGB(255, 255, 255) : RGB(80, 160, 240));
     Box(dc, rThumb, thumbColor, thumbBorder, 2, 4);
