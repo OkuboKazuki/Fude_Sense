@@ -88,7 +88,7 @@ graph TD
     - `Alt + /` / `Alt + ?`: バージョン情報ダイアログ（About）。
   - **入力保護 ([`IsStudioAcceptingKeys`](../App/FudeCode/WacomMT_Scribble.cpp#L82))**:
     - タイトル画面および画面遷移中は、F11 以外のすべてのショートカットを遮断し、裏でスタジオ状態が変わることを防止。
-    - お手本文字の入力中（`otehon.isTyping`）は、`F11` と `F9` 以外のショートカットを `AppController::OnKeyDown` で一時遮断。
+    - お手本文字の入力中（`ui.interaction.isTyping`）は、`F11` と `F9` 以外のショートカットを `AppController::OnKeyDown` で一時遮断。
 - **入力 (Input)**:
   - Windows メッセージ（`HWND`, `UINT message`, `WPARAM wParam`, `LPARAM lParam`）
 - **出力 (Output)**:
@@ -96,7 +96,7 @@ graph TD
 - **使用されている定数の名前 (Constants used)**:
   - ウィンドウタイトル: `szTitle = L"Fude Sense"`
   - ウィンドウクラス名: `szWindowClass = L"FUDESENSE"`
-  - `REPLAY_TIMER_ID`: リプレイ進行用タイマ識別子 (`101`)。終了時に止めます。
+  - `REPLAY_TIMER_ID`: リプレイ進行用タイマ識別子 (`101`)。終了時に止めます。タイマの ID は [`AppController.h`](../App/FudeCode/Controllers/AppController.h) で定義しています。
   - `TITLE_ANIM_TIMER_ID`: タイトルブレス用タイマ識別子 (`103`)。起動時に開始します。
 
 ---

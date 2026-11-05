@@ -107,7 +107,7 @@ graph TD
 ### ③ [状態・データモデルレイヤー (Models)](models.md)
 - **役割**: アプリケーションが保持するすべてのデータ、設定値、履歴、時系列アーカイブを管理します。
 - **特徴**: 
-  - 統合ファサード [`AppState`](../App/FudeCode/Models/AppState.h) により、画面の種類と遷移、筆・紙・お手本・墨残量を一元管理。
+  - 統合ファサード [`AppState`](../App/FudeCode/Models/AppState.h) により、筆・紙・お手本・墨残量を一元管理。
   - 運筆の全サンプリング点を保持する時系列アーカイブ [`TrajectorySession`](../App/FudeCode/Models/TrajectoryModel.h)（JSON/CSVエクスポート・インポート対応、リビジョン整合性管理）。
   - 破壊的墨汁描画に対応した RLE 圧縮履歴 [`UndoHistory`](../App/FudeCode/Models/UndoHistory.h)（メモリ上限384MB、紙を大きくする表示の出入り時における90度回転追従保持、終筆保護同期）。
 
@@ -122,7 +122,7 @@ graph TD
   - タイトル画面の WIC ロゴ表示とブレスアニメーション（[`TitleView`](../App/FudeCode/Views/TitleView.h)）。
   - 和紙の質感、薄墨お手本、下敷き升目格子、`SRCAND` 墨汁合成、3D筆姿勢モニタ、運筆リプレイ時の淡墨ゴーストおよび朱色芯線軌跡描画（[`CanvasView`](../App/FudeCode/Views/CanvasView.h)）。
   - 文机背景、開閉式フローティングパネル、動的スケール硯パネル、リアルタイム運筆解析グラフ、全消し確認モーダル（回転描画対応）。
-  - ホバーやボタンの矩形、モーダルの開閉などの画面の状態を持つ [`UIState`](../App/FudeCode/Views/UIState.h)。Model には含めず、エントリポイントから View と Controller へ引数で渡します。
+  - 画面の種類と遷移、ホバーやボタンの矩形、モーダルの開閉、操作の状態などを持つ [`UIState`](../App/FudeCode/Views/UIState.h)。Model には含めず、エントリポイントから View と Controller へ引数で渡します。
 
 ### ⑥ [基盤サービス & アプリケーションエントリ (Services & Entry)](services_and_entry.md)
 - **役割**: Windows OS との対話、ウィンドウ生成、メッセージループのハンドリング、Wintab デバイスコンテキストの動的ロード・管理、作品画像の高画質エクスポート（WIC PNG / BMP）およびクリップボード連携（`CF_BITMAP`）を担当します。

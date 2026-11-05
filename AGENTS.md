@@ -39,7 +39,7 @@
 ### 状態管理のファサード設計 (AppState)
 - `AppState` は、Models (筆・紙・お手本・物理パラメータ), Controllers (運筆・UI制御), Views (各UIパネル) の間を仲介する統合ファサード（Facade）として設計されています。
 - サブシステム間の疎結合を保ちつつ、運筆中の瞬時なパラメータ参照（筆圧、硬さ補正、インク消費量）をキャッシュミスなく O(1) で高速アクセス可能にしています。
-- ホバーやボタンの矩形、モーダルの開閉などの画面の状態は `AppState` に含めず、`Views/UIState.h` の `UIState` に持ちます。実体は `WacomMT_Scribble.cpp` の `g_uiState` で、View と Controller へ引数で渡します。
+- 画面の種類と遷移、ホバーやボタンの矩形、モーダルの開閉、操作の状態などの画面の状態は `AppState` に含めず、`Views/UIState.h` の `UIState` に持ちます。実体は `WacomMT_Scribble.cpp` の `g_uiState` で、View と Controller へ引数で渡します。
 
 ```text
 App/FudeCode/

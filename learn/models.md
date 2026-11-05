@@ -11,9 +11,6 @@
 ```mermaid
 classDiagram
     class AppState {
-        +AppScreen currentScreen
-        +bool isTransitioning
-        +float transitionProgress
         +BrushModel brush
         +PaperModel paper
         +OtehonModel otehon
@@ -30,7 +27,8 @@ classDiagram
     class BrushModel {
         +Brush type
         +double hardness
-        +bool isDraggingHardness
+        +SetHardnessFromRatio(ratio)
+        +GetHardnessRatio() double
         +GetBaseMaxWidth() double
     }
 
@@ -40,6 +38,7 @@ classDiagram
         +GridColorTheme gridColor
         +GetAspectRatio(outW, outH)
         +GetCanvasSize(outW, outH)
+        +GetGridDivision(cols, rows)
     }
 
     class OtehonModel {
@@ -47,13 +46,14 @@ classDiagram
         +int selectedIndex
         +double opacity
         +wstring inputText
-        +bool isTyping
         +vector~wstring~ palette
         +OtehonFontStyle fontStyle
         +wstring cellText[8]
         +PlaceAtCell(int cellIndex, wstring text)
         +RebuildPalette()
         +AppendInputChar(wchar_t ch)
+        +SetOpacityFromRatio(ratio)
+        +GetOpacityRatio() double
     }
 
     class TrajectorySession {
@@ -107,17 +107,11 @@ classDiagram
   - `GridPattern`: 下敷き升目格子（`None`: なし, `Cross1`: 1字十字, `Div2`: 2文字上下2段, `Grid4`: 4文字田の字, `Grid6`: 6文字2x3, `Grid8`: 8文字2x4）
   - `OtehonFontStyle`: お手本の書体（`Seikaisho`: 毛筆楷書, `Kyokasho`: 教科書体, `Gyosho`: 行書）
   - `GridColorTheme`: 罫線配色（`RedLine`: 朱赤線 `RGB(235, 85, 85)`, `WhiteLine`: 高級毛氈白線 `RGB(240, 244, 252)`, `InkGray`: 薄墨点線 `RGB(150, 155, 168)`）
-  - `AppScreen`: 画面状態（`Title`: タイトル・モード選択画面, `Studio`: 習字制作ワークスペース）
-  - `TbButton`: ナビゲーションボタン（`None`, `Home`, `NavToggle`, `Brush`, `Paper`, `Analysis`, `Save`, `Otehon`, `InkRefill`, `ClearAll`）
-  - `LeftTab`: 左側パネルタブ（`Brush`, `Paper`, `Analysis`, `Save`, `Otehon`）
 - **使用されている定数の名前 (Constants used)**:
   - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
   - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
   - `INK_MAX_VALUE`: 墨残量の最大値 (`1.0`)。
   - `MAX_GRID_CELLS`: 升目セル配列の上限 (`8`)。
-  - `REPLAY_TIMER_ID`: リプレイ再生用タイマ ID (`101`)。
-  - `TRANSITION_TIMER_ID`: タイトル→スタジオ画面遷移タイマ ID (`102`)。
-  - `TITLE_ANIM_TIMER_ID`: タイトル画面ブレスアニメーション用タイマ ID (`103`)。
 
 ---
 
@@ -125,7 +119,8 @@ classDiagram
 
 - **責務 (Responsibility)**:
   - システム全体の中心となる状態ファサードクラス `AppState`、および筆・紙・お手本のサブモデルを定義・管理します。画面の状態（`UIState`）は持ちません。[Views レイヤー](views.md) を参照してください。
-  - **画面状態とアニメーション遷移**: 起動時のタイトル画面（`AppScreen::Title`）から制作画面（`AppScreen::Studio`）への滑らかなアルファブレンド遷移（`transitionProgress`, `transitionDurationMs = 400`）の状態を保持します。
+  - **設定値の範囲と変換**: 筆の硬さとお手本の透過度の範囲を定数で持ち、スライダーの割合との変換（`SetHardnessFromRatio`, `GetHardnessRatio`, `SetOpacityFromRatio`, `GetOpacityRatio`）を行います。透過度は割合がそのまま値になり、下限より薄くはなりません。
+  - **升目の分割数 (`GetGridDivision`)**: 下敷きのパターンから列数と行数を求めます。
   - **お手本パレット管理**: IME入力された文字列からサロゲートペアを考慮して1文字単位の候補タイル（`palette`）を再構築し、升目ミニマップからの配置（`PlaceAtCell`）を管理します（同じ字が置かれているマスを再指定すると消去するトグル動作）。
   - **他者アーカイブの解析サポート**: `importedTrajectory`, `viewingImport`, `importedName` を保持し、`AnalysisSession()` ゲッターにより自分の運筆と読み込んだアーカイブを透過的に切り替えます。
 - **入力 (Input)**:
@@ -133,6 +128,8 @@ classDiagram
 - **出力 (Output)**:
   - 各種モデルの現在値
 - **使用されている定数の名前 (Constants used)**:
+  - `HARDNESS_MIN`, `HARDNESS_MAX`: 筆の硬さの範囲 (`0.1`, `2.0`)。
+  - `OPACITY_MIN`, `OPACITY_MAX`: お手本の透過度の範囲 (`0.05`, `1.0`)。
   - `TILT_WIDTH_COMPENSATION`: ペン仰角の違いによる線幅変化を旧環境の手応えに合わせる補正係数 (`1.20`)。
   - `BASE_LONG_EDGE`: キャンバスの内部固定論理解像度の長辺基準 (`1200`px)。
   - `OTEHON_PALETTE_MAX`: お手本候補タイルの上限数 (`8`)。
@@ -182,7 +179,7 @@ classDiagram
 ### 2.5 [MathUtils.h](../App/FudeCode/Models/MathUtils.h)
 
 - **責務 (Responsibility)**:
-  - 描画に依存しない計算の共通関数を提供します。`Models/` と `Services/` はこのヘッダーを直接使うので、`Views/RenderUtils.h` へ依存しません。
+  - 描画に依存しない計算の共通関数を提供します。`Models/`、`Controllers/`、[`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) はこのヘッダーを直接使うので、`Views/RenderUtils.h` へ依存しません。
 - **入力 (Input)**:
   - `Clamp(v, lo, hi)`: 範囲を制限する値と上下限
   - `RW(r)`, `RH(r)`: 矩形

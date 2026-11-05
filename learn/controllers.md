@@ -24,7 +24,6 @@ graph TD
         InkMod["墨・水分モデル (InkModel)"]
         Traj["運筆アーカイブ (TrajectorySession)"]
         Undo["一画戻す/復元 (UndoHistory)"]
-        Screen["画面状態 (AppScreen)"]
     end
 
     subgraph EngineLayer ["InkEngine レイヤー"]
@@ -40,6 +39,7 @@ graph TD
         SL["ScreenLayout (レイアウト計算)"]
         CV["CanvasView (作品画像の合成)"]
         UI["UI状態・配置 (UIState)"]
+        Screen["画面の種類と遷移 (UIState)"]
     end
 
     subgraph OSLayer ["OS / Win32"]
@@ -76,14 +76,14 @@ graph TD
 - **責務 (Responsibility)**:
   - デバイス非依存の [`PenInputEvent`](../App/FudeCode/Inputs/PenInputEvent.h) を受け取り、書道特有の運筆力学計算を実行します。
   - **運筆可否判定 (`canDrawInk`)**:
-    - スタジオ画面（`AppScreen::Studio`）かつ親ウィンドウが有効で、遷移中・全消しモーダル中でなく、半紙領域内かつ開いたサブパネルに重なっていない場合にのみ描画を許可します。
+    - スタジオ画面（`ui.currentScreen == AppScreen::Studio`）かつ親ウィンドウが有効で、遷移中・全消しモーダル中でなく、半紙領域内かつ開いたサブパネルに重なっていない場合にのみ描画を許可します。
     - 解析タブ表示中はリプレイ墨が半紙へ描画されるため、通常運筆の透過・記録ずれを防ぐため運筆を受け付けません（「紙を大きくする」表示中は解析パネルが無いため受け付けます）。
-  - **誤運筆ロックの保護 (`suppressPenUntilLift`)**:
+  - **誤運筆ロックの保護 (`ui.interaction.suppressPenUntilLift`)**:
     - 全消しモーダルや全消しボタン等の操作直後、ペンが接地したままの場合にペンが一度離れるまで運筆を遮断します。
     - 保存・読み込みダイアログの表示中（親ウィンドウが無効の間）は運筆を破棄し、閉じた後もペンが離れるまでロックします。
   - **硯の補充としごき**:
-    - `isPenRefilling` の間は `InkModel::PressRefill` で筆圧に応じて墨を継ぎ足します。
-    - ペンで磨り面をしごいている間（`isWiping`）は [`AppController::WipeInkTo`](../App/FudeCode/Controllers/AppController.h) で墨を落とします。
+    - `ui.interaction.isPenRefilling` の間は `InkModel::PressRefill` で筆圧に応じて墨を継ぎ足します。
+    - ペンで磨り面をしごいている間（`ui.interaction.isWiping`）は [`AppController::WipeInkTo`](../App/FudeCode/Controllers/AppController.h) で墨を落とします。
   - **筆圧平滑化**:
     - 加圧時は `0.35`、抜圧時は `0.60` の係数でスムージングし、滑らかさと抜けの良さを両立。
   - **量子化ノイズと角度ジッターの平滑化**:
@@ -104,7 +104,7 @@ graph TD
     - 画の開始時に [`AppController::PushUndoBeforeStroke`](../App/FudeCode/Controllers/AppController.h) を実行。
     - [`GpuInk::DrawSegmentLinear`](../App/FudeCode/InkEngine/GpuInk.h) へ線分を投入。
     - 再描画要求（`InvalidateRect`）の頻度を約120Hz（`kMinInvalidateIntervalMs = 8`ms間隔）にレート制御し、過剰な描画呼び出しを抑制。
-    - 硯パネル（液面・残量テキスト）の再描画は約30Hz（33ms間隔）で同期。
+    - 硯パネル（液面・残量テキスト）の再描画は約30Hz（33ms間隔）で同期。範囲は `ScreenLayout` が計算した `ui.rInkStoneRepaint` を使います。
 - **入力 (Input)**:
   - `HWND hWnd`: 描画先メインウィンドウ
   - `const PenInputEvent& event`: 正規化されたペン入力情報
@@ -131,23 +131,23 @@ graph TD
   - マウスクリック、ドラッグ、キー入力、タイマ、カーソル形状、ウィンドウサイズ変更など、UI全般のイベントをハンドリングします。
   - **レイアウトの再計算**: ウィンドウサイズの変更やタブの切り替えなどで [`ScreenLayout::Layout`](../App/FudeCode/Views/ScreenLayout.h) を、再生位置の変更で `ScreenLayout::UpdateReplaySeekThumb` を呼びます。
   - **画面遷移制御**:
-    - タイトル画面でのタップ/クリック検知によりスタジオ画面への遷移アニメーション（`isTransitioning = true`）を開始。
+    - タイトル画面でのタップ/クリック検知によりスタジオ画面への遷移アニメーション（`ui.isTransitioning = true`）を開始。
     - 左上ホームボタン押下によるタイトル画面への復帰（読み込んだ記録を表示中なら閉じます）。
     - `OnTimer`: 遷移アニメーションの進行、タイトルのブレスアニメーションの更新、運筆リプレイの時刻の進行。
   - **UIインタラクション**:
-    - 左側フローティングパネルの開閉、筆の硬さスライダー調整、半紙選択、升目選択、カラーテーマ、保存ボタン群。
+    - 左側フローティングパネルの開閉、筆の硬さスライダー調整（値への変換は `BrushModel::SetHardnessFromRatio`）、半紙選択、升目選択、カラーテーマ、保存ボタン群。
     - **タブ切り替え (`SelectTab`)**: 筆・紙・解析・保存・お手本を切り替えます。解析以外へ移るときは読み込んだ記録を閉じ、解析へ移るときは再生位置を先頭（0ms）にして一時停止にします。
-    - **ショートカットキー (`OnKeyDown`)**: `F9`、`Esc`、`Ctrl+Z`、`Ctrl+Shift+Z`、`Ctrl+Y` を処理します。文字入力中（`otehon.isTyping`）は `F9` 以外を止めます。
+    - **ショートカットキー (`OnKeyDown`)**: `F9`、`Esc`、`Ctrl+Z`、`Ctrl+Shift+Z`、`Ctrl+Y` を処理します。文字入力中（`ui.interaction.isTyping`）は `F9` 以外を止めます。
     - **カーソル形状 (`OnSetCursor`)**: 半紙の上は十字、お手本の入力欄は I ビーム、それ以外は矢印にします。
     - **作品の書き出しと結果の通知 (`ExportCanvasWithFeedback`)**: 半紙の大きさが 0 のときは何もしません。[`CanvasView::ComposeArtwork`](../App/FudeCode/Views/CanvasView.h) で合成した作品画像を [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) へ渡し、返った `ImageExportResult` に応じて `UIState::SetSaveFeedback` でメッセージを設定します。作品画像を作れなかったときも失敗として知らせます。クリップボードへ渡せたときを除いて、作品画像はここで破棄します。
     - 運筆アーカイブの保存と読み込みは [`ArchiveDialogs`](../App/FudeCode/Services/ArchiveDialogs.h) を呼び、取り消しでは何も表示せず、失敗のときだけ知らせます。
     - 全消し確認モーダルの判定では、紙だけ表示の倒した向きへ点を移します（`ToClearModalSpace`）。
     - お手本文字の配置・消去（トグル動作）、書体変更。
-    - **IME 変換ウィンドウ追従 (`SetOtehonImePosition`)**: お手本入力欄の位置へ IME 変換候補ウィンドウを配置（`ImmSetCompositionWindow`）。
+    - **IME 変換ウィンドウ追従 (`SetOtehonImePosition`)**: `ScreenLayout` が計算した `ui.otehonImePos` へ IME 変換候補ウィンドウを配置（`ImmSetCompositionWindow`）。
     - 硯パネルでの墨補充（`RefillByPress`: ペンの筆圧に応じた補充量、マウス時は満タン）。硯の下の部分は補充に使わず、`IsOnInkStoneLand` で判定します。
     - **硯のしごき (`WipeInkTo`)**: 硯の下の部分を押してから離すまで、動かした長さと筆圧に応じて墨を落とします。長さは硯の幅を単位とし、下の部分を通っている間だけ数えます。マウスは筆圧が無いので `REFILL_FULL_PRESSURE * 0.5` の強さとして扱います。
     - **墨残量ゲージ (`SetInkAmountFromBadgeX`)**: 硯の上のゲージを押した位置へ残量を合わせ、離すまで左右の動きに追従させます。
-    - **入力ロックの解除 (`ReleasePenLock`, `OnPenOutOfRange`, `OnLButtonUp`)**: `suppressPenUntilLift` などのフラグを、新しい押下、ペンの接地解除、ボタンの解放、ペンの圏外で解除します。呼び出す時機は [`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) が決めます。
+    - **入力ロックの解除 (`ReleasePenLock`, `OnPenOutOfRange`, `OnLButtonUp`)**: `ui.interaction.suppressPenUntilLift` などのフラグを、新しい押下、ペンの接地解除、ボタンの解放、ペンの圏外で解除します。呼び出す時機は [`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) が決めます。
   - **一画戻す (Undo) / 一画復元 (Redo)**:
     - [`UndoHistory`](../App/FudeCode/Models/UndoHistory.h) を操作し、墨テクスチャ・墨残量・運筆時系列データを過去の状態へ安全に巻き戻し/復元。
     - 墨の控えの取得（`CaptureInkForUndo`）と書き戻し（`GpuInk::RestoreSnapshot`）は本クラスで行い、そのあと `CommitUndo` / `CommitRedo` で履歴を更新します。書き戻せないときとメモリが足りないときは履歴を消します。
@@ -158,9 +158,10 @@ graph TD
     - `CloseImportedArchive`: 読み込んだ記録を閉じ、自分の運筆記録の解析へ復帰。
   - **紙を大きくする（横向き）表示の切り替え (`SetPaperOnly`)**:
     - 半紙の縦横回転、書いた墨と運筆記録の90度回転引き継ぎ、升目ジオメトリの再配置。
+    - 文字入力、スライダーと墨残量ゲージのドラッグ、硯のしごきの状態を解除します。
     - `UndoHistory::RotateQuarter` へ `GpuInk::RotateSnapshot` を呼ぶ関数を渡し、Undo 履歴の墨スナップショットおよび復元用ストロークも90度回転させて保持。
   - **全消し (`ClearAllInk`)**:
-    - 墨・運筆アーカイブ・Undo履歴・リプレイをリセットし、読み込んだ記録も閉じて筆タブへ移動します。消去直後の誤運筆を防ぐため `suppressPenUntilLift` を設定。
+    - 墨・運筆アーカイブ・Undo履歴・リプレイをリセットし、読み込んだ記録も閉じて筆タブへ移動します。シークバーと波形のドラッグの状態も解除します。消去直後の誤運筆を防ぐため `ui.interaction.suppressPenUntilLift` を設定。
 - **入力 (Input)**:
   - `HWND hWnd`: ウィンドウハンドル
   - `POINT pt`: マウスクリック・移動座標
@@ -169,7 +170,7 @@ graph TD
   - `wchar_t ch`: WM_CHAR で受け取る入力文字（IME確定文字）
   - `int width, int height`: クライアント領域の幅と高さ
   - `AppState& state`: 状態モデル
-  - `UIState& ui`: 画面の状態と各要素の配置（`ReleasePenLock`、`OnPenOutOfRange` はこれだけを受け取ります）
+  - `UIState& ui`: 画面の状態と各要素の配置（`OnLButtonUp`、`OnSetCursor`、`ReleasePenLock`、`OnPenOutOfRange` は `AppState` を受け取りません）
   - `GpuInk& gpuInk`: 墨描画エンジン
 - **出力 (Output)**:
   - 戻り値 `bool`: 各操作がUIによって消費されたか（運筆等への透過を防ぐフラグ）
@@ -177,7 +178,7 @@ graph TD
   - `InvalidateRect(hWnd, NULL, FALSE)`: UI変更に伴う画面全体の再描画要求
 - **使用されている定数の名前 (Constants used)**:
   - `LeftTab`: 各タブ識別列挙子。
-  - `REPLAY_TIMER_ID`: 運筆リプレイ再生用の Win32 タイマ ID (`101`)。
+  - `REPLAY_TIMER_ID`: 運筆リプレイ再生用の Win32 タイマ ID (`101`)。タイマの ID は `AppController.h` で定義しています。
   - `TRANSITION_TIMER_ID`: タイトル→スタジオ画面遷移用の Win32 タイマ ID (`102`)。
   - `TITLE_ANIM_TIMER_ID`: タイトル画面ブレスアニメーション用の Win32 タイマ ID (`103`)。
   - `REFILL_FULL_PRESSURE`: マウスでしごくときの強さの基準 (`0.8`)。

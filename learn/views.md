@@ -67,7 +67,7 @@ graph TD
   - **ダブルバッファリング**: 画面と同じサイズのメモリDCとビットマップ（`BackBuffer`）を管理し、チラツキ（フリッカー）のない一括転送（`BitBlt`）を実現します。
   - **画面状態とアルファブレンド遷移**:
     - `AppScreen::Title`: タイトル画面（[`TitleView`](../App/FudeCode/Views/TitleView.h)）を単独描画。
-    - 画面遷移中 (`isTransitioning`): 背景バッファ（スタジオ画面）と一時バッファ（タイトル画面）の間で `AlphaBlend`（`AC_SRC_OVER`）による滑らかなクロスフェード演出を実行。
+    - 画面遷移中 (`ui.isTransitioning`): 背景バッファ（スタジオ画面）と一時バッファ（タイトル画面）の間で `AlphaBlend`（`AC_SRC_OVER`）による滑らかなクロスフェード演出を実行。
     - `AppScreen::Studio`: 重ね順（机背景 $\to$ 半紙 $\to$ 墨 $\to$ お手本 $\to$ 下敷き $\to$ 硯/紙だけボタン帯 $\to$ メニュー $\to$ モーダル）を厳密に制御して描画。
   - **局所更新パス（運筆中の半紙専用高速パス）**:
     - 運筆中など半紙専用の局所更新で、モーダルや左メニュー、硯パネルと交差しない場合、背景やUI部品の再描画をスキップし、`rcPaint` 領域のみを画面へ高速転送（CPU/GPU バス帯域を節約）。
@@ -99,7 +99,7 @@ graph TD
 - **出力 (Output)**:
   - タイトル画面全体のグラフィックス
 - **使用されている定数の名前 (Constants used)**:
-  - `TITLE_ANIM_TIMER_ID`: ブレスアニメーション用タイマ ID (`103`)。
+  - なし（アニメーションのタイマは [`AppController`](../App/FudeCode/Controllers/AppController.h) が管理します）。
 
 ---
 
@@ -156,7 +156,7 @@ graph TD
 - **責務 (Responsibility)**:
   - 画面右側に配置される硯（すずり）および墨残量インジケータ、墨補充ボタン、一画戻す（Undo）、一画復元（Redo）、「紙を大きくする（横向き）」切り替えボタン、全消しボタンを描画します。
   - **スケール対応 (`inkStoneScale`)**: 空き領域に合わせて硯パネル全体を動的スケーリング。
-  - **墨残量ゲージ**: 硯の真上の `rInkBadge` に「💧 墨残量: ○%」を表示し、20%以下では「⚠️ 墨残量: ○%」として警告赤表示。残量の分だけ左から塗り、つまみで位置を示します。ホバー中とドラッグ中（`isDraggingInkAmount`）は縁を明るくします。
+  - **墨残量ゲージ**: 硯の真上の `rInkBadge` に「💧 墨残量: ○%」を表示し、20%以下では「⚠️ 墨残量: ○%」として警告赤表示。残量の分だけ左から塗り、つまみで位置を示します。ホバー中とドラッグ中（`ui.interaction.isDraggingInkAmount`）は縁を明るくします。
   - **リアルな硯表現**: 墨溜まり（`rInkPool`）、液面の光沢ハイライトライン、磨り面（`rInkLand`）の微細な石目テクスチャを描画。操作が違うので、ペンが乗っている側（しごいている間は磨り面）の枠だけを明るくして区別します。
   - **履歴ボタン表示**: 「↩ 一画戻す」「↪ 一画復元」ボタンに現在の遡り可能画数 `(%d)` を表示し、履歴が無いときは無効色で沈めて描画。
   - **紙だけ表示用ボタンバー ([`DrawPaperOnlyBar`](../App/FudeCode/Views/InkStoneView.cpp#L181))**: 半紙を横向き最大化した際に、半紙の右側に縦帯で「墨を補充（残り %d%%）」「通常表示に戻る」「筆跡を消す」ボタンを90度回転文字（`DrawRotatedCenter`）で描画。
@@ -207,7 +207,7 @@ graph TD
   - Win32 GDI を用いた高品質な描画ユーティリティ関数群を提供します。
   - 角丸枠線付きボックス（`Box`）、ドロップシャドウ（`DrawShadow`）、木目調文机背景（`DrawWoodDesk`）、フォント生成（`CreateCustomFont`）、テキスト配置（`DrawTextCustom`, `Center`）、UIカード描画（`DrawTileCard`, `DrawColorThemeButton`）を実装しています。
   - GDIオブジェクト（`HBRUSH`, `HPEN`, `HFONT`）の作成と解放を確実に管理し、GDIリソースリークを防止します。
-  - 計算の共通関数（`Clamp`, `RW`, `RH`, `PtIn`）の本体は [`MathUtils.h`](../App/FudeCode/Models/MathUtils.h) にあり、View と Controller からは using 宣言により `RenderUtils` の名前でも呼べます。
+  - 計算の共通関数（`Clamp`, `RW`, `RH`, `PtIn`）の本体は [`MathUtils.h`](../App/FudeCode/Models/MathUtils.h) にあり、View からは using 宣言により `RenderUtils` の名前でも呼べます。
 - **入力 (Input)**:
   - 描画対象DC、矩形、カラー値（`COLORREF`）、文字列など
 - **出力 (Output)**:
@@ -223,8 +223,9 @@ graph TD
 - **責務 (Responsibility)**:
   - ウィンドウサイズと表示モードに応じて全UI要素の位置矩形を計算し、`UIState` へ書き込みます。書き換えるのは `UIState` だけで、モデルは読むだけです。
   - **通常表示 (`Layout`)**: 左メニュー、各タブの操作部品、画面中央の半紙（`rPaper`）、右側硯パネル、全消し確認モーダルを配置します。硯パネルは空き領域に合わせて拡大率（`inkStoneScale`）を決めます。
-  - **紙だけ表示 (`LayoutPaperOnly`)**: 横に倒した半紙を画面いっぱいに広げ、右端の帯へボタンを配置します。左メニューと硯パネルは矩形ごと畳み、当たり判定が運筆を横取りしないようにします。硯まわりのドラッグとしごきの状態も解除します。モーダルは倒した向きで組みます。
-  - **下敷きと手本の一元配置 (`LayoutGridGeometry`)**: `rGridBorder` と `rGridCell[MAX_GRID_CELLS]`、お手本のミニマップ（`rOtehonCellBtn`）を一括で計算し、罫線描画（`CanvasView::DrawGrid`）とお手本配置を一致させます。
+  - **紙だけ表示 (`LayoutPaperOnly`)**: 横に倒した半紙を画面いっぱいに広げ、右端の帯へボタンを配置します。左メニューと硯パネルは矩形ごと畳み、当たり判定が運筆を横取りしないようにします。モーダルは倒した向きで組みます。
+  - **下敷きと手本の一元配置 (`LayoutGridGeometry`)**: `rGridBorder` と `rGridCell[MAX_GRID_CELLS]`、お手本のミニマップ（`rOtehonCellBtn`）を一括で計算し、罫線描画（`CanvasView::DrawGrid`）とお手本配置を一致させます。列数と行数は `PaperModel::GetGridDivision` から受け取ります。
+  - **Controller が使う位置 (`rInkStoneRepaint`, `otehonImePos`)**: 運筆中に再描画する硯と墨残量の範囲と、IME の候補の位置を計算します。紙だけ表示では `rInkStoneRepaint` を空にします。
   - **シークバーのツマミ (`UpdateReplaySeekThumb`)**: 再生時刻からツマミの位置だけを計算します。再生中は毎フレーム呼ばれます。
 - **入力 (Input)**:
   - `UIState& ui`: 書き込み先
@@ -233,7 +234,7 @@ graph TD
   - `const ReplayModel& replay`: 再生時刻（ツマミの位置）
   - `int clientWidth, int clientHeight`: クライアント領域の幅と高さ
 - **出力 (Output)**:
-  - `ui` の各要素の矩形、`inkStoneScale`、`gridCols`、`gridRows`、`gridCellCount`
+  - `ui` の各要素の矩形、`otehonImePos`、`inkStoneScale`、`gridCols`、`gridRows`、`gridCellCount`
 - **使用されている定数の名前 (Constants used)**:
   - `INK_STONE_MAX_SCALE`: 硯パネルの最大拡大率 (`1.8`)。
   - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
@@ -246,14 +247,22 @@ graph TD
 
 - **責務 (Responsibility)**:
   - 作品や設定のデータではない、画面の状態を構造体 `UIState` にまとめます。Model には含めず、実体は [`WacomMT_Scribble.cpp`](../App/FudeCode/WacomMT_Scribble.cpp) の `g_uiState` です。
+  - **画面の種類と遷移**: 起動時のタイトル画面（`AppScreen::Title`）から制作画面（`AppScreen::Studio`）へのアルファブレンド遷移の状態（`currentScreen`, `isTransitioning`, `transitionStartTime`, `transitionProgress`, `transitionDurationMs = 400`）を保持します。
   - **表示の状態**: 左メニューのタブ（`leftTab`）、サブパネルの開閉（`isSubPanelOpen`）、全消し確認モーダルの表示（`showClearConfirm`）、紙だけ表示（`paperOnly`）、各ボタンのホバー（`hoverTb` など）を保持します。
-  - **操作の状態**: 入力ロック（`suppressPenUntilLift`）、補充中（`isPenRefilling`）、墨残量ゲージのドラッグ中（`isDraggingInkAmount`）、しごき中（`isWiping`）を保持します。
-  - **画面配置の保持**: 半紙領域（`rPaper`）、左メニュー、右側硯パネル（墨溜まり `rInkPool`、磨り面 `rInkLand`、墨残量ゲージ `rInkBadge` を含む）、波形グラフの描画領域（`rAnalysisGraphPlot`）、下敷き升目セル（`rGridBorder`, `rGridCell[MAX_GRID_CELLS]`）の矩形を保持します。計算は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が行います。
+  - **操作の状態 (`InteractionState`)**: `ui.interaction` にまとめて保持します。入力ロック（`suppressPenUntilLift`）、補充中（`isPenRefilling`）、墨残量ゲージのドラッグ中（`isDraggingInkAmount`）、しごき中（`isWiping`, `wipeByMouse`, `wipeLastPt`）、スライダーなどのドラッグ中（`isDraggingHardness`, `isDraggingOpacity`, `isDraggingSeekBar`, `isDraggingWaveform`）、文字入力中（`isTyping`）です。
+  - **画面配置の保持**: 半紙領域（`rPaper`）、左メニュー、右側硯パネル（墨溜まり `rInkPool`、磨り面 `rInkLand`、墨残量ゲージ `rInkBadge` を含む）、波形グラフの描画領域（`rAnalysisGraphPlot`）、硯と墨残量の再描画の範囲（`rInkStoneRepaint`）、下敷き升目セル（`rGridBorder`, `rGridCell[MAX_GRID_CELLS]`）の矩形と、IME の候補の位置（`otehonImePos`）を保持します。計算は [`ScreenLayout`](../App/FudeCode/Views/ScreenLayout.h) が行います。
   - **保存通知**: `SetSaveFeedback(message, isError)` により、フィードバック文言と表示開始時刻（`saveFeedbackTime`）、エラー表示フラグ（`saveFeedbackIsError`）を設定します。
 - **入力 (Input)**:
   - `AppController` と `StrokeController` からの状態の更新、`ScreenLayout` からの矩形の書き込み
 - **出力 (Output)**:
   - 描画とクリック判定で読む、各要素の矩形と画面の状態
+- **定義されている主要な列挙型**:
+  - `AppScreen`: 画面の種類（`Title`, `Studio`）
+  - `TbButton`: ナビゲーションボタン（`None`, `Home`, `NavToggle`, `Brush`, `Paper`, `Analysis`, `Save`, `Otehon`, `InkRefill`, `ClearAll`）
+  - `LeftTab`: 左側パネルタブ（`Brush`, `Paper`, `Analysis`, `Save`, `Otehon`）
+  - `ClearModalHover`: 全消し確認モーダルのホバー（`None`, `ClearAll`, `Cancel`）
+  - `PaperOnlyHover`: 紙だけ表示のホバー（`None`, `Exit`, `Refill`, `Clear`）
+  - `InkStoneHover`: 硯パネルのホバー（`None`, `Stone`, `Refill`, `ClearAll`, `Undo`, `Redo`, `PaperOnly`, `Badge`, `Land`）
 - **使用されている定数の名前 (Constants used)**:
   - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
   - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
