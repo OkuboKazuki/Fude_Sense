@@ -154,12 +154,12 @@ graph TD
 ### 2.5 [InkStoneView.h](../App/FudeCode/Views/InkStoneView.h) / [InkStoneView.cpp](../App/FudeCode/Views/InkStoneView.cpp)
 
 - **責務 (Responsibility)**:
-  - 画面右側に配置される硯（すずり）および墨残量インジケータ、墨補充ボタン、一画戻す（Undo）、一画復元（Redo）、「紙を大きくする（横向き）」切り替えボタン、全消しボタンを描画します。
+  - 画面右側に配置される硯（すずり）および墨残量インジケータ、一画戻す（Undo）、一画復元（Redo）、「紙を大きくする（横向き）」切り替えボタン、全消しボタンを描画します。
   - **スケール対応 (`inkStoneScale`)**: 空き領域に合わせて硯パネル全体を動的スケーリング。
   - **墨残量ゲージ**: 硯の真上の `rInkBadge` に「💧 墨残量: ○%」を表示し、20%以下では「⚠️ 墨残量: ○%」として警告赤表示。残量の分だけ左から塗り、つまみで位置を示します。ホバー中とドラッグ中（`ui.interaction.isDraggingInkAmount`）は縁を明るくします。
   - **リアルな硯表現**: 墨溜まり（`rInkPool`）、液面の光沢ハイライトライン、磨り面（`rInkLand`）の微細な石目テクスチャを描画。操作が違うので、ペンが乗っている側（しごいている間は磨り面）の枠だけを明るくして区別します。
   - **履歴ボタン表示**: 「↩ 一画戻す」「↪ 一画復元」ボタンに現在の遡り可能画数 `(%d)` を表示し、履歴が無いときは無効色で沈めて描画。
-  - **紙だけ表示用ボタンバー ([`DrawPaperOnlyBar`](../App/FudeCode/Views/InkStoneView.cpp#L181))**: 半紙を横向き最大化した際に、半紙の右側に縦帯で「墨を補充（残り %d%%）」「通常表示に戻る」「筆跡を消す」ボタンを90度回転文字（`DrawRotatedCenter`）で描画。
+  - **紙だけ表示用ボタンバー ([`DrawPaperOnlyBar`](../App/FudeCode/Views/InkStoneView.cpp#L174))**: 半紙を横向き最大化した際に、半紙の右側に縦帯で「墨を補充（残り %d%%）」「通常表示に戻る」「筆跡を消す」ボタンを90度回転文字（`DrawRotatedCenter`）で描画。
 - **入力 (Input)**:
   - `HDC dc`, `const AppState& state`, `const UIState& ui`
 - **出力 (Output)**:
@@ -262,7 +262,7 @@ graph TD
   - `LeftTab`: 左側パネルタブ（`Brush`, `Paper`, `Analysis`, `Save`, `Otehon`）
   - `ClearModalHover`: 全消し確認モーダルのホバー（`None`, `ClearAll`, `Cancel`）
   - `PaperOnlyHover`: 紙だけ表示のホバー（`None`, `Exit`, `Refill`, `Clear`）
-  - `InkStoneHover`: 硯パネルのホバー（`None`, `Stone`, `Refill`, `ClearAll`, `Undo`, `Redo`, `PaperOnly`, `Badge`, `Land`）
+  - `InkStoneHover`: 硯パネルのホバー（`None`, `Stone`, `ClearAll`, `Undo`, `Redo`, `PaperOnly`, `Badge`, `Land`）
 - **使用されている定数の名前 (Constants used)**:
   - `GRID_PATTERN_COUNT`: 下敷きパターン数 (`6`)。
   - `OTEHON_FONT_COUNT`: お手本フォントのバリエーション数 (`3`)。
