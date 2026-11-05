@@ -150,27 +150,20 @@ void InkStoneView::Draw(HDC dc, const AppState& state, const UIState& ui) {
     SelectObject(dc, otp);
     DeleteObject(tp);
 
-    // 5. 「💧 墨を補充」ボタン（シャドウなし・スッキリ配置）
-    bool hovRefill = (ui.hoverInkStone == InkStoneHover::Refill);
-    Box(dc, ui.rInkRefillBtn, hovRefill ? RGB(42, 72, 110) : RGB(32, 38, 48), hovRefill ? RGB(85, 145, 235) : RGB(54, 62, 78), 1, 8);
-    HFONT fBtn = CreateCustomFont(S(17), FW_BOLD);
-    Center(dc, ui.rInkRefillBtn, L"💧 墨を補充", fBtn, hovRefill ? RGB(255, 255, 255) : RGB(220, 230, 245));
-    DeleteObject(fBtn);
-
-    // 6. 「↩ 一画戻す」「↪ 一画復元」ボタン
+    // 5. 「↩ 一画戻す」「↪ 一画復元」ボタン
     DrawHistoryButton(dc, ui.rUndoBtn, L"↩ 一画戻す", state.undo.Depth(),
         state.undo.CanUndo(), ui.hoverInkStone == InkStoneHover::Undo, sc);
     DrawHistoryButton(dc, ui.rRedoBtn, L"↪ 一画復元", state.undo.RedoDepth(),
         state.undo.CanRedo(), ui.hoverInkStone == InkStoneHover::Redo, sc);
 
-    // 7. 「🗑️ 筆跡をすべて消す」ボタン（シャドウなし・スッキリ配置）
+    // 6. 「🗑️ 筆跡をすべて消す」ボタン（シャドウなし・スッキリ配置）
     bool hovClear = (ui.hoverInkStone == InkStoneHover::ClearAll);
     Box(dc, ui.rClearAllBtn, hovClear ? RGB(85, 38, 38) : RGB(42, 30, 32), hovClear ? RGB(180, 70, 70) : RGB(74, 48, 52), 1, 8);
     HFONT fClear = CreateCustomFont(S(17), FW_BOLD);
     Center(dc, ui.rClearAllBtn, L"🗑️ 筆跡をすべて消す", fClear, hovClear ? RGB(255, 225, 225) : RGB(230, 185, 185));
     DeleteObject(fClear);
 
-    // 8. 紙だけ表示（横向き）に入る
+    // 7. 紙だけ表示（横向き）に入る
     bool hovPaperOnly = (ui.hoverInkStone == InkStoneHover::PaperOnly);
     Box(dc, ui.rPaperOnlyBtn, hovPaperOnly ? RGB(42, 72, 110) : RGB(30, 36, 46), hovPaperOnly ? RGB(85, 145, 235) : RGB(54, 62, 78), 1, 8);
     HFONT fView = CreateCustomFont(S(17), FW_BOLD);

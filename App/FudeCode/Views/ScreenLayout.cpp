@@ -389,6 +389,8 @@ void ScreenLayout::Layout(UIState& ui, const PaperModel& paper, bool viewingImpo
     const int baseHeaderSpace = 42;
     const int baseViewGap = 20;
     const double INK_STONE_MAX_SCALE = 1.8;
+    // 高さの合計には、硯の下にあった補充ボタン 1 つ分も含めたままにする。
+    // 硯の大きさと位置を変えずに、下のボタンだけを上へ詰めるため。
     int baseTotalH = baseHeaderSpace + (int)(baseStoneW * 1.34) + 4 * (baseSpacing + baseBtnH)
                    + baseViewGap + baseViewBtnH;
 
@@ -403,7 +405,7 @@ void ScreenLayout::Layout(UIState& ui, const PaperModel& paper, bool viewingImpo
 
     int stoneW = S(baseStoneW);
     int stoneH = (int)(stoneW * 1.34);
-    int refillBtnH = S(baseBtnH);
+    int reservedBtnH = S(baseBtnH);
     int undoBtnH = S(baseBtnH);
     int redoBtnH = S(baseBtnH);
     int clearBtnH = S(baseBtnH);
@@ -412,7 +414,7 @@ void ScreenLayout::Layout(UIState& ui, const PaperModel& paper, bool viewingImpo
     int headerSpace = S(baseHeaderSpace); // 墨残量ヘッダー用スペース
 
     int viewGap = S(baseViewGap);     // 硯まわりの操作と表示切り替えの間の区切り
-    int totalBlockH = headerSpace + stoneH + spacing + refillBtnH + spacing + undoBtnH
+    int totalBlockH = headerSpace + stoneH + spacing + reservedBtnH + spacing + undoBtnH
                     + spacing + redoBtnH + spacing + clearBtnH
                     + viewGap + viewBtnH;
     int blockStartY = canvasCenterY - totalBlockH / 2;
@@ -442,8 +444,8 @@ void ScreenLayout::Layout(UIState& ui, const PaperModel& paper, bool viewingImpo
     int badgeX = stoneX + (stoneW - badgeW) / 2;
     int badgeY = stoneY - badgeH - S(8);
     ui.rInkBadge = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
-    ui.rInkRefillBtn  = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + refillBtnH };
-    ui.rUndoBtn      = { stoneX, ui.rInkRefillBtn.bottom + spacing, stoneX + stoneW, ui.rInkRefillBtn.bottom + spacing + undoBtnH };
+    ui.rInkRefillBtn = { 0, 0, 0, 0 };  // 補充ボタンは紙だけ表示でだけ使う
+    ui.rUndoBtn      = { stoneX, stoneY + stoneH + spacing, stoneX + stoneW, stoneY + stoneH + spacing + undoBtnH };
     ui.rRedoBtn       = { stoneX, ui.rUndoBtn.bottom + spacing, stoneX + stoneW, ui.rUndoBtn.bottom + spacing + redoBtnH };
     ui.rClearAllBtn   = { stoneX, ui.rRedoBtn.bottom + spacing, stoneX + stoneW, ui.rRedoBtn.bottom + spacing + clearBtnH };
 

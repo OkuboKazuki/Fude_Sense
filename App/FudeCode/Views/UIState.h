@@ -57,7 +57,6 @@ enum class PaperOnlyHover {
 enum class InkStoneHover {
     None,
     Stone,      // 硯の上の部分（墨を含ませる）
-    Refill,     // 墨を補充
     ClearAll,   // 全消し
     Undo,       // 一画戻す
     Redo,       // 一画復元

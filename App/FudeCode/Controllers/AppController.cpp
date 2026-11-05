@@ -846,7 +846,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
         ui.interaction.suppressPenUntilLift = true;
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
-    } else if (PtIn(ui.rInkStoneLarge, pt) || PtIn(ui.rInkRefillBtn, pt)) {
+    } else if (PtIn(ui.rInkStoneLarge, pt)) {
         RefillByPress(state, ui, penPressure);
         InvalidateRect(hWnd, &ui.rRight, FALSE);
         return true;
@@ -1218,8 +1218,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
             }
         }
 
-        if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverInkStone = InkStoneHover::Refill;
-        else if (PtIn(ui.rClearAllBtn, pt)) ui.hoverInkStone = InkStoneHover::ClearAll;
+        if (PtIn(ui.rClearAllBtn, pt)) ui.hoverInkStone = InkStoneHover::ClearAll;
         else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = InkStoneHover::Undo;
         else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = InkStoneHover::Redo;
         else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = InkStoneHover::PaperOnly;
