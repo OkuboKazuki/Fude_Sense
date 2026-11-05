@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "AppController.h"
-#include "RenderUtils.h"
+#include "MathUtils.h"
 #include "ScreenLayout.h"
 #include "ImageExporter.h"
 #include "ArchiveDialogs.h"
@@ -11,7 +11,7 @@
 
 #pragma comment(lib, "imm32.lib")
 
-using namespace RenderUtils;
+using namespace MathUtils;
 
 // IME の変換候補ウィンドウを入力欄の位置へ寄せる。
 // 指定しないとウィンドウ左上に出てしまい、どこへ入力しているのか分からない。

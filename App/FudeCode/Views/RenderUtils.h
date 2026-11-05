@@ -11,7 +11,7 @@
 
 namespace RenderUtils {
 
-    // 計算の共通関数は MathUtils にあり、View と Controller からはこの名前でも呼べる
+    // 計算の共通関数は MathUtils にあり、View からはこの名前でも呼べる
     using MathUtils::Clamp;
     using MathUtils::RW;
     using MathUtils::RH;

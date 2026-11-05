@@ -172,6 +172,10 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 
 | 処理 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| スライダーの割合から硬さへの変換 | `Controllers/AppController.cpp` の `OnLButtonDown`、`OnMouseMove` | `Models/AppState.h` の `BrushModel::SetHardnessFromRatio` | `未コミット` |
-| 硬さからスライダーの割合への変換 | `Views/FloatingMenuView.cpp` の `DrawSub` | `Models/AppState.h` の `BrushModel::GetHardnessRatio` | `未コミット` |
-| スライダーの割合から透過度への変換 | `Controllers/AppController.cpp` の `OnLButtonDown`、`OnMouseMove` | `Models/AppState.h` の `OtehonModel::SetOpacityFromRatio` | `未コミット` |
+| スライダーの割合から硬さへの変換 | `Controllers/AppController.cpp` の `OnLButtonDown`、`OnMouseMove` | `Models/AppState.h` の `BrushModel::SetHardnessFromRatio` | `d6d46db` |
+| 硬さからスライダーの割合への変換 | `Views/FloatingMenuView.cpp` の `DrawSub` | `Models/AppState.h` の `BrushModel::GetHardnessRatio` | `d6d46db` |
+| スライダーの割合から透過度への変換 | `Controllers/AppController.cpp` の `OnLButtonDown`、`OnMouseMove` | `Models/AppState.h` の `OtehonModel::SetOpacityFromRatio` | `d6d46db` |
+
+## C6. Controller の描画用ヘッダーへの依存をなくす
+
+関数や処理の移動なし。`Controllers/AppController.cpp`、`Controllers/StrokeController.cpp`、`WacomMT_Scribble.cpp` の読み込みと呼び方を、`RenderUtils` から `MathUtils` に変えました。

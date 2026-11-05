@@ -30,7 +30,7 @@
 #include "WintabUtils.h"
 #include "GpuInk.h"
 #include "AppEnums.h"
-#include "RenderUtils.h"
+#include "MathUtils.h"
 #include "AppState.h"
 #include "UIState.h"
 #include "WintabManager.h"
@@ -351,7 +351,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			AppController::ReleasePenLock(g_uiState);
 
 			// ペン (Wintab) 入力の直後でない場合のみマウスによる運筆描画を開始
-			if (!isPenActive && RenderUtils::PtIn(g_uiState.rPaper, pt))
+			if (!isPenActive && MathUtils::PtIn(g_uiState.rPaper, pt))
 			{
 				SetCapture(hWnd);
 				s_isMouseDrawing = true;
@@ -370,7 +370,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// マウスドラッグ描画中のストローク処理
 		if (s_isMouseDrawing && (wParam & MK_LBUTTON))
 		{
-			if (RenderUtils::PtIn(g_uiState.rPaper, pt))
+			if (MathUtils::PtIn(g_uiState.rPaper, pt))
 			{
 				PenInputEvent penEvent = MouseAdapter::CreatePenEvent(pt, true);
 				g_strokeCtrl.ProcessPenEvent(hWnd, penEvent, g_appState, g_uiState, g_gpuInk);

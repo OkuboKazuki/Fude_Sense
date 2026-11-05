@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "StrokeController.h"
 #include "AppController.h"
-#include "RenderUtils.h"
+#include "MathUtils.h"
 #include <cmath>
 #include <algorithm>
 
@@ -226,8 +226,8 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
         // 内部固定論理解像度へのスケーリング変換
         int inkW = gpuInk.GetWidth();
         int inkH = gpuInk.GetHeight();
-        int paperW = RenderUtils::RW(rPaper);
-        int paperH = RenderUtils::RH(rPaper);
+        int paperW = MathUtils::RW(rPaper);
+        int paperH = MathUtils::RH(rPaper);
         double scaleX = (paperW > 0 && inkW > 0) ? (static_cast<double>(inkW) / static_cast<double>(paperW)) : 1.0;
         double scaleY = (paperH > 0 && inkH > 0) ? (static_cast<double>(inkH) / static_cast<double>(paperH)) : 1.0;
         double scaleAvg = (scaleX + scaleY) * 0.5;
