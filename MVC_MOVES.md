@@ -96,7 +96,7 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 | `AppState::LayoutPaperOnly` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
 | `AppState::LayoutGridGeometry` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
 | `LayoutClearModal` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
-| `GetGridDivision` | `Models/AppState.cpp` | `Models/AppState.h` の `PaperModel::GetGridDivision`（M9 で移動） | `ca44652`、`未コミット` |
+| `GetGridDivision` | `Models/AppState.cpp` | `Models/AppState.h` の `PaperModel::GetGridDivision`（M9 で移動） | `ca44652`、`de9cc72` |
 
 ## M3. UI の状態を移す
 
@@ -164,4 +164,4 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 
 | 関数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `GetGridDivision` | `Views/ScreenLayout.cpp` のファイル内の関数 | `Models/AppState.h` の `PaperModel::GetGridDivision` | `未コミット` |
+| `GetGridDivision` | `Views/ScreenLayout.cpp` のファイル内の関数 | `Models/AppState.h` の `PaperModel::GetGridDivision` | `de9cc72` |
