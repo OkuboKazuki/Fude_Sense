@@ -52,6 +52,7 @@ graph TD
     Caller -->|サイズ変更・タブ切替・再生位置の変更など| SL
     SL -->|矩形を書き込み| UIStateNode
     Caller -->|ホバー・開閉などの更新| UIStateNode
+    Caller -->|作品画像の合成| CV
     UIStateNode -.->|配置を参照| MV
 ```
 
@@ -108,21 +109,25 @@ graph TD
   - 書道制作のキャンバス面を描画します。
   - **半紙背景と影**: 繊細な和紙の質感（`Hanshi` 242×333mm 比率）と立体的なドロップシャドウの描画。
   - **墨汁合成**: 通常時は [`GpuInk`](../App/FudeCode/InkEngine/GpuInk.h) から転送（DirectX Interop ゼロコピーと `SRCAND` 合成）。
-  - **運筆リプレイ描画 ([`DrawReplayCanvas`](../App/FudeCode/Views/CanvasView.cpp#L812))**:
+  - **作品画像の合成 (`ComposeArtwork`)**: 書き出す作品画像のビットマップを作ります。和紙の地色の上に墨（`gpuInk.Render`）だけを描きます。お手本や下敷き罫線は揮毫の下敷きであって作品の一部ではないため、含めません。ビットマップの破棄は呼び出し側で行います。
+  - **運筆リプレイ描画 ([`DrawReplayCanvas`](../App/FudeCode/Views/CanvasView.cpp#L842))**:
     1. **再生済みの墨**: [`ReplayInk`](../App/FudeCode/InkEngine/ReplayInk.h) による時系列墨汁再生アニメーション。
-    2. **淡墨ゴースト ([`ghostMaster`](../App/FudeCode/Views/CanvasView.cpp#L834))**: 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト。未再生の未来の文字が筆圧グラデーションとして表示され、再生済みの墨と `SRCAND` 合成（インポート記録時は `importedFullInk` 事前ベイクキャッシュを活用）。
-    3. **朱色芯線軌跡 ([`DrawReplayTrajectory`](../App/FudeCode/Views/CanvasView.cpp#L879))**: ペンが実際に通過した軌跡（運筆の芯線）を視認しやすい朱色（`RGB(235, 55, 35)`）の細線で時系列に沿って順次描画。
+    2. **淡墨ゴースト ([`ghostMaster`](../App/FudeCode/Views/CanvasView.cpp#L864))**: 実際に書いた文字と100%完全一致する筆圧カラーグラデーション淡墨ゴースト。未再生の未来の文字が筆圧グラデーションとして表示され、再生済みの墨と `SRCAND` 合成（インポート記録時は `importedFullInk` 事前ベイクキャッシュを活用）。
+    3. **朱色芯線軌跡 ([`DrawReplayTrajectory`](../App/FudeCode/Views/CanvasView.cpp#L909))**: ペンが実際に通過した軌跡（運筆の芯線）を視認しやすい朱色（`RGB(235, 55, 35)`）の細線で時系列に沿って順次描画。
   - **お手本描画 ([`DrawOtehonGlyph`](../App/FudeCode/Views/CanvasView.cpp))**: 半紙上の升目セル（emボックス）に内接するようフォントサイズを動的計算し、指定透明度で毛筆楷書・教科書体・行書のお手本を描画（`rotateCcw` による紙だけ表示での90度回転描画対応）。また、`HasOtehonFont` により該当フォントがPCに導入されているかを事前検出。解析タブ表示中は、お手本のON/OFFにかかわらず描画しません。
   - **下敷き格子**: 十字、2段、田の字、2x3、2x4 を指定カラーテーマ（朱赤、白線、薄墨）で描画。
   - **3D筆姿勢モニタ ([`Draw3DBrushPose`](../App/FudeCode/Views/CanvasView.cpp))**: 筆先高度角・方位角・接地状態を俯瞰する3D筆を描画。
   - **リソースプール**: `PenPool` により線幅ごとの GDI ペンを再利用し、1画あたり数百個の GDI オブジェクト生成・破棄オーバーヘッドを完全に排除。
 - **入力 (Input)**:
   - `HDC dc`, `const AppState& state`, `const UIState& ui`, `GpuInk& gpuInk`（`DrawBackground`、`RenderInk`、`Draw3DBrushPose` は `AppState` を受け取りません）
+  - `ComposeArtwork` は `HWND hWnd`, `GpuInk& gpuInk`, `int width`, `int height` を受け取ります。
 - **出力 (Output)**:
   - メモリDC上の半紙領域への描画
+  - `ComposeArtwork` の戻り値 `HBITMAP`: 合成した作品画像（作れなかったときは `nullptr`）
 - **使用されている定数の名前 (Constants used)**:
   - `SRCAND`: 墨汁およびお手本フォント合成用ラスタオペレーションコード。
   - 芯線カラー: `RGB(235, 55, 35)`。
+  - 作品画像の半紙の地色: `RGB(248, 247, 242)`。
 
 ---
 

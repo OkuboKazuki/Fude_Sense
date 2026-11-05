@@ -38,6 +38,7 @@ graph TD
 
     subgraph ViewLayer ["Views レイヤー"]
         SL["ScreenLayout (レイアウト計算)"]
+        CV["CanvasView (作品画像の合成)"]
         UI["UI状態・配置 (UIState)"]
     end
 
@@ -58,6 +59,7 @@ graph TD
     AC -->|UIクリック・IME文字入力| UI
     AC -->|全消し・サイズ変更・用紙回転・墨の控えと書き戻し| GPU
     AC -->|控えの保管・一画戻す/復元・90度回転指示| Undo
+    AC -->|作品画像の合成| CV
     AC -->|作品画像の書き出し| IE
     AC -->|保存・読込ダイアログ| AD
     AC -->|外部アーカイブ読込・切替| Traj
@@ -137,7 +139,7 @@ graph TD
     - **タブ切り替え (`SelectTab`)**: 筆・紙・解析・保存・お手本を切り替えます。解析以外へ移るときは読み込んだ記録を閉じ、解析へ移るときは再生位置を先頭（0ms）にして一時停止にします。
     - **ショートカットキー (`OnKeyDown`)**: `F9`、`Esc`、`Ctrl+Z`、`Ctrl+Shift+Z`、`Ctrl+Y` を処理します。文字入力中（`otehon.isTyping`）は `F9` 以外を止めます。
     - **カーソル形状 (`OnSetCursor`)**: 半紙の上は十字、お手本の入力欄は I ビーム、それ以外は矢印にします。
-    - **保存結果の通知 (`ExportCanvasWithFeedback`)**: [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) が返した `ImageExportResult` に応じて、`UIState::SetSaveFeedback` でメッセージを設定します。
+    - **作品の書き出しと結果の通知 (`ExportCanvasWithFeedback`)**: 半紙の大きさが 0 のときは何もしません。[`CanvasView::ComposeArtwork`](../App/FudeCode/Views/CanvasView.h) で合成した作品画像を [`ImageExporter`](../App/FudeCode/Services/ImageExporter.h) へ渡し、返った `ImageExportResult` に応じて `UIState::SetSaveFeedback` でメッセージを設定します。作品画像を作れなかったときも失敗として知らせます。クリップボードへ渡せたときを除いて、作品画像はここで破棄します。
     - 運筆アーカイブの保存と読み込みは [`ArchiveDialogs`](../App/FudeCode/Services/ArchiveDialogs.h) を呼び、取り消しでは何も表示せず、失敗のときだけ知らせます。
     - 全消し確認モーダルの判定では、紙だけ表示の倒した向きへ点を移します（`ToClearModalSpace`）。
     - お手本文字の配置・消去（トグル動作）、書体変更。

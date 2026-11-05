@@ -134,9 +134,11 @@ graph TD
 ### 2.4 [ImageExporter.h](../App/FudeCode/Services/ImageExporter.h) / [ImageExporter.cpp](../App/FudeCode/Services/ImageExporter.cpp)
 
 - **責務 (Responsibility)**:
-  - 半紙上に描かれた墨汁作品を、デスクトップへの高画質画像ファイル保存（WIC PNG / BMP 形式）またはクリップボードへの転送（`CF_BITMAP` 形式）を行う画像エクスポートサービスです。
-  - **出力内容**:
-    - お手本や下敷き罫線は揮毫の下敷きであって作品の一部ではないため書き出しには含めず、純粋に和紙の地色の上に墨汁ストローク（`gpuInk.Render`）のみを高解像度でレンダリングして出力します。
+  - 渡された作品画像のビットマップを、デスクトップへの画像ファイル保存（WIC PNG / BMP 形式）またはクリップボードへの転送（`CF_BITMAP` 形式）で書き出す画像エクスポートサービスです。作品画像の合成は [`CanvasView::ComposeArtwork`](../App/FudeCode/Views/CanvasView.h) が行います。
+  - **クリップボードへの転送 (`CopyToClipboard`)**:
+    - 転送に成功するとビットマップの所有権がシステムへ移るので、呼び出し側は破棄しません。失敗したときは呼び出し側で破棄します。
+  - **画像ファイルの保存 (`SaveToDesktop`)**:
+    - WIC で PNG を保存し、失敗したときは BMP で保存します。ビットマップは呼び出し側で破棄します。
   - **ファイル命名規則**:
     - デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png`（WIC失敗時は `.bmp`）として保存。
   - **破損ファイルのクリーンアップ**:
@@ -145,13 +147,12 @@ graph TD
     - 結果を `ImageExportResult` で返すだけで、画面の状態には書き込みません。メッセージは [`AppController`](../App/FudeCode/Controllers/AppController.h) が設定します。
 - **入力 (Input)**:
   - `HWND hWnd`: 親ウィンドウ
-  - `GpuInk& gpuInk`: 墨テクスチャ
-  - `const RECT& rPaper`: 半紙の矩形（書き出す画像の大きさに使います）
-  - `bool toClipboard`: クリップボードにコピーするか、ファイル保存するか
+  - `HBITMAP hBmp`: 書き出す作品画像
+  - `int width`, `int height`: 作品画像の大きさ（`SaveToDesktop` のみ）
 - **出力 (Output)**:
   - ファイル出力（デスクトップ上に `習字作品_YYYYMMDD_HHMMSS.png` または `.bmp`）
   - クリップボードへのビットマップデータ格納 (`CF_BITMAP`)
-  - 戻り値 `ImageExportResult`: `NothingToExport`（半紙の大きさが 0）、`Failed`、`CopiedToClipboard`、`SavedPng`、`SavedBmp`
+  - 戻り値 `ImageExportResult`: `Failed`、`CopiedToClipboard`、`SavedPng`、`SavedBmp`
 - **使用されている定数の名前 (Constants used)**:
   - `CF_BITMAP`: Win32 クリップボード形式。
   - `GUID_ContainerFormatPng`: WIC (Windows Imaging Component) の PNG エンコーダー GUID。
