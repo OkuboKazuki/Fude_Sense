@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "ImageExporter.h"
-#include "MathUtils.h"
 #include <shlobj.h>
 #include <knownfolders.h>
 #include <wincodec.h>
@@ -90,7 +89,7 @@ bool SaveBitmapAsPng(HBITMAP hBmp, int width, int height, const wchar_t* filePat
 }
 
 // WIC 失敗時のフォールバック用 BMP 保存
-bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* filePath) {
+bool SaveBitmapAsBmp(HDC dc, HBITMAP memBmp, int pw, int ph, const wchar_t* filePath) {
     BITMAP bmp;
     GetObject(memBmp, sizeof(BITMAP), &bmp);
 
@@ -110,7 +109,7 @@ bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* f
     bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
 
     std::vector<BYTE> buf(dwSize);
-    GetDIBits(memDC, memBmp, 0, ph, buf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
+    GetDIBits(dc, memBmp, 0, ph, buf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
 
     HANDLE hFile = CreateFileW(filePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) return false;
@@ -130,74 +129,43 @@ bool SaveBitmapAsBmp(HDC memDC, HBITMAP memBmp, int pw, int ph, const wchar_t* f
 
 } // namespace
 
-ImageExportResult ImageExporter::ExportCanvas(HWND hWnd, GpuInk& gpuInk, const RECT& rPaper, bool toClipboard) {
-    using namespace MathUtils;
-
-    int pw = RW(rPaper);
-    int ph = RH(rPaper);
-    if (pw <= 0 || ph <= 0) return ImageExportResult::NothingToExport;
-
-    HDC screenDC = GetDC(hWnd);
-    HDC memDC = CreateCompatibleDC(screenDC);
-    HBITMAP memBmp = CreateCompatibleBitmap(screenDC, pw, ph);
-    HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
-
-    // 1. 半紙背景
-    RECT rLocal = { 0, 0, pw, ph };
-    HBRUSH pb = CreateSolidBrush(RGB(248, 247, 242));
-    FillRect(memDC, &rLocal, pb);
-    DeleteObject(pb);
-
-    // 2. 墨汁レンダリング
-    // お手本はなぞるための下敷きであって作品の一部ではないため、書き出しには
-    // 含めない（画面表示のみ）。下敷きの罫線を書き出さないのと同じ扱い。
-    gpuInk.Render(memDC, 0, 0, pw, ph);
-
+ImageExportResult ImageExporter::CopyToClipboard(HWND hWnd, HBITMAP hBmp) {
     ImageExportResult result = ImageExportResult::Failed;
-    bool success = false;
-    if (toClipboard) {
-        if (OpenClipboard(hWnd)) {
-            EmptyClipboard();
-            // クリップボードへ所有権を引き渡す（成功時はシステムがメモリを管理するため DeleteObject してはならない）
-            if (SetClipboardData(CF_BITMAP, memBmp)) {
-                result = ImageExportResult::CopiedToClipboard;
-                success = true;
-            }
-            CloseClipboard();
+    if (OpenClipboard(hWnd)) {
+        EmptyClipboard();
+        // クリップボードへ所有権を引き渡す（成功時はシステムがメモリを管理するため DeleteObject してはならない）
+        if (SetClipboardData(CF_BITMAP, hBmp)) {
+            result = ImageExportResult::CopiedToClipboard;
         }
-    } else {
-        PWSTR pDeskPath = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, NULL, &pDeskPath))) {
-            SYSTEMTIME st;
-            GetLocalTime(&st);
-            wchar_t filePath[MAX_PATH];
-            swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.png",
+        CloseClipboard();
+    }
+    return result;
+}
+
+ImageExportResult ImageExporter::SaveToDesktop(HWND hWnd, HBITMAP hBmp, int width, int height) {
+    ImageExportResult result = ImageExportResult::Failed;
+    PWSTR pDeskPath = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, NULL, &pDeskPath))) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        wchar_t filePath[MAX_PATH];
+        swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.png",
+            pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+        // WIC による PNG 保存を実行
+        if (SaveBitmapAsPng(hBmp, width, height, filePath)) {
+            result = ImageExportResult::SavedPng;
+        } else {
+            // WIC 失敗時は拡張子を .bmp にしてフォールバック保存
+            swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
                 pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-
-            // WIC による PNG 保存を実行
-            if (SaveBitmapAsPng(memBmp, pw, ph, filePath)) {
-                result = ImageExportResult::SavedPng;
-                success = true;
-            } else {
-                // WIC 失敗時は拡張子を .bmp にしてフォールバック保存
-                swprintf_s(filePath, MAX_PATH, L"%s\\習字作品_%04d%02d%02d_%02d%02d%02d.bmp",
-                    pDeskPath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-                if (SaveBitmapAsBmp(memDC, memBmp, pw, ph, filePath)) {
-                    result = ImageExportResult::SavedBmp;
-                    success = true;
-                }
+            HDC screenDC = GetDC(hWnd);
+            if (SaveBitmapAsBmp(screenDC, hBmp, width, height, filePath)) {
+                result = ImageExportResult::SavedBmp;
             }
-            CoTaskMemFree(pDeskPath);
+            ReleaseDC(hWnd, screenDC);
         }
+        CoTaskMemFree(pDeskPath);
     }
-
-    SelectObject(memDC, oldBmp);
-    // クリップボードへ正常に渡した場合はシステムが所有するため破棄しない
-    if (!toClipboard || !success) {
-        DeleteObject(memBmp);
-    }
-    DeleteDC(memDC);
-    ReleaseDC(hWnd, screenDC);
-
     return result;
 }

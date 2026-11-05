@@ -26,7 +26,7 @@ Fude Sense のコードが MVC から外れている箇所をまとめた資料�
 |---|---|---|
 | 高 | 3 | M1 レイアウト計算（完了）、M2 View への依存（完了）、M3 UI の状態（完了） |
 | 中 | 7 | M4 ダイアログ（完了）、M5 画面座標の解釈（完了）、M10 運筆の記録の画面への依存（意図して残す）、C1 ドメインルール（意図して残す）、C2 余白の重複（完了）、C3 設定値の範囲の重複（完了）、E1 状態の直接更新（完了） |
-| 低 | 9 | M6 操作中の一時状態（完了）、M7 描画エンジンへの依存（完了）、M8 画面の種類と UI 用の定数（完了）、M9 升目の分割数（完了）、M11 Model の小さなずれ（意図して残す）、C4 Controller の表示の数値、C5 ホバーの番号、C6 描画用ヘッダーへの依存（完了）、S1 Service の責務（第 1 段階まで完了） |
+| 低 | 9 | M6 操作中の一時状態（完了）、M7 描画エンジンへの依存（完了）、M8 画面の種類と UI 用の定数（完了）、M9 升目の分割数（完了）、M11 Model の小さなずれ（意図して残す）、C4 Controller の表示の数値、C5 ホバーの番号、C6 描画用ヘッダーへの依存（完了）、S1 Service の責務（完了） |
 
 ---
 
@@ -271,7 +271,7 @@ Model のフラグと `UIState` の中の操作の状態を、`Views/UIState.h` 
 **場所**
 
 - `Controllers/StrokeController.cpp:284`、`:311`（硯と墨残量の再描画の範囲。`44 * ui.inkStoneScale`）
-- `Controllers/AppController.cpp:23-24`（IME の候補の位置。入力欄から `+12`、`+6`）
+- `Controllers/AppController.cpp:24-25`（IME の候補の位置。入力欄から `+12`、`+6`）
 
 **問題:** 再描画の範囲は、`Views/ScreenLayout.cpp:437-441` のゲージの配置（高さ 34、間隔 8）に依存していて、同じ式が 2 か所にあります。ゲージの配置を変えると、再描画の範囲からはみ出すおそれがあります。IME の位置も入力欄の見た目に依存します。入力欄の文字の位置（`Views/FloatingMenuView.cpp` の `+14`）とは値が違いますが、意図した差かは分かっていません。
 
@@ -328,11 +328,21 @@ Model のフラグと `UIState` の中の操作の状態を、`Views/UIState.h` 
 
 ## 5. Service の問題
 
-### S1. `ImageExporter` の責務が広い（優先度: 低）
+### S1. `ImageExporter` の責務が広い（優先度: 低）（完了）
 
-**終わった段階（第 1 段階）:** `ExportCanvas` は `ImageExportResult` で結果を返すだけにし、メッセージの設定は `AppController` の `ExportCanvasWithFeedback` へ移しました。`AppState` は `const` で受け取るので、Service から書き込めません。Windows でのビルドは未確認です。
+作品画像の合成を `CanvasView::ComposeArtwork` へ移し、`ImageExporter` は渡されたビットマップの書き出しだけを行うようにしました。`ImageExporter.h` から `GpuInk.h` への依存はなくなりました。Windows でのビルドは未確認です。
 
-**残り（第 2 段階）:** 作品画像の合成を、書き出しから分けます。
+**段階**
+
+- **第 1 段階:** `ExportCanvas` は `ImageExportResult` で結果を返すだけにし、メッセージの設定は `AppController` の `ExportCanvasWithFeedback` へ移しました。
+- **第 2 段階:** `ExportCanvas` を `CanvasView::ComposeArtwork`、`ImageExporter::CopyToClipboard`、`ImageExporter::SaveToDesktop` に分け、`ExportCanvasWithFeedback` から順に呼ぶようにしました。
+
+分けたことで、次の点だけ修正前と変わります。ふだんの操作では違いは出ません。
+
+- ビットマップを DC から外したあとで、クリップボードと PNG、BMP へ渡します。BMP の `GetDIBits` には画面の DC を渡します。
+- ビットマップを作れなかったときは、保存もコピーもせずに失敗のメッセージを出します。修正前は、空の BMP を保存して成功と表示することがありました。
+
+以下は修正前の記録です。
 
 **場所**
 
@@ -375,14 +385,14 @@ Model のフラグと `UIState` の中の操作の状態を、`Views/UIState.h` 
 2. **M4（完了）:** ダイアログを Model の外へ移す
 3. **C2（完了）:** グラフの余白の重複をなくす
 4. **M5（完了）、E1（完了）:** 座標の解釈と状態の更新を Controller に集める
-5. **C1（意図して残す）、S1（第 1 段階まで完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
+5. **C1（意図して残す）、S1（完了）、M7（完了）:** ドメインルールと Service、墨エンジンの依存を整理する
 6. **M1（完了）、M3（完了）、M6（完了）:** レイアウトと `UIState` を分離する
 7. **M8（完了）:** 画面の種類と UI 用の定数を Model の外へ移す
 8. **M9（完了）:** 升目の分割数の計算を Model へ戻す
 9. **C3（完了）:** 硬さと透過度の範囲を Model にまとめる
 10. **C6（完了）:** Controller の描画用ヘッダーへの依存をなくす
-11. **S1（第 2 段階）:** 作品画像の合成を書き出しから分ける
+11. **S1（第 2 段階、完了）:** 作品画像の合成を書き出しから分ける
 12. **C4:** 表示の数値を `ScreenLayout` へ移す
 13. **C5:** ホバーの番号に名前を付ける
 
-残りは S1 の第 2 段階、C4、C5 です。C1、M10、M11 は意図して残します。
+残りは C4、C5 です。C1、M10、M11 は意図して残します。

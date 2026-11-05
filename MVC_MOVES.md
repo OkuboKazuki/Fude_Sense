@@ -63,13 +63,19 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 | ボタンを離したときのフラグの解除 | `WacomMT_Scribble.cpp` の `WM_LBUTTONUP` | `Controllers/AppController` の `OnLButtonUp` | `d44e40c` |
 | 圏外へ出たときのフラグの解除 | `WacomMT_Scribble.cpp` の `WT_PROXIMITY` | `Controllers/AppController` の `OnPenOutOfRange` | `d44e40c` |
 
-## S1. 保存結果のメッセージを移す（第 1 段階）
+## S1. 保存結果のメッセージと作品画像の合成を移す
 
-`ExportCanvas` の戻り値は、`bool` から `ImageExportResult` に変えました。作品画像の合成は、まだ `ImageExporter` にあります。
+第 1 段階（`f3b0f27`）: `ExportCanvas` の戻り値は、`bool` から `ImageExportResult` に変えました。
+
+第 2 段階（`未コミット`）: `ExportCanvas` を分割して削除しました。`ImageExportResult::NothingToExport` も削除し、半紙の大きさの確認は `ExportCanvasWithFeedback` で行います。
 
 | 処理 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
 | 保存結果のメッセージの設定 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Controllers/AppController.cpp` の `ExportCanvasWithFeedback` | `f3b0f27` |
+| 半紙の背景と墨の合成 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Views/CanvasView.cpp` の `CanvasView::ComposeArtwork` | `未コミット` |
+| クリップボードへの受け渡し | `Services/ImageExporter.cpp` の `ExportCanvas` | `Services/ImageExporter.cpp` の `ImageExporter::CopyToClipboard` | `未コミット` |
+| デスクトップへの保存 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Services/ImageExporter.cpp` の `ImageExporter::SaveToDesktop` | `未コミット` |
+| 半紙の大きさの確認とビットマップの破棄 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Controllers/AppController.cpp` の `ExportCanvasWithFeedback` | `未コミット` |
 
 ## M7. 墨エンジンの操作を移す
 

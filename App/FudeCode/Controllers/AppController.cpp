@@ -2,6 +2,7 @@
 #include "AppController.h"
 #include "MathUtils.h"
 #include "ScreenLayout.h"
+#include "CanvasView.h"
 #include "ImageExporter.h"
 #include "ArchiveDialogs.h"
 #include <imm.h>
@@ -43,9 +44,22 @@ static void RefillByPress(AppState& state, UIState& ui, double penPressure) {
 
 // 作品を書き出し、結果を保存タブのメッセージとして出す
 static void ExportCanvasWithFeedback(HWND hWnd, GpuInk& gpuInk, UIState& ui, bool toClipboard) {
-    switch (ImageExporter::ExportCanvas(hWnd, gpuInk, ui.rPaper, toClipboard)) {
-    case ImageExportResult::NothingToExport:
-        break;
+    int pw = RW(ui.rPaper);
+    int ph = RH(ui.rPaper);
+    if (pw <= 0 || ph <= 0) return;  // 半紙の大きさが 0 で、書き出すものが無い
+
+    ImageExportResult result = ImageExportResult::Failed;
+    HBITMAP artwork = CanvasView::ComposeArtwork(hWnd, gpuInk, pw, ph);
+    if (artwork) {
+        result = toClipboard ? ImageExporter::CopyToClipboard(hWnd, artwork)
+                             : ImageExporter::SaveToDesktop(hWnd, artwork, pw, ph);
+        // クリップボードへ正常に渡した場合はシステムが所有するため破棄しない
+        if (result != ImageExportResult::CopiedToClipboard) {
+            DeleteObject(artwork);
+        }
+    }
+
+    switch (result) {
     case ImageExportResult::Failed:
         ui.SetSaveFeedback(toClipboard ? L"× クリップボードにコピーできませんでした"
                                              : L"× 画像を保存できませんでした", true);

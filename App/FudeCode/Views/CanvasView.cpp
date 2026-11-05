@@ -395,6 +395,36 @@ void CanvasView::RenderInk(HDC dc, GpuInk& gpuInk, const UIState& ui) {
     }
 }
 
+HBITMAP CanvasView::ComposeArtwork(HWND hWnd, GpuInk& gpuInk, int width, int height) {
+    HDC screenDC = GetDC(hWnd);
+    HDC memDC = CreateCompatibleDC(screenDC);
+    HBITMAP memBmp = CreateCompatibleBitmap(screenDC, width, height);
+
+    if (memDC && memBmp) {
+        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+
+        // 1. 半紙背景
+        RECT rLocal = { 0, 0, width, height };
+        HBRUSH pb = CreateSolidBrush(RGB(248, 247, 242));
+        FillRect(memDC, &rLocal, pb);
+        DeleteObject(pb);
+
+        // 2. 墨汁レンダリング
+        // お手本はなぞるための下敷きであって作品の一部ではないため、書き出しには
+        // 含めない（画面表示のみ）。下敷きの罫線を書き出さないのと同じ扱い。
+        gpuInk.Render(memDC, 0, 0, width, height);
+
+        SelectObject(memDC, oldBmp);
+    } else if (memBmp) {
+        DeleteObject(memBmp);
+        memBmp = nullptr;
+    }
+
+    if (memDC) DeleteDC(memDC);
+    ReleaseDC(hWnd, screenDC);
+    return memBmp;
+}
+
 // ---------------------------------------------------------------------------
 // リプレイ描画のオフスクリーンキャッシュ
 //

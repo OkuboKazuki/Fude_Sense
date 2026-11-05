@@ -27,6 +27,10 @@ public:
     static void DrawGrid(HDC dc, const AppState& state, const UIState& ui);
     static void RenderInk(HDC dc, GpuInk& gpuInk, const UIState& ui);
 
+    // 書き出す作品画像を合成する。半紙の背景に墨を重ねたビットマップを返す。
+    // 破棄は呼び出し側で行う。作れなかったときは nullptr を返す。
+    static HBITMAP ComposeArtwork(HWND hWnd, GpuInk& gpuInk, int width, int height);
+
     // リプレイ用半紙描画
     static void DrawReplayCanvas(HDC dc, GpuInk& gpuInk, const AppState& state, const UIState& ui);
 

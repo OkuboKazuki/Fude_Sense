@@ -6,11 +6,9 @@
 
 #include <windows.h>
 #include <string>
-#include "GpuInk.h"
 
 // 作品の書き出しの結果。表示するメッセージは呼び出し側で決める。
 enum class ImageExportResult {
-    NothingToExport,   // 半紙の大きさが 0 で、書き出すものが無い
     Failed,
     CopiedToClipboard,
     SavedPng,
@@ -19,7 +17,11 @@ enum class ImageExportResult {
 
 class ImageExporter {
 public:
-    // キャンバス作品をクリップボードまたはデスクトップの画像ファイルへ保存
-    // rPaper: 半紙の矩形。書き出す画像の大きさに使う
-    static ImageExportResult ExportCanvas(HWND hWnd, GpuInk& gpuInk, const RECT& rPaper, bool toClipboard);
+    // 作品画像をクリップボードへ渡す。
+    // CopiedToClipboard を返したときは所有権がシステムへ移るので、呼び出し側で破棄してはならない。
+    // Failed を返したときは、呼び出し側で破棄する。
+    static ImageExportResult CopyToClipboard(HWND hWnd, HBITMAP hBmp);
+
+    // 作品画像をデスクトップの画像ファイルへ保存する。hBmp は呼び出し側で破棄する。
+    static ImageExportResult SaveToDesktop(HWND hWnd, HBITMAP hBmp, int width, int height);
 };
