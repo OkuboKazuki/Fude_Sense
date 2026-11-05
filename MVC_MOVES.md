@@ -165,3 +165,13 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 | 関数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
 | `GetGridDivision` | `Views/ScreenLayout.cpp` のファイル内の関数 | `Models/AppState.h` の `PaperModel::GetGridDivision` | `de9cc72` |
+
+## C3. 設定値の範囲と変換を Model へ移す
+
+`BrushModel` に `HARDNESS_MIN`、`HARDNESS_MAX`、`OtehonModel` に `OPACITY_MIN`、`OPACITY_MAX` を足しました。`StrokeController` の硬さの下限の判定は、`HARDNESS_MIN` を読むようにしました。透過度は割合がそのまま値になるので、View がつまみの位置に使う `GetOpacityRatio` を新しく足しました。
+
+| 処理 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| スライダーの割合から硬さへの変換 | `Controllers/AppController.cpp` の `OnLButtonDown`、`OnMouseMove` | `Models/AppState.h` の `BrushModel::SetHardnessFromRatio` | `未コミット` |
+| 硬さからスライダーの割合への変換 | `Views/FloatingMenuView.cpp` の `DrawSub` | `Models/AppState.h` の `BrushModel::GetHardnessRatio` | `未コミット` |
+| スライダーの割合から透過度への変換 | `Controllers/AppController.cpp` の `OnLButtonDown`、`OnMouseMove` | `Models/AppState.h` の `OtehonModel::SetOpacityFromRatio` | `未コミット` |

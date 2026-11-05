@@ -141,7 +141,7 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
 
         // 筆の硬さ（感度補正）を筆圧に適用
         double hardness = state.brush.hardness;
-        if (std::isnan(hardness) || hardness < 0.1) hardness = 1.0;
+        if (std::isnan(hardness) || hardness < BrushModel::HARDNESS_MIN) hardness = 1.0;
         double pressureFactor = std::pow(m_smoothedPressure, hardness);
         if (std::isnan(pressureFactor) || std::isinf(pressureFactor)) pressureFactor = 0.5;
 

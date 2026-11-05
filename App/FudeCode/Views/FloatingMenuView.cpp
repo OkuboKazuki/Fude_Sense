@@ -33,8 +33,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state, const UIState& ui)
 
         // トラック描画
         Fill(dc, ui.rHardnessTrack, RGB(18, 20, 26));
-        double normHardness = (hardness - 0.1) / (2.0 - 0.1);
-        normHardness = Clamp(normHardness, 0.0, 1.0);
+        double normHardness = state.brush.GetHardnessRatio();
         int thumbX = ui.rHardnessTrack.left + (int)(RW(ui.rHardnessTrack) * normHardness);
 
         RECT rLevel = ui.rHardnessTrack;
@@ -266,7 +265,7 @@ void FloatingMenuView::DrawSub(HDC dc, const AppState& state, const UIState& ui)
         DeleteObject(fTitle);
 
         Fill(dc, ui.rOtehonOpacityTrack, RGB(18, 20, 26));
-        int thumbX = ui.rOtehonOpacityTrack.left + (int)(RW(ui.rOtehonOpacityTrack) * state.otehon.opacity);
+        int thumbX = ui.rOtehonOpacityTrack.left + (int)(RW(ui.rOtehonOpacityTrack) * state.otehon.GetOpacityRatio());
         RECT rLevel = ui.rOtehonOpacityTrack;
         rLevel.right = thumbX;
         Fill(dc, rLevel, RGB(70, 130, 210));

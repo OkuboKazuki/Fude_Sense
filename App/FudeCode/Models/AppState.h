@@ -10,11 +10,26 @@
 #include <algorithm>
 #include <cmath>
 #include "AppEnums.h"
+#include "MathUtils.h"
 
 // 筆設定モデル
 struct BrushModel {
     Brush type = Brush::Medium;
-    double hardness = 0.5; // 0.1: 超極軟 ~ 2.0: 非常に硬い
+    static constexpr double HARDNESS_MIN = 0.1;  // 超極軟
+    static constexpr double HARDNESS_MAX = 2.0;  // 非常に硬い
+    double hardness = 0.5;
+
+    // スライダーの割合 (0.0 ~ 1.0) から硬さを決める
+    void SetHardnessFromRatio(double ratio) {
+        ratio = MathUtils::Clamp(ratio, 0.0, 1.0);
+        hardness = HARDNESS_MIN + ratio * (HARDNESS_MAX - HARDNESS_MIN);
+    }
+
+    // 今の硬さをスライダーの割合 (0.0 ~ 1.0) にする
+    double GetHardnessRatio() const {
+        double ratio = (hardness - HARDNESS_MIN) / (HARDNESS_MAX - HARDNESS_MIN);
+        return MathUtils::Clamp(ratio, 0.0, 1.0);
+    }
 
     // 傾き非対応タブレットからの移行にともなう線幅の補正。
     // 旧環境（Wacom One Creative Pen Display）は傾きを返さないので pkOrientation が
@@ -91,7 +106,19 @@ constexpr int OTEHON_PALETTE_MAX = 8;
 struct OtehonModel {
     bool isVisible = false;
     int selectedIndex = 0; // palette 内の選択位置
-    double opacity = 0.35; // 0.05 ～ 1.0
+    static constexpr double OPACITY_MIN = 0.05;
+    static constexpr double OPACITY_MAX = 1.0;
+    double opacity = 0.35;
+
+    // スライダーの割合 (0.0 ~ 1.0) から透過度を決める。割合がそのまま透過度になり、下限より薄くはしない。
+    void SetOpacityFromRatio(double ratio) {
+        opacity = MathUtils::Clamp(ratio, OPACITY_MIN, OPACITY_MAX);
+    }
+
+    // 今の透過度をスライダーの割合 (0.0 ~ 1.0) にする
+    double GetOpacityRatio() const {
+        return opacity;
+    }
 
     // 書きたい文字の入力（IME 変換確定後の文字を WM_CHAR で受け取る）。
     // 入力があればその文字が候補タイルになり、空なら既定の8字に戻る。

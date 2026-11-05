@@ -666,8 +666,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                         SetCapture(hWnd);
                         double trackW = static_cast<double>(RW(ui.rHardnessTrack));
                         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rHardnessTrack.left) / trackW : 0.2;
-                        norm = Clamp(norm, 0.0, 1.0);
-                        state.brush.hardness = 0.1 + norm * (2.0 - 0.1);
+                        state.brush.SetHardnessFromRatio(norm);
                         InvalidateRect(hWnd, &ui.rSub, FALSE);
                         return true;
                     }
@@ -805,7 +804,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                         SetCapture(hWnd);
                         double trackW = static_cast<double>(RW(ui.rOtehonOpacityTrack));
                         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rOtehonOpacityTrack.left) / trackW : 0.35;
-                        state.otehon.opacity = Clamp(norm, 0.05, 1.0);
+                        state.otehon.SetOpacityFromRatio(norm);
                         InvalidateRect(hWnd, NULL, FALSE);
                         return true;
                     }
@@ -1083,8 +1082,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     if (ui.interaction.isDraggingHardness && (wParam & MK_LBUTTON)) {
         double trackW = static_cast<double>(RW(ui.rHardnessTrack));
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rHardnessTrack.left) / trackW : 0.2;
-        norm = Clamp(norm, 0.0, 1.0);
-        state.brush.hardness = 0.1 + norm * (2.0 - 0.1);
+        state.brush.SetHardnessFromRatio(norm);
         InvalidateRect(hWnd, &ui.rSub, FALSE);
         return true;
     }
@@ -1098,7 +1096,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     if (ui.interaction.isDraggingOpacity && (wParam & MK_LBUTTON)) {
         double trackW = static_cast<double>(RW(ui.rOtehonOpacityTrack));
         double norm = (trackW > 0.0) ? static_cast<double>(pt.x - ui.rOtehonOpacityTrack.left) / trackW : 0.35;
-        state.otehon.opacity = Clamp(norm, 0.05, 1.0);
+        state.otehon.SetOpacityFromRatio(norm);
         InvalidateRect(hWnd, NULL, FALSE);
         return true;
     }
