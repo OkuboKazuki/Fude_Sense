@@ -96,7 +96,7 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 | `AppState::LayoutPaperOnly` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
 | `AppState::LayoutGridGeometry` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
 | `LayoutClearModal` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
-| `GetGridDivision` | `Models/AppState.cpp` | `Views/ScreenLayout.cpp` のファイル内の関数 | `ca44652` |
+| `GetGridDivision` | `Models/AppState.cpp` | `Models/AppState.h` の `PaperModel::GetGridDivision`（M9 で移動） | `ca44652`、`未コミット` |
 
 ## M3. UI の状態を移す
 
@@ -146,14 +146,22 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 | 変数・型・定数 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `currentScreen` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
-| `isTransitioning` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
-| `transitionStartTime` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
-| `transitionDurationMs` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
-| `transitionProgress` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
-| `AppScreen` | `Models/AppEnums.h` | `Views/UIState.h` | `未コミット` |
-| `TbButton` | `Models/AppEnums.h` | `Views/UIState.h` | `未コミット` |
-| `LeftTab` | `Models/AppEnums.h` | `Views/UIState.h` | `未コミット` |
-| `REPLAY_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `未コミット` |
-| `TRANSITION_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `未コミット` |
-| `TITLE_ANIM_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `未コミット` |
+| `currentScreen` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `2d19753` |
+| `isTransitioning` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `2d19753` |
+| `transitionStartTime` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `2d19753` |
+| `transitionDurationMs` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `2d19753` |
+| `transitionProgress` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `2d19753` |
+| `AppScreen` | `Models/AppEnums.h` | `Views/UIState.h` | `2d19753` |
+| `TbButton` | `Models/AppEnums.h` | `Views/UIState.h` | `2d19753` |
+| `LeftTab` | `Models/AppEnums.h` | `Views/UIState.h` | `2d19753` |
+| `REPLAY_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `2d19753` |
+| `TRANSITION_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `2d19753` |
+| `TITLE_ANIM_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `2d19753` |
+
+## M9. 升目の分割数の計算を Model へ戻す
+
+M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数にしました。引数の `GridPattern` は、メンバーの `gridPattern` を読むようにしたので削除しました。
+
+| 関数 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| `GetGridDivision` | `Views/ScreenLayout.cpp` のファイル内の関数 | `Models/AppState.h` の `PaperModel::GetGridDivision` | `未コミット` |

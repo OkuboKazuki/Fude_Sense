@@ -5,24 +5,6 @@
 
 namespace {
 
-// 升目の分割数（列×行）をパターンから求める。
-// 列は縦書きの「行（ぎょう）」に相当し、右列から左列へ向かって書き進める。
-void GetGridDivision(GridPattern pattern, int& cols, int& rows) {
-    cols = 1;
-    rows = 1;
-
-    switch (pattern) {
-    case GridPattern::Div2:  cols = 1; rows = 2; break;
-    case GridPattern::Grid4: cols = 2; rows = 2; break;
-    case GridPattern::Grid6: cols = 2; rows = 3; break;
-    case GridPattern::Grid8: cols = 2; rows = 4; break;
-    case GridPattern::None:
-    case GridPattern::Cross1:
-    default:
-        break; // 1字用（1マス）
-    }
-}
-
 // 全消し確認モーダル。w×h の領域の中央に置く。
 // 紙だけ表示では倒した向き（幅と高さを入れ替えた座標系）で組む。
 void LayoutClearModal(UIState& ui, int w, int h) {
@@ -58,7 +40,7 @@ void LayoutGridGeometry(UIState& ui, const PaperModel& paper) {
 
         // 列数・行数は半紙を縦に置いた向きで決める
         int cols = 1, rows = 1;
-        GetGridDivision(paper.gridPattern, cols, rows);
+        paper.GetGridDivision(cols, rows);
 
         // 紙だけ表示の半紙は、通常表示の半紙を左回りに90度倒したもの。
         // 升目も一緒に倒すので、画面上の列と行が入れ替わる。

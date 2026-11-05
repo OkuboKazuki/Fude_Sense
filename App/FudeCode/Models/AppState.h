@@ -64,6 +64,24 @@ struct PaperModel {
             outH = static_cast<int>(std::round(BASE_LONG_EDGE * (ratioH / ratioW)));
         }
     }
+
+    // 升目の分割数（列×行）をパターンから求める。
+    // 列は縦書きの「行（ぎょう）」に相当し、右列から左列へ向かって書き進める。
+    void GetGridDivision(int& cols, int& rows) const {
+        cols = 1;
+        rows = 1;
+
+        switch (gridPattern) {
+        case GridPattern::Div2:  cols = 1; rows = 2; break;
+        case GridPattern::Grid4: cols = 2; rows = 2; break;
+        case GridPattern::Grid6: cols = 2; rows = 3; break;
+        case GridPattern::Grid8: cols = 2; rows = 4; break;
+        case GridPattern::None:
+        case GridPattern::Cross1:
+        default:
+            break; // 1字用（1マス）
+        }
+    }
 };
 
 // お手本の候補文字数（入力欄から取り込む上限＝タイルの数）
