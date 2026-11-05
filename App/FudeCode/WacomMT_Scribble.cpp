@@ -81,7 +81,7 @@ INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 // ショートカットキーを受け付けてよいか。タイトル画面と遷移中は F11 以外を止める。
 static bool IsStudioAcceptingKeys()
 {
-	return g_appState.currentScreen == AppScreen::Studio && !g_appState.isTransitioning;
+	return g_uiState.currentScreen == AppScreen::Studio && !g_uiState.isTransitioning;
 }
 
 static bool g_isFullscreen = false;
@@ -304,7 +304,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_SETCURSOR:
 	{
-		if (AppController::OnSetCursor(hWnd, lParam, g_appState, g_uiState))
+		if (AppController::OnSetCursor(hWnd, lParam, g_uiState))
 		{
 			return TRUE;
 		}
@@ -425,7 +425,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				AppController::ReleasePenLock(g_uiState);
 			}
 
-			if (penEvent.pressure > 0.0 && g_appState.currentScreen == AppScreen::Title)
+			if (penEvent.pressure > 0.0 && g_uiState.currentScreen == AppScreen::Title)
 			{
 				if (!g_uiState.interaction.suppressPenUntilLift)
 				{

@@ -94,9 +94,9 @@ void StrokeController::ProcessPenEvent(HWND hWnd, const PenInputEvent& event, Ap
     // GpuInk へ入っても画面に出ず、記録だけが増えてタイムラインとずれるため、
     // 解析タブ表示中は運筆そのものを受け付けない（紙だけ表示ではリプレイを描かないので受け付ける）。
     // タイトル画面表示中や遷移アニメーション中も受け付けない。
-    bool canDrawInk = (state.currentScreen == AppScreen::Studio)
+    bool canDrawInk = (ui.currentScreen == AppScreen::Studio)
         && (!hWnd || IsWindowEnabled(hWnd))
-        && !state.isTransitioning
+        && !ui.isTransitioning
         && !ui.showClearConfirm
         && (ui.paperOnly || ui.leftTab != LeftTab::Analysis)
         && PtInRect(&rPaper, clientPt)

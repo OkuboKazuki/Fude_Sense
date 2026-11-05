@@ -425,16 +425,16 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
     int h = clientRect.bottom - clientRect.top;
 
     // 0. タイトル画面でのクリック / タップ処理
-    if (state.currentScreen == AppScreen::Title) {
-        if (state.isTransitioning) return true;
+    if (ui.currentScreen == AppScreen::Title) {
+        if (ui.isTransitioning) return true;
         if (ui.interaction.suppressPenUntilLift) return true;
 
         ui.interaction.suppressPenUntilLift = true; // スタジオ画面への遷移完了後にペンが離れるまで描画を抑制
 
         // 墨染めフェード遷移を開始
-        state.isTransitioning = true;
-        state.transitionStartTime = GetTickCount();
-        state.transitionProgress = 0.0f;
+        ui.isTransitioning = true;
+        ui.transitionStartTime = GetTickCount();
+        ui.transitionProgress = 0.0f;
         SetTimer(hWnd, TRANSITION_TIMER_ID, 16, NULL);
         KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
         InvalidateRect(hWnd, NULL, FALSE);
@@ -494,9 +494,9 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
         if (state.viewingImport) {
             CloseImportedArchive(hWnd, state, ui);
         }
-        state.currentScreen = AppScreen::Title;
-        state.isTransitioning = false;
-        state.transitionProgress = 0.0f;
+        ui.currentScreen = AppScreen::Title;
+        ui.isTransitioning = false;
+        ui.transitionProgress = 0.0f;
         state.replay.state = ReplayState::Stopped;
         ui.interaction.suppressPenUntilLift = true; // タイトル画面に戻った直後に同じペン押下で再度スタジオ画面へ遷移するのを防止
         KillTimer(hWnd, REPLAY_TIMER_ID);
@@ -908,28 +908,28 @@ static DWORD s_lastReplayTick = 0;
 
 void AppController::OnTimer(HWND hWnd, WPARAM timerId, AppState& state, UIState& ui) {
     if (timerId == TRANSITION_TIMER_ID) {
-        if (!state.isTransitioning) {
+        if (!ui.isTransitioning) {
             KillTimer(hWnd, TRANSITION_TIMER_ID);
             return;
         }
 
         DWORD now = GetTickCount();
-        DWORD elapsed = now - state.transitionStartTime;
-        if (elapsed >= state.transitionDurationMs) {
-            state.isTransitioning = false;
-            state.transitionProgress = 1.0f;
-            state.currentScreen = AppScreen::Studio;
+        DWORD elapsed = now - ui.transitionStartTime;
+        if (elapsed >= ui.transitionDurationMs) {
+            ui.isTransitioning = false;
+            ui.transitionProgress = 1.0f;
+            ui.currentScreen = AppScreen::Studio;
             ui.leftTab = LeftTab::Brush;
             KillTimer(hWnd, TRANSITION_TIMER_ID);
         } else {
-            state.transitionProgress = static_cast<float>(elapsed) / static_cast<float>(state.transitionDurationMs);
+            ui.transitionProgress = static_cast<float>(elapsed) / static_cast<float>(ui.transitionDurationMs);
         }
         InvalidateRect(hWnd, NULL, FALSE);
         return;
     }
 
     if (timerId == TITLE_ANIM_TIMER_ID) {
-        if (state.currentScreen != AppScreen::Title || state.isTransitioning) {
+        if (ui.currentScreen != AppScreen::Title || ui.isTransitioning) {
             KillTimer(hWnd, TITLE_ANIM_TIMER_ID);
             return;
         }
@@ -1049,7 +1049,7 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     int h = clientRect.bottom - clientRect.top;
 
     // タイトル画面表示中はマウス移動での追加処理なし
-    if (state.currentScreen == AppScreen::Title) {
+    if (ui.currentScreen == AppScreen::Title) {
         return true;
     }
 
@@ -1224,14 +1224,14 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     return true;
 }
 
-bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state, const UIState& ui) {
+bool AppController::OnSetCursor(HWND hWnd, LPARAM lParam, const UIState& ui) {
     // クライアント領域外（タイトルバーやウィンドウ枠など）はOS標準のサイズ変更カーソル等に委ねる
     if (LOWORD(lParam) != HTCLIENT) {
         return false;
     }
 
     // タイトル画面表示中、または墨染めフェード遷移中は通常の矢印カーソル
-    if (state.currentScreen != AppScreen::Studio || state.isTransitioning) {
+    if (ui.currentScreen != AppScreen::Studio || ui.isTransitioning) {
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         return true;
     }

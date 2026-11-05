@@ -77,14 +77,14 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
     HDC memDC = g_backBuffer.dc;
 
     // ★ タイトル画面の単独描画
-    if (state.currentScreen == AppScreen::Title && !state.isTransitioning) {
+    if (ui.currentScreen == AppScreen::Title && !ui.isTransitioning) {
         TitleView::Draw(memDC, width, height, state);
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
         return;
     }
 
     // ★ タイトルからスタジオ画面へのアルファブレンド遷移演出
-    if (state.isTransitioning) {
+    if (ui.isTransitioning) {
         // 1. 背景バッファ（memDC）にスタジオ画面を描画
         RenderUtils::DrawWoodDesk(memDC, width, height);
         CanvasView::DrawBackground(memDC, ui);
@@ -102,7 +102,7 @@ void MainView::Render(HDC hdc, int width, int height, GpuInk& gpuInk, const AppS
             BLENDFUNCTION bf = {};
             bf.BlendOp = AC_SRC_OVER;
             bf.BlendFlags = 0;
-            float alphaFactor = (std::max)(0.0f, (std::min)(1.0f, 1.0f - state.transitionProgress));
+            float alphaFactor = (std::max)(0.0f, (std::min)(1.0f, 1.0f - ui.transitionProgress));
             bf.SourceConstantAlpha = static_cast<BYTE>(alphaFactor * 255.0f);
             bf.AlphaFormat = 0;
 

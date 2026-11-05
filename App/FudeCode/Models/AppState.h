@@ -177,12 +177,6 @@ struct OtehonModel {
 // アプリケーション全体の状態を統合する Model クラス
 class AppState {
 public:
-    AppScreen currentScreen = AppScreen::Title;  // 起動時はタイトル画面
-    bool isTransitioning = false;                // 遷移アニメーション中
-    DWORD transitionStartTime = 0;
-    DWORD transitionDurationMs = 400;            // 400ms の滑らかな遷移
-    float transitionProgress = 0.0f;             // 0.0 (Title) -> 1.0 (Studio)
-
     BrushModel brush;
     PaperModel paper;
     OtehonModel otehon;

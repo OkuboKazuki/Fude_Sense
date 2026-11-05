@@ -126,16 +126,34 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 | 変数・処理 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
-| `isDraggingHardness` | `Models/AppState.h`（`BrushModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isDraggingOpacity` | `Models/AppState.h`（`OtehonModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isTyping` | `Models/AppState.h`（`OtehonModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isDraggingSeekBar` | `Models/TrajectoryModel.h`（`ReplayModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isDraggingWaveform` | `Models/TrajectoryModel.h`（`ReplayModel`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `suppressPenUntilLift` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isPenRefilling` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isDraggingInkAmount` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `isWiping` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `wipeByMouse` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| `wipeLastPt` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `未コミット` |
-| シークバーと波形のドラッグの解除 | `Models/TrajectoryModel.h` の `ReplayModel::Reset` | `Controllers/AppController.cpp` の `ClearAllInk` | `未コミット` |
-| しごきの解除 | `Views/ScreenLayout.cpp` の `LayoutPaperOnly` | `Controllers/AppController.cpp` の `SetPaperOnly` | `未コミット` |
+| `isDraggingHardness` | `Models/AppState.h`（`BrushModel`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isDraggingOpacity` | `Models/AppState.h`（`OtehonModel`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isTyping` | `Models/AppState.h`（`OtehonModel`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isDraggingSeekBar` | `Models/TrajectoryModel.h`（`ReplayModel`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isDraggingWaveform` | `Models/TrajectoryModel.h`（`ReplayModel`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `suppressPenUntilLift` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isPenRefilling` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isDraggingInkAmount` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `isWiping` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `wipeByMouse` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| `wipeLastPt` | `Views/UIState.h`（`UIState`） | `Views/UIState.h`（`InteractionState`） | `2260991` |
+| シークバーと波形のドラッグの解除 | `Models/TrajectoryModel.h` の `ReplayModel::Reset` | `Controllers/AppController.cpp` の `ClearAllInk` | `2260991` |
+| しごきの解除 | `Views/ScreenLayout.cpp` の `LayoutPaperOnly` | `Controllers/AppController.cpp` の `SetPaperOnly` | `2260991` |
+
+## M8. 画面の種類と UI 用の定数を移す
+
+`AppState` を使わなくなった `AppController::OnSetCursor` の引数から `const AppState&` を削除しました。
+
+| 変数・型・定数 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| `currentScreen` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
+| `isTransitioning` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
+| `transitionStartTime` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
+| `transitionDurationMs` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
+| `transitionProgress` | `Models/AppState.h`（`AppState`） | `Views/UIState.h`（`UIState`） | `未コミット` |
+| `AppScreen` | `Models/AppEnums.h` | `Views/UIState.h` | `未コミット` |
+| `TbButton` | `Models/AppEnums.h` | `Views/UIState.h` | `未コミット` |
+| `LeftTab` | `Models/AppEnums.h` | `Views/UIState.h` | `未コミット` |
+| `REPLAY_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `未コミット` |
+| `TRANSITION_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `未コミット` |
+| `TITLE_ANIM_TIMER_ID` | `Models/AppEnums.h` | `Controllers/AppController.h` | `未コミット` |

@@ -9,6 +9,35 @@
 #include "AppEnums.h"
 #include "UIComponents.h"
 
+// 画面状態（タイトル画面 / スタジオ画面）
+enum class AppScreen {
+    Title,      // タイトル・モード選択画面
+    Studio      // 習字制作ワークスペース
+};
+
+// ツールバー・ナビゲーションボタン
+enum class TbButton {
+    None,
+    Home,           // タイトル画面へ戻る
+    NavToggle,
+    Brush,
+    Paper,
+    Analysis,
+    Save,
+    Otehon,
+    InkRefill,
+    ClearAll
+};
+
+// 左側フローティングパネルのタブ
+enum class LeftTab {
+    Brush,
+    Paper,
+    Analysis,
+    Save,
+    Otehon
+};
+
 // 操作の状態。押してから離すまでのドラッグや入力中など、今進行している操作を表す。
 struct InteractionState {
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
@@ -41,6 +70,12 @@ struct InteractionState {
 
 // UI・レイアウト状態
 struct UIState {
+    AppScreen currentScreen = AppScreen::Title;  // 起動時はタイトル画面
+    bool isTransitioning = false;                // 遷移アニメーション中
+    DWORD transitionStartTime = 0;
+    DWORD transitionDurationMs = 400;            // 400ms の滑らかな遷移
+    float transitionProgress = 0.0f;             // 0.0 (Title) -> 1.0 (Studio)
+
     LeftTab leftTab = LeftTab::Brush;
     bool isSubPanelOpen = true;
     bool showClearConfirm = false;

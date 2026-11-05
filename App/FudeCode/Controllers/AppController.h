@@ -9,6 +9,11 @@
 #include "UIState.h"
 #include "GpuInk.h"
 
+// 各種タイマの ID
+constexpr UINT_PTR REPLAY_TIMER_ID = 101;       // 運筆再生用
+constexpr UINT_PTR TRANSITION_TIMER_ID = 102;   // タイトル→スタジオ画面遷移用
+constexpr UINT_PTR TITLE_ANIM_TIMER_ID = 103;   // タイトル画面ブレスアニメーション用
+
 class AppController {
 public:
     // UIイベントハンドリング
@@ -26,7 +31,7 @@ public:
     // ペンが圏外へ出たときに、接地中の操作の状態を解除する
     static void OnPenOutOfRange(UIState& ui);
     // カーソル形状の制御（半紙上は十字カーソル、テキスト入力欄はIビーム、UIパネルや外側は標準カーソル）
-    static bool OnSetCursor(HWND hWnd, LPARAM lParam, const AppState& state, const UIState& ui);
+    static bool OnSetCursor(HWND hWnd, LPARAM lParam, const UIState& ui);
     // お手本の文字入力（IME 変換確定後の文字が WM_CHAR で届く）。
     // 入力中なら true を返し、呼び出し側は他のキー処理を行わない。
     static bool OnChar(HWND hWnd, wchar_t ch, AppState& state, UIState& ui);
