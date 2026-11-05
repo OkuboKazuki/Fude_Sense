@@ -117,6 +117,7 @@ struct UIState {
     UIWidget rOtehonTile[8]{};
     UIWidget rOtehonToggleBtn{}, rOtehonOpacityTrack{};
     UIWidget rOtehonInputBox{};                  // 書きたい文字の入力欄
+    POINT otehonImePos{};                        // 入力欄の IME の候補の位置
     UIWidget rOtehonCellMapBox{};                // 配置先を選ぶ升目ミニマップの配置枠
     UIWidget rOtehonFontBtn[OTEHON_FONT_COUNT]{}; // 書体の切り替え（楷書 / 教科書体 / 行書）
     UIWidget rOtehonCellBtn[MAX_GRID_CELLS]{};   // ミニマップ上の各マス（rGridCell と同じ並び）
@@ -129,6 +130,7 @@ struct UIState {
     UIWidget rAnalysisImportBtn{};   // 運筆アーカイブを読み込む
     UIWidget rAnalysisBackBtn{};     // 読み込んだ記録を閉じて自分の記録に戻る（表示中だけ）
     UIWidget rInkStoneLarge{}, rInkRefillBtn{}, rUndoBtn{}, rRedoBtn{}, rClearAllBtn{};
+    UIWidget rInkStoneRepaint{};   // 運筆中に再描画する範囲（硯と、その上の墨残量ゲージ）。紙だけ表示では空
     UIWidget rInkPool{}, rInkLand{}; // 硯の内側: 墨溜まり（上、墨を含ませる）と磨り面（下、墨を整える）
     UIWidget rInkBadge{};         // 右パネル: 硯の上の墨残量ゲージ（左右に動かして残量を決める）
     UIWidget rPaperOnlyBtn{};      // 右パネル: 紙だけ表示に入る

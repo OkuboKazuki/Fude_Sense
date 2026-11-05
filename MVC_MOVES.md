@@ -67,15 +67,15 @@ MVC 修正で、どの関数や処理をどこからどこへ移したかをま�
 
 第 1 段階（`f3b0f27`）: `ExportCanvas` の戻り値は、`bool` から `ImageExportResult` に変えました。
 
-第 2 段階（`未コミット`）: `ExportCanvas` を分割して削除しました。`ImageExportResult::NothingToExport` も削除し、半紙の大きさの確認は `ExportCanvasWithFeedback` で行います。
+第 2 段階（`099be22`）: `ExportCanvas` を分割して削除しました。`ImageExportResult::NothingToExport` も削除し、半紙の大きさの確認は `ExportCanvasWithFeedback` で行います。
 
 | 処理 | 移動前 | 移動後 | コミット |
 |---|---|---|---|
 | 保存結果のメッセージの設定 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Controllers/AppController.cpp` の `ExportCanvasWithFeedback` | `f3b0f27` |
-| 半紙の背景と墨の合成 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Views/CanvasView.cpp` の `CanvasView::ComposeArtwork` | `未コミット` |
-| クリップボードへの受け渡し | `Services/ImageExporter.cpp` の `ExportCanvas` | `Services/ImageExporter.cpp` の `ImageExporter::CopyToClipboard` | `未コミット` |
-| デスクトップへの保存 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Services/ImageExporter.cpp` の `ImageExporter::SaveToDesktop` | `未コミット` |
-| 半紙の大きさの確認とビットマップの破棄 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Controllers/AppController.cpp` の `ExportCanvasWithFeedback` | `未コミット` |
+| 半紙の背景と墨の合成 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Views/CanvasView.cpp` の `CanvasView::ComposeArtwork` | `099be22` |
+| クリップボードへの受け渡し | `Services/ImageExporter.cpp` の `ExportCanvas` | `Services/ImageExporter.cpp` の `ImageExporter::CopyToClipboard` | `099be22` |
+| デスクトップへの保存 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Services/ImageExporter.cpp` の `ImageExporter::SaveToDesktop` | `099be22` |
+| 半紙の大きさの確認とビットマップの破棄 | `Services/ImageExporter.cpp` の `ExportCanvas` | `Controllers/AppController.cpp` の `ExportCanvasWithFeedback` | `099be22` |
 
 ## M7. 墨エンジンの操作を移す
 
@@ -185,3 +185,12 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 ## C6. Controller の描画用ヘッダーへの依存をなくす
 
 関数や処理の移動なし。`Controllers/AppController.cpp`、`Controllers/StrokeController.cpp`、`WacomMT_Scribble.cpp` の読み込みと呼び方を、`RenderUtils` から `MathUtils` に変えました。
+
+## C4. 表示の数値を ScreenLayout へ移す
+
+`UIState` に `rInkStoneRepaint` と `otehonImePos` を足しました。`SetOtehonImePosition` の引数は、入力欄の矩形から `POINT` に変えました。同じ式が 2 か所にあった再描画の範囲は、1 か所で計算するようにしました。
+
+| 処理 | 移動前 | 移動後 | コミット |
+|---|---|---|---|
+| 硯と墨残量の再描画の範囲の計算 | `Controllers/StrokeController.cpp` の `ProcessPenEvent`（2 か所） | `Views/ScreenLayout.cpp` の `ScreenLayout::Layout` | `未コミット` |
+| IME の候補の位置の計算 | `Controllers/AppController.cpp` の `SetOtehonImePosition` | `Views/ScreenLayout.cpp` の `ScreenLayout::Layout` | `未コミット` |

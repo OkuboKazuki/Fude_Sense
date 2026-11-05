@@ -16,13 +16,12 @@ using namespace MathUtils;
 
 // IME の変換候補ウィンドウを入力欄の位置へ寄せる。
 // 指定しないとウィンドウ左上に出てしまい、どこへ入力しているのか分からない。
-static void SetOtehonImePosition(HWND hWnd, const RECT& inputBox) {
+static void SetOtehonImePosition(HWND hWnd, POINT pos) {
     HIMC hImc = ImmGetContext(hWnd);
     if (!hImc) return;
     COMPOSITIONFORM cf{};
     cf.dwStyle = CFS_POINT;
-    cf.ptCurrentPos.x = inputBox.left + 12;
-    cf.ptCurrentPos.y = inputBox.top + 6;
+    cf.ptCurrentPos = pos;
     ImmSetCompositionWindow(hImc, &cf);
     ImmReleaseContext(hWnd, hImc);
 }
@@ -796,7 +795,7 @@ bool AppController::OnLButtonDown(HWND hWnd, POINT pt, AppState& state, UIState&
                 // 文字入力欄
                 if (PtIn(ui.rOtehonInputBox, pt)) {
                     ui.interaction.isTyping = true;
-                    SetOtehonImePosition(hWnd, ui.rOtehonInputBox);
+                    SetOtehonImePosition(hWnd, ui.otehonImePos);
                     InvalidateRect(hWnd, &ui.rSub, FALSE);
                     return true;
                 }

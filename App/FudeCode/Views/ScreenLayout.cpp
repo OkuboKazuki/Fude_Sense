@@ -119,6 +119,7 @@ void LayoutPaperOnly(UIState& ui, const PaperModel& paper, int w, int h) {
     ui.rSub = ui.rRight = kNone;
     ui.rTbNavToggle = ui.rTbBrush = ui.rTbPaper = ui.rTbAnalysis = ui.rTbSave = ui.rTbOtehon = kNone;
     ui.rInkStoneLarge = ui.rUndoBtn = ui.rRedoBtn = ui.rClearAllBtn = ui.rPaperOnlyBtn = kNone;
+    ui.rInkStoneRepaint = kNone;
     ui.rInkBadge = ui.rInkPool = ui.rInkLand = kNone;
     // 全消し確認モーダル（Esc・筆跡を消すボタンで出す）は倒した向きで読めるよう、幅と高さを入れ替えて組む
     LayoutClearModal(ui, h, w);
@@ -336,6 +337,7 @@ void ScreenLayout::Layout(UIState& ui, const PaperModel& paper, bool viewingImpo
         // 書きたい文字の入力欄
         ui.rOtehonInputBox = { ui.rSub.left + 20, ui.rOtehonCellMapBox.bottom + 28,
                                ui.rSub.right - 20, ui.rOtehonCellMapBox.bottom + 28 + 44 };
+        ui.otehonImePos = { ui.rOtehonInputBox.left + 12, ui.rOtehonInputBox.top + 6 };
 
         int oTop = ui.rOtehonInputBox.bottom + 12;
         int oW = (menuW - 68) / 4;
@@ -428,6 +430,7 @@ void ScreenLayout::Layout(UIState& ui, const PaperModel& paper, bool viewingImpo
 
     ui.rRight = { rightSpaceLeft, 0, w, h };
     ui.rInkStoneLarge = { stoneX, stoneY, stoneX + stoneW, stoneY + stoneH };
+    ui.rInkStoneRepaint = { stoneX, stoneY - S(44), stoneX + stoneW, stoneY + stoneH };
     // 硯の内側。上が墨溜まり（墨を含ませる）、下が磨り面（墨を整える）
     int rim = S(12);
     ui.rInkPool = { stoneX + rim, stoneY + rim, stoneX + stoneW - rim, stoneY + (int)(stoneH * 0.38) };
