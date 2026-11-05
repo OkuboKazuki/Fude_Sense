@@ -201,4 +201,4 @@ M1 で `ScreenLayout` へ移した関数を、`PaperModel` のメンバー関数
 
 第 2 段階（`62a6941`）: 関数や処理の移動なし。`UIState::hoverPaperOnly` の型を、`int` から `Views/UIState.h` の新しい列挙型 `PaperOnlyHover` に変えました。
 
-第 3 段階（`未コミット`）: 関数や処理の移動なし。`UIState::hoverInkStone` の型を、`int` から `Views/UIState.h` の新しい列挙型 `InkStoneHover` に変えました。
+第 3 段階（`636ec8f`）: 関数や処理の移動なし。`UIState::hoverInkStone` の型を、`int` から `Views/UIState.h` の新しい列挙型 `InkStoneHover` に変えました。
