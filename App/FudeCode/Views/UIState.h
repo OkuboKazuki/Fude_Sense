@@ -53,6 +53,19 @@ enum class PaperOnlyHover {
     Clear    // 筆跡を消す
 };
 
+// 硯パネルでホバーしている部品
+enum class InkStoneHover {
+    None,
+    Stone,      // 硯の上の部分（墨を含ませる）
+    Refill,     // 墨を補充
+    ClearAll,   // 全消し
+    Undo,       // 一画戻す
+    Redo,       // 一画復元
+    PaperOnly,  // 紙だけ表示に入る
+    Badge,      // 墨残量ゲージ
+    Land        // 硯の下の部分（墨を落とす）
+};
+
 // 操作の状態。押してから離すまでのドラッグや入力中など、今進行している操作を表す。
 struct InteractionState {
     // UI操作直後にペンが接地したままでも運筆を開始させないためのロック。
@@ -104,7 +117,7 @@ struct UIState {
     PaperOnlyHover hoverPaperOnly = PaperOnlyHover::None;
     TbButton hoverTb = TbButton::None;
     int hoverSub = 0;
-    int hoverInkStone = 0;
+    InkStoneHover hoverInkStone = InkStoneHover::None;
     // 右の硯パネル（硯・ボタン・文字）の拡大率。Layout で空きに収まる範囲で決める。
     double inkStoneScale = 1.0;
     int hoverReplayBtn = 0; // 1: Reset, 2: Prev, 3: Play/Pause, 4: Next, 5: Speed0.5, 6: Speed1.0, 7: Speed2.0, 8: SeekTrack, 9: Import, 10: Back

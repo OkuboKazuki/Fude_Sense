@@ -1153,13 +1153,13 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
     // ホバー状態の更新
     TbButton oldTb = ui.hoverTb;
     int oldSub = ui.hoverSub;
-    int oldStone = ui.hoverInkStone;
+    InkStoneHover oldStone = ui.hoverInkStone;
     ClearModalHover oldModal = ui.hoverClearModal;
     int oldReplay = ui.hoverReplayBtn;
 
     ui.hoverTb = TbButton::None;
     ui.hoverSub = 0;
-    ui.hoverInkStone = 0;
+    ui.hoverInkStone = InkStoneHover::None;
     ui.hoverClearModal = ClearModalHover::None;
     ui.hoverReplayBtn = 0;
 
@@ -1218,14 +1218,14 @@ bool AppController::OnMouseMove(HWND hWnd, POINT pt, WPARAM wParam, AppState& st
             }
         }
 
-        if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverInkStone = 2;
-        else if (PtIn(ui.rClearAllBtn, pt)) ui.hoverInkStone = 3;
-        else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = 4;
-        else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = 5;
-        else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = 6;
-        else if (PtIn(ui.rInkBadge, pt)) ui.hoverInkStone = 7;
-        else if (IsOnInkStoneLand(ui, pt)) ui.hoverInkStone = 8;
-        else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = 1;
+        if (PtIn(ui.rInkRefillBtn, pt)) ui.hoverInkStone = InkStoneHover::Refill;
+        else if (PtIn(ui.rClearAllBtn, pt)) ui.hoverInkStone = InkStoneHover::ClearAll;
+        else if (PtIn(ui.rUndoBtn, pt)) ui.hoverInkStone = InkStoneHover::Undo;
+        else if (PtIn(ui.rRedoBtn, pt)) ui.hoverInkStone = InkStoneHover::Redo;
+        else if (PtIn(ui.rPaperOnlyBtn, pt)) ui.hoverInkStone = InkStoneHover::PaperOnly;
+        else if (PtIn(ui.rInkBadge, pt)) ui.hoverInkStone = InkStoneHover::Badge;
+        else if (IsOnInkStoneLand(ui, pt)) ui.hoverInkStone = InkStoneHover::Land;
+        else if (PtIn(ui.rInkStoneLarge, pt)) ui.hoverInkStone = InkStoneHover::Stone;
     }
 
     if (oldTb != ui.hoverTb || oldSub != ui.hoverSub || oldStone != ui.hoverInkStone || oldModal != ui.hoverClearModal || oldReplay != ui.hoverReplayBtn) {
